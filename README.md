@@ -57,26 +57,26 @@ print("Response:", result["response"])
 
 ## 🧭 18-Week Learning Journey (Google Colab Curriculum)
 
-| Week | Module                                                                                      |
-| ---- | ------------------------------------------------------------------------------------------- |
-| 1    | [Multimodal Basics: Whisper + CLIP + GPT]([Session 1 Notebook](colab_notebooks/Session1_Multimodal_Basics.ipynb)
-| 2    | [Wake Words with Whisper](colab_notebooks/Session2_Whisper_WakeWord.ipynb)                  |
-| 3    | Scene Description with Vision-Language Models                                               |
-| 4    | Intent Detection + Prompt Engineering                                                       |
-| 5    | Meta Ray-Ban SDK Simulation                                                                 |
-| 6    | Real-Time Audio Streaming                                                                   |
-| 7    | Visual OCR and Translation                                                                  |
-| 8    | Domain-Specific Voice Commands                                                              |
-| 9    | On-Device Tiny Models (CPU)                                                                 |
-| 10   | Caching & Optimization                                                                      |
-| 11   | Mobile UI/UX Considerations                                                                 |
-| 12   | Meta Ray-Ban Deployment Flow                                                                |
-| 13   | Use Case: Healthcare                                                                        |
-| 14   | Use Case: Retail                                                                            |
-| 15   | Use Case: Travel Assistant                                                                  |
-| 16   | Use Case: Security Agent                                                                    |
-| 17   | Assemble End-to-End Glass Agent                                                             |
-| 18   | Pitch Deck + Commercial Demo                                                                |
+| Week | Module                                                                                        |
+| ---- | -------------------------------------------------------------------------------------------   |
+| 1    | [Multimodal Basics: Whisper + CLIP + GPT](colab_notebooks/Session1_Multimodal_Basics.ipynb)   |
+| 2    | [Wake Words with Whisper](colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)       |
+| 3    | [Scene Description with Vision-Language Models] (colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                |
+| 4    | [Intent Detection + Prompt Engineering] (colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                        |
+| 5    | [Meta Ray-Ban SDK Simulation] (colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                                  |
+| 6    | [Real-Time Audio Streaming] (colab_notebooks/Session6_RealTime_Audio_Streaming.ipynb)                                                                   |
+| 7    | [Visual OCR and Translation] (colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                                   |
+| 8    | [Domain-Specific Voice Commands] (colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                              |
+| 9    | [On-Device Tiny Models (CPU)] (colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                                 |
+| 10   | [Caching & Optimization] (colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                                      |
+| 11   | [Mobile UI/UX Considerations] (colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                                 |
+| 12   | [Meta Ray-Ban Deployment Flow] (colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                                |
+| 13   | [Use Case: Healthcare] (colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                                        |
+| 14   | [Use Case: Retail] (colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                                            |
+| 15   | [Use Case: Travel Assistant] (colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                                  |
+| 16   | [Use Case: Security Agent] (colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                                    |
+| 17   | [Assemble End-to-End Glass Agent] (colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                             |
+| 18   | [Pitch Deck + Commercial Demo] (colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                                |
 
 See [`roadmap.md`](roadmap.md) for full breakdown.
 
