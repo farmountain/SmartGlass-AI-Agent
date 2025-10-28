@@ -71,9 +71,9 @@ print("Response:", result["response"])
 | 10   | [Caching & Optimization](colab_notebooks/Session10_Caching_Optimization.ipynb)                                                                      |
 | 11   | [Mobile UI/UX Considerations](colab_notebooks/Session11_Mobile_UI_UX.ipynb)                                                                 |
 | 12   | [Meta Ray-Ban Deployment Flow](colab_notebooks/Session12_Meta_RayBan_Deployment.ipynb)                                                                |
-| 13   | [Use Case: Healthcare](colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                                        |
-| 14   | [Use Case: Retail](colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                                            |
-| 15   | [Use Case: Travel Assistant](colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                                  |
+| 13   | [Use Case: Healthcare](colab_notebooks/Session13_Healthcare_UseCase.ipynb)                                                                        |
+| 14   | [Use Case: Retail](to be continued)                                                                            |
+| 15   | [Use Case: Travel Assistant](To be continued)                                                                  |
 | 16   | [Use Case: Security Agent](to be continued)                                                                    |
 | 17   | [Assemble End-to-End Glass Agent](to be continued)                                                             |
 | 18   | [Pitch Deck + Commercial Demo](For private use only)                                                                |
