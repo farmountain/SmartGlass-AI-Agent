@@ -61,22 +61,22 @@ print("Response:", result["response"])
 | ---- | -------------------------------------------------------------------------------------------   |
 | 1    | [Multimodal Basics: Whisper + CLIP + GPT](colab_notebooks/Session1_Multimodal_Basics.ipynb)   |
 | 2    | [Wake Words with Whisper](colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)       |
-| 3    | [Scene Description with Vision-Language Models](colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                |
-| 4    | [Intent Detection + Prompt Engineering](colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                        |
-| 5    | [Meta Ray-Ban SDK Simulation](colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                                  |
+| 3    | [Scene Description with Vision-Language Models](colab_notebooks/Session3_Scene_Description_CLIP.ipynb)                                                |
+| 4    | [Intent Detection + Prompt Engineering](colab_notebooks/Session4_Intent_Detection_Prompt_Engineering.ipynb)                                                        |
+| 5    | [Meta Ray-Ban SDK Simulation](colab_notebooks/Session5_Meta_RayBan_SDK_Simulation.ipynb)                                                                  |
 | 6    | [Real-Time Audio Streaming](colab_notebooks/Session6_RealTime_Audio_Streaming.ipynb)                                                                   |
-| 7    | [Visual OCR and Translation](colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                                   |
-| 8    | [Domain-Specific Voice Commands](colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                              |
-| 9    | [On-Device Tiny Models (CPU)](colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                                 |
-| 10   | [Caching & Optimization](colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                                      |
-| 11   | [Mobile UI/UX Considerations](colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                                 |
-| 12   | [Meta Ray-Ban Deployment Flow](colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                                |
+| 7    | [Visual OCR and Translation](ccolab_notebooks/Session7_Visual_OCR_and_Translation.ipynb)                                                                   |
+| 8    | [Domain-Specific Voice Commands](colab_notebooks/Session8_Domain_Specific_Voice_Commands.ipynb)                                                              |
+| 9    | [On-Device Tiny Models (CPU)](colab_notebooks/Session9_On_Device_Tiny_Models_CPU.ipynb)                                                                 |
+| 10   | [Caching & Optimization](colab_notebooks/Session10_Caching_Optimization.ipynb)                                                                      |
+| 11   | [Mobile UI/UX Considerations](colab_notebooks/Session11_Mobile_UI_UX.ipynb)                                                                 |
+| 12   | [Meta Ray-Ban Deployment Flow](colab_notebooks/Session12_Meta_RayBan_Deployment.ipynb)                                                                |
 | 13   | [Use Case: Healthcare](colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                                        |
 | 14   | [Use Case: Retail](colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                                            |
 | 15   | [Use Case: Travel Assistant](colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                                  |
-| 16   | [Use Case: Security Agent](colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                                    |
-| 17   | [Assemble End-to-End Glass Agent](colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                             |
-| 18   | [Pitch Deck + Commercial Demo](colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                                                                |
+| 16   | [Use Case: Security Agent](to be continued)                                                                    |
+| 17   | [Assemble End-to-End Glass Agent](to be continued)                                                             |
+| 18   | [Pitch Deck + Commercial Demo](For private use only)                                                                |
 
 See [`roadmap.md`](roadmap.md) for full breakdown.
 
