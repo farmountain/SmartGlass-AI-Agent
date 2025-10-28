@@ -1,8 +1,3 @@
-Here is the **clean, unified `README.md`** that merges your code-centric and Colab-based learning journey into one professional document, aligned with industry and open-source best practices.
-
----
-
-````markdown
 # 👓🤖 SmartGlass AI Agent
 
 A multimodal AI assistant for smart glasses, integrating:
@@ -177,18 +172,3 @@ See [`LICENSE`](LICENSE) for terms.
 ---
 
 **Built with ❤️ for the future of wearable AI**
-
-```
-
----
-
-## ✅ Next Suggested Steps
-
-1. ✅ Upload this as your `README.md` in GitHub repo root
-2. 🔜 I’ll now generate:
-   - `roadmap.md` → full 18-week table with session titles + goals
-   - `requirements.txt` with precise versions
-   - First notebook: `Session01_Multimodal_Basics.ipynb`
-
-Would you like those in a downloadable `.zip`, or commit-ready Markdown/notebooks to paste directly into your repo?
-```
