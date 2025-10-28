@@ -1,0 +1,1 @@
+This folder contains sample audio files for wake words and commands.
