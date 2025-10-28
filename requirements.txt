@@ -1,0 +1,12 @@
+# Core dependencies for SmartGlass AI Agent
+torch>=2.0.0
+transformers>=4.30.0
+openai-whisper>=20230314
+Pillow>=9.5.0
+numpy>=1.24.0
+soundfile>=0.12.1
+scipy>=1.10.0
+
+# Optional dependencies for enhanced functionality
+opencv-python>=4.8.0
+librosa>=0.10.0
