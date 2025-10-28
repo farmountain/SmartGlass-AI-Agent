@@ -92,7 +92,7 @@ See [`roadmap.md`](roadmap.md) for full breakdown.
 
 ---
 
-## 📓 Try It on Colab
+## 📓 Try It on Colab (Week 1 Session)
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/farmountain/SmartGlass-AI-Agent/blob/main/colab_notebooks/Session1_Multimodal_Basics.ipynb)
 
