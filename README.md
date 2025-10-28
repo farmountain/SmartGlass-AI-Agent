@@ -95,10 +95,16 @@ See [`roadmap.md`](roadmap.md) for:
 
 ---
 
-## 📄 License
+## 📄 Apache 2.0, Commercial Use & Licensing
 
-Licensed under the **Apache 2.0 License**.
-Feel free to fork, adapt, and contribute.
+This open-source version is free to use under the Apache 2.0 License.
+
+For commercial deployment, OEM integration (e.g. smart glasses manufacturers), or enterprise features (e.g. RAG modules, EHR integration, multilingual OCR), please contact:
+
+📩 farmountain@gmail.com
+
+Commercial licenses include priority support, closed-source modules, and custom deployment options.
+
 
 ---
 
