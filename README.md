@@ -59,7 +59,7 @@ print("Response:", result["response"])
 
 | Week | Module                                                                                      |
 | ---- | ------------------------------------------------------------------------------------------- |
-| 1    | [Multimodal Basics: Whisper + CLIP + GPT](colab_notebooks/Session1_Multimodal_Basics.ipynb) |
+| 1    | [Multimodal Basics: Whisper + CLIP + GPT]([colab_notebooks/Session1_Multimodal_Basics.ipynb](https://github.com/farmountain/SmartGlass-AI-Agent/blob/main/colab_notebooks/Session01_Multimodal_Basics.ipynb)) |
 | 2    | [Wake Words with Whisper](colab_notebooks/Session2_Whisper_WakeWord.ipynb)                  |
 | 3    | Scene Description with Vision-Language Models                                               |
 | 4    | Intent Detection + Prompt Engineering                                                       |
