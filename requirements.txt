@@ -1,5 +1,6 @@
-# Core dependencies for SmartGlass AI Agent
+# Core Dependencies
 torch>=2.0.0
+torchaudio>=2.0.1
 transformers>=4.30.0
 openai-whisper>=20230314
 Pillow>=9.5.0
@@ -7,6 +8,20 @@ numpy>=1.24.0
 soundfile>=0.12.1
 scipy>=1.10.0
 
-# Optional dependencies for enhanced functionality
-opencv-python>=4.8.0
+# Audio Processing & Streaming
+pydub>=0.25.1
 librosa>=0.10.0
+
+# Vision & Image Processing
+opencv-python>=4.8.0
+matplotlib>=3.7.0
+
+# Optional (for later sessions)
+tesseract                 # For OCR in Week 7 (note: installed via system package in Colab)
+gTTS                     # Text-to-speech (for audio reply, Week 11+)
+gradio                   # Web app prototype (Week 18 optional)
+fastapi                  # API serving (Week 18 optional)
+
+# Colab-specific (auto-installed in Colab but listed for local testing)
+ipython
+notebook
