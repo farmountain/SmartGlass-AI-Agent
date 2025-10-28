@@ -1,0 +1,1 @@
+Reserved for proprietary enterprise connectors
