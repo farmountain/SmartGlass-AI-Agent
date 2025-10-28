@@ -159,7 +159,7 @@ See [`NOTICE`](NOTICE) for details.
 ## 👨‍💻 Author
 
 **Liew Keong Han** (`@farmountain`)
-Senior Data & AI Architect, Capgemini | AI Wearables Researcher
+AI Architect | AI Researcher
 🔗 [GitHub](https://github.com/farmountain)
 
 ---
