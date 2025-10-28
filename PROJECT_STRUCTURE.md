@@ -203,22 +203,26 @@ Response to User
 
 ## 📊 File Sizes and Requirements
 
-### Models (Downloaded on First Run)
+### Models (Disk Storage Requirements - Downloaded on First Run)
 - Whisper tiny: ~39 MB
 - Whisper base: ~74 MB
 - Whisper small: ~244 MB
 - CLIP base: ~350 MB
 - GPT-2 base: ~500 MB
 
+*Note: These are disk storage requirements for model files, not runtime memory usage.*
+
 ### Disk Space
 - Minimum: 1 GB (tiny models)
 - Recommended: 2-3 GB (base models)
 - Full install: 5+ GB (large models)
 
-### RAM Requirements
-- Minimum: 4 GB
-- Recommended: 8 GB
-- Optimal: 16+ GB
+### RAM Requirements (System Memory)
+- Minimum: 4 GB (for tiny/base models, single image processing)
+- Recommended: 8 GB (for base models with multimodal processing)
+- Optimal: 16+ GB (for larger models or batch processing)
+
+*Note: These are total system RAM requirements. GPU memory (VRAM) requirements are typically 2-4 GB for base models when using CUDA acceleration. Requirements increase with larger model sizes and concurrent processing.*
 
 ## 🔌 Extension Points
 
