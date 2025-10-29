@@ -1,0 +1,4 @@
+{
+  "pattern": "(?P<value>\\d+(?:[.,]\\d+)?)\\s*(?P<unit>g|kg|kilograms?|oz|ounces?|lb|lbs|pounds?)",
+  "postprocess": "to_grams"
+}

@@ -1,0 +1,23 @@
+{
+  "id": "price_scan",
+  "capture": {
+    "operator": "image_snapshot"
+  },
+  "perceive": {
+    "operator": "ocr_raw"
+  },
+  "extract": {
+    "operator": "price",
+    "schema": "price.yaml",
+    "precision_target": 0.95,
+    "min_confidence": 0.6
+  },
+  "respond": {
+    "operator": "explain",
+    "template": "explain.j2",
+    "max_words": 35,
+    "low_confidence_tip": "Tip: move closer or steady the shelf text.",
+    "steady_message": "Confidence steady.",
+    "no_price_message": "No price detected"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "id": "explain_this",
+  "capture": {
+    "operator": "image_snapshot"
+  },
+  "perceive": {
+    "operator": "clip_topk",
+    "topk": 3
+  },
+  "extract": {
+    "operator": "label",
+    "min_confidence": 0.65
+  },
+  "respond": {
+    "operator": "explain",
+    "template": "explain.j2",
+    "max_words": 35,
+    "low_confidence_tip": "Tip: adjust angle or lighting for clarity.",
+    "steady_message": "Confidence steady."
+  }
+}
