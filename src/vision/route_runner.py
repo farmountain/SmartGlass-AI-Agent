@@ -30,7 +30,11 @@ class ExplainThisRoute:
         self._templates_dir = self._root / "templates"
         self._config = self._load_route(route_name)
         self._template = self._load_template(self._config["respond"]["template"])
-        self._min_conf = float(self._config["extract"].get("min_confidence", 0.0))
+        (
+            self._min_conf_default,
+            self._min_conf_environments,
+        ) = self._parse_min_confidence(self._config["extract"].get("min_confidence", 0.0))
+        self._min_conf = self._min_conf_default
         self._max_words = int(self._config["respond"].get("max_words", 35))
         self._low_conf_tip = self._config["respond"].get(
             "low_confidence_tip", "Tip: rescan for clarity."
@@ -48,6 +52,7 @@ class ExplainThisRoute:
             return handle.read().strip()
 
     def run(self, fixture: Dict[str, Any]) -> ExplainResult:
+        self._min_conf = self._resolve_min_confidence(fixture.get("context"))
         predictions = [
             Prediction(label=item["label"], confidence=float(item["confidence"]))
             for item in fixture["predictions"][:3]
@@ -95,6 +100,27 @@ class ExplainThisRoute:
             "respond": respond,
             "total": total,
         }
+
+    def _parse_min_confidence(self, min_conf_config: Any) -> tuple[float, Dict[str, float]]:
+        if isinstance(min_conf_config, dict):
+            default = float(min_conf_config.get("default", 0.0))
+            environments = {
+                key.lower(): float(value)
+                for key, value in min_conf_config.items()
+                if key != "default"
+            }
+            return default, environments
+        return float(min_conf_config), {}
+
+    def _resolve_min_confidence(self, context: Any) -> float:
+        if not isinstance(context, dict):
+            return self._min_conf_default
+        environment = context.get("environment")
+        if isinstance(environment, str):
+            key = environment.lower()
+            if key in self._min_conf_environments:
+                return self._min_conf_environments[key]
+        return self._min_conf_default
 
     @staticmethod
     def _format_pct(confidence: float) -> str:

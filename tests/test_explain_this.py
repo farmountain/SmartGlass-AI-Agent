@@ -41,7 +41,8 @@ def test_response_word_budget_and_confidence(fixtures):
         result = runner.run(fixture)
         assert result.word_count <= 35, f"Response too long: {result.response}"
         top1 = result.predictions[0]
-        if top1.confidence < 0.65:
+        threshold = runner._min_conf
+        if top1.confidence < threshold:
             assert "Tip:" in result.response, "Low confidence tip missing"
         else:
             assert "Confidence steady." in result.response
@@ -58,3 +59,21 @@ def test_latency_logging(fixtures):
         assert latencies["extract"] <= 100
         assert latencies["respond"] <= 150
         assert latencies["total"] <= 2200
+
+
+@pytest.mark.parametrize(
+    "fixture_id, expected_threshold, expects_tip",
+    [
+        ("scene_env_indoor", 0.6, False),
+        ("scene_env_outdoor", 0.7, True),
+    ],
+)
+def test_environment_specific_min_confidence(fixtures, fixture_id, expected_threshold, expects_tip):
+    runner = ExplainThisRoute()
+    fixture = next(item for item in fixtures if item["id"] == fixture_id)
+    result = runner.run(fixture)
+    assert runner._min_conf == pytest.approx(expected_threshold)
+    if expects_tip:
+        assert "Tip:" in result.response
+    else:
+        assert "Confidence steady." in result.response
