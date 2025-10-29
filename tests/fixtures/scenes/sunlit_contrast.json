@@ -1,0 +1,22 @@
+[
+  {
+    "id": "sunlit_walkway",
+    "lighting": "Sunlit atrium",
+    "summary": "Glare along glass walkway",
+    "contrast_label": "Sunlit walkway glare hotspots",
+    "contrast_ratio": 0.68,
+    "confidence": "0.78",
+    "formula": "contrast_ratio=0.68",
+    "haptic": "sunlit_contrast_notice"
+  },
+  {
+    "id": "sunlit_control_room",
+    "lighting": "Sunlit control canopy",
+    "summary": "Panels washed by rooftop light",
+    "contrast_label": "Sunlit control panel washout",
+    "contrast_ratio": 0.62,
+    "confidence": "0.71",
+    "formula": "contrast_ratio=0.62",
+    "haptic": "ambient_adjust"
+  }
+]

@@ -1,0 +1,7 @@
+{
+  "low_confidence": [80, 60, 80, 60, 160],
+  "obstacle_warning": [240, 80, 240, 80, 320],
+  "goal_reached": [180, 100, 180],
+  "ambient_adjust": [60, 40, 60],
+  "sunlit_contrast_notice": [100, 50, 200, 50, 100]
+}
