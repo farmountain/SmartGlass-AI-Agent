@@ -154,6 +154,29 @@ class PriceScanRoute:
 
     @staticmethod
     def _infer_currency(text: str, value_str: str) -> str:
-        if "€" in text or "," in value_str:
+        normalized = text.lower()
+        symbol_hints = {
+            "€": ["€"],
+            "£": ["£"],
+            "¥": ["¥", "\u00a5"],
+            "$": ["$"],
+        }
+        keyword_hints = {
+            "€": ["eur", "euro", "euros"],
+            "£": ["gbp", "pound", "pounds", "sterling"],
+            "¥": ["jpy", "yen"],
+            "$": ["usd", "dollar", "dollars"],
+        }
+
+        for currency, symbols in symbol_hints.items():
+            if any(symbol in text for symbol in symbols):
+                return currency
+
+        for currency, keywords in keyword_hints.items():
+            if any(keyword in normalized for keyword in keywords):
+                return currency
+
+        if "," in value_str and "." not in value_str:
             return "€"
+
         return "$"

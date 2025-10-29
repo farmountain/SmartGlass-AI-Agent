@@ -1,6 +1,7 @@
 from pathlib import Path
 import importlib.util
 import json
+import re
 import sys
 
 import pytest
@@ -23,6 +24,23 @@ def fixtures():
         return json.load(handle)
 
 
+def test_price_pattern_named_groups():
+    runner = PriceScanRoute()
+    pattern = runner._pattern
+
+    match = pattern.search("Imported tea £2.99 per box")
+    assert match and match.group("currency") == "£"
+
+    gbp_match = pattern.search("Local cheddar GBP 4.50")
+    assert gbp_match and gbp_match.group("gbp") == "GBP"
+    assert gbp_match.group("currency") is None
+    assert gbp_match.group("value") == "4.50"
+
+    jpy_match = pattern.search("Sushi rice JPY 540 bag")
+    assert jpy_match and jpy_match.group("jpy") == "JPY"
+    assert jpy_match.group("value") == "540"
+
+
 def test_price_detection_and_precision(fixtures):
     runner = PriceScanRoute()
     tp = 0
@@ -35,7 +53,9 @@ def test_price_detection_and_precision(fixtures):
         if expected:
             assert result.matched, f"Expected match for {fixture['id']}"
             assert result.formatted == expected, f"Incorrect price for {fixture['id']}"
-            assert result.value == pytest.approx(float(expected.replace("$", "").replace("€", "")))
+            numeric = re.sub(r"[^\d.,]", "", expected)
+            expected_value = module.PriceScanRoute._to_float(numeric)
+            assert result.value == pytest.approx(expected_value)
             assert result.cer is not None and result.cer <= 0.1
             cer_scores.append(result.cer)
             tp += 1
