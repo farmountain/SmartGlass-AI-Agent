@@ -1,0 +1,6 @@
+# UX latency expectations for SmartGlass handshake and recovery flows.
+handshake:
+  degrade_p50: 1.2
+  degrade_p95: 2.5
+  reconnect_p50: 3.0
+  reconnect_p95: 5.5
