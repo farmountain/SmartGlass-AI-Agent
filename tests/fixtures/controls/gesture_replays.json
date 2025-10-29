@@ -1,0 +1,28 @@
+[
+  {
+    "id": "priority_double_tap_over_swipe",
+    "events": [
+      {"gesture": "swipe_left", "timestamp": 0.00},
+      {"gesture": "double_tap", "timestamp": 0.18}
+    ],
+    "expected_action": "confirm"
+  },
+  {
+    "id": "debounce_reduces_noise",
+    "events": [
+      {"gesture": "pinch", "timestamp": 1.00},
+      {"gesture": "pinch", "timestamp": 1.10},
+      {"gesture": "pinch", "timestamp": 1.35}
+    ],
+    "expected_action": "select",
+    "expected_accepted": 2
+  },
+  {
+    "id": "dismiss_overrides_navigation",
+    "events": [
+      {"gesture": "swipe_right", "timestamp": 2.00},
+      {"gesture": "shake", "timestamp": 2.05}
+    ],
+    "expected_action": "dismiss"
+  }
+]
