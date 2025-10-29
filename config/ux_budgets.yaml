@@ -4,3 +4,7 @@ handshake:
   degrade_p95: 2.5
   reconnect_p50: 3.0
   reconnect_p95: 5.5
+
+gesture_detection:
+  false_positive_cap: 0.08
+  false_negative_cap: 0.12
