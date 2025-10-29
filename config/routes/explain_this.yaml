@@ -9,7 +9,11 @@
   },
   "extract": {
     "operator": "label",
-    "min_confidence": 0.65
+    "min_confidence": {
+      "default": 0.65,
+      "indoor": 0.6,
+      "outdoor": 0.7
+    }
   },
   "respond": {
     "operator": "explain",
