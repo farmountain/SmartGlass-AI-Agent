@@ -1,0 +1,10 @@
+artifact_root: calibration/artifacts
+targets:
+  clip:
+    ece_threshold: 0.05
+    bins: 15
+    methods:
+      temperature:
+        artifact: clip_temperature.json
+      isotonic:
+        artifact: clip_isotonic.json
