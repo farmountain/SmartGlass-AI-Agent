@@ -21,7 +21,12 @@ class UnitPriceResult:
 
 
 class UnitPriceRoute:
-    def __init__(self, base_path: Path | None = None, route_name: str = "unit_price") -> None:
+    def __init__(
+        self,
+        base_path: Path | None = None,
+        route_name: str = "unit_price",
+        unit_mode: str | None = None,
+    ) -> None:
         self._root = base_path or Path(__file__).resolve().parents[2]
         self._routes_dir = self._root / "config" / "routes"
         self._templates_dir = self._root / "templates"
@@ -32,14 +37,31 @@ class UnitPriceRoute:
         self._price_pattern = re.compile(self._price_schema["pattern"])
         self._weight_pattern = re.compile(self._weight_schema["pattern"], re.IGNORECASE)
         self._min_conf = float(self._config["extract"].get("min_confidence", 0.0))
-        self._template = (self._templates_dir / self._config["respond"]["template"]).read_text().strip()
-        self._unit = self._config["respond"].get("unit", "/100g")
-        self._formula = self._config["respond"].get("formula", "{price} / ({weight}/100)")
-        self._low_conf_tip = self._config["respond"].get(
+        respond_cfg = self._config["respond"]
+        self._template = (self._templates_dir / respond_cfg["template"]).read_text().strip()
+        self._unit_modes = respond_cfg.get("unit_modes", {})
+        self._unit_mode = unit_mode or respond_cfg.get("unit_mode")
+        self._unit = respond_cfg.get("unit", "/100g")
+        self._reference_grams = float(respond_cfg.get("reference_grams", 100.0))
+        self._formula = respond_cfg.get("formula", "{price} / ({weight}/100)")
+        if self._unit_modes:
+            if not self._unit_mode or self._unit_mode not in self._unit_modes:
+                self._unit_mode = next(iter(self._unit_modes))
+            mode_cfg = self._unit_modes.get(self._unit_mode, {})
+            if isinstance(mode_cfg, dict):
+                self._unit = mode_cfg.get("unit", self._unit)
+                if "reference_grams" in mode_cfg:
+                    self._reference_grams = float(mode_cfg["reference_grams"])
+                else:
+                    self._reference_grams = float(mode_cfg.get("reference_grams", self._reference_grams))
+                self._formula = mode_cfg.get("formula", self._formula)
+            else:
+                self._unit = str(mode_cfg)
+        self._low_conf_tip = respond_cfg.get(
             "low_confidence_tip", "Tip: ensure price and weight are visible."
         )
-        self._steady_message = self._config["respond"].get("steady_message", "Confidence steady.")
-        self._missing_message = self._config["respond"].get("missing_message", "Data missing")
+        self._steady_message = respond_cfg.get("steady_message", "Confidence steady.")
+        self._missing_message = respond_cfg.get("missing_message", "Data missing")
 
     def _load_route(self, route_name: str) -> Dict[str, Any]:
         with (self._routes_dir / f"{route_name}.yaml").open("r", encoding="utf-8") as handle:
@@ -64,7 +86,8 @@ class UnitPriceRoute:
         unit_price: Optional[float] = None
         result_label: Optional[str] = None
         if matched:
-            unit_price = price_value / (grams / 100)
+            reference = self._reference_grams if self._reference_grams else 100.0
+            unit_price = price_value / (grams / reference)
             currency_symbol = price_label[0] if price_label else "$"
             result_label = f"{currency_symbol}{unit_price:.2f}{self._unit}"
 
@@ -115,11 +138,10 @@ class UnitPriceRoute:
         if not match:
             return None, None
         value = float(match.group("value").replace(",", "."))
-        unit = match.group("unit").lower()
-        grams = self._to_grams(value, unit)
-        if grams is None:
+        unit = match.group("unit")
+        grams, label = self._to_grams(value, unit, match.group(0))
+        if grams is None or label is None:
             return None, None
-        label = f"{grams:.0f}g" if grams >= 100 else f"{grams:.2f}g"
         return label, grams
 
     @staticmethod
@@ -155,17 +177,64 @@ class UnitPriceRoute:
             return None
 
     @staticmethod
-    def _to_grams(value: float, unit: str) -> Optional[float]:
-        unit = unit.lower()
-        if unit.startswith("kg") or "kilogram" in unit:
-            return value * 1000
-        if unit == "g":
-            return value
-        if unit.startswith("oz"):
-            return value * 28.3495
-        if unit.startswith("lb") or "pound" in unit:
-            return value * 453.592
-        return None
+    def _to_grams(value: float, unit: str, raw_label: str | None = None) -> tuple[Optional[float], Optional[str]]:
+        normalized_unit = unit.lower()
+        original_label = UnitPriceRoute._clean_label(raw_label) if raw_label else None
+        default_label = original_label or UnitPriceRoute._clean_label(
+            f"{UnitPriceRoute._format_value(value)} {UnitPriceRoute._canonical_unit(normalized_unit)}"
+        )
+
+        if normalized_unit.startswith("kg") or "kilogram" in normalized_unit:
+            grams = value * 1000
+            grams_label = UnitPriceRoute._format_grams_label(grams)
+            return grams, UnitPriceRoute._clean_label(f"{default_label} ({grams_label})")
+        if normalized_unit in {"g", "gram", "grams"}:
+            grams = value
+            return grams, default_label
+        if normalized_unit.startswith("oz") or "ounce" in normalized_unit:
+            grams = value * 28.3495
+            grams_label = UnitPriceRoute._format_grams_label(grams)
+            return grams, UnitPriceRoute._clean_label(f"{default_label} ({grams_label})")
+        if normalized_unit.startswith("lb") or "pound" in normalized_unit:
+            grams = value * 453.592
+            grams_label = UnitPriceRoute._format_grams_label(grams)
+            return grams, UnitPriceRoute._clean_label(f"{default_label} ({grams_label})")
+        return None, original_label
+
+    @staticmethod
+    def _format_value(value: float) -> str:
+        if float(value).is_integer():
+            return f"{int(value)}"
+        formatted = f"{value:.2f}".rstrip("0").rstrip(".")
+        return formatted
+
+    @staticmethod
+    def _format_grams_label(grams: float) -> str:
+        if abs(grams - round(grams)) < 1e-2:
+            return f"{round(grams):.0f}g"
+        precision = "{:.2f}" if grams < 100 else "{:.1f}"
+        formatted = precision.format(grams)
+        trimmed = formatted.rstrip("0").rstrip(".")
+        return f"{trimmed}g"
+
+    @staticmethod
+    def _canonical_unit(unit: str) -> str:
+        mapping = {
+            "grams": "g",
+            "gram": "g",
+            "kilogram": "kg",
+            "kilograms": "kg",
+            "ounce": "oz",
+            "ounces": "oz",
+            "pound": "lb",
+            "pounds": "lb",
+            "lbs": "lb",
+        }
+        return mapping.get(unit, unit)
+
+    @staticmethod
+    def _clean_label(label: str) -> str:
+        return re.sub(r"\s+", " ", label.strip())
 
     @staticmethod
     def _infer_currency(text: str, raw_value: str) -> str:

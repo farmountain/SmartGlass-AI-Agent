@@ -35,6 +35,8 @@ def test_unit_price_computation(fixtures):
             assert result.unit_price == pytest.approx(expected, rel=1e-3)
             assert fixture["expected_result_label"] in result.response
             assert "/100g" in result.response
+            if fixture.get("expected_weight_label"):
+                assert fixture["expected_weight_label"] in result.response
         else:
             assert not result.matched
             assert "Need price and weight" in result.response
@@ -62,3 +64,20 @@ def test_latency_bounds(fixtures):
         assert latencies["extract"] <= 100
         assert latencies["respond"] <= 150
         assert latencies["total"] <= 2200
+
+
+def test_imperial_unit_modes(fixtures):
+    runners = {}
+    for fixture in fixtures:
+        expectation = fixture.get("imperial_expectations")
+        if not expectation:
+            continue
+        mode = expectation["mode"]
+        if mode not in runners:
+            runners[mode] = UnitPriceRoute(unit_mode=mode)
+        result = runners[mode].run(fixture)
+        assert result.matched
+        assert result.unit_price == pytest.approx(expectation["unit_price"], rel=1e-3)
+        assert expectation["result_label"] in result.response
+        if fixture.get("expected_weight_label"):
+            assert fixture["expected_weight_label"] in result.response

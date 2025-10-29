@@ -17,6 +17,22 @@
     "template": "compute.j2",
     "max_words": 35,
     "unit": "/100g",
+    "reference_grams": 100,
+    "unit_modes": {
+      "metric": {
+        "unit": "/100g",
+        "reference_grams": 100
+      },
+      "imperial_oz": {
+        "unit": "/oz",
+        "reference_grams": 28.3495
+      },
+      "imperial_lb": {
+        "unit": "/lb",
+        "reference_grams": 453.592
+      }
+    },
+    "unit_mode": "metric",
     "formula": "{price} / ({weight}/100)",
     "low_confidence_tip": "Tip: confirm both price and weight are visible.",
     "steady_message": "Confidence steady.",
