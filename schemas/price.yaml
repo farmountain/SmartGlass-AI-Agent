@@ -1,4 +1,4 @@
 {
-  "pattern": "(?:(?P<currency>[$\u20ac])\\s*(?P<value>\\d{1,3}(?:[.,]\\d{3})*(?:[.,]\\d{2})?)|(?P<plain>\\d+[.,]\\d{2}))",
+  "pattern": "(?:(?:(?P<currency>[$\u20ac\u00a3\u00a5])|(?P<gbp>GBP|Pounds?)|(?P<jpy>JPY|Yen))\\s*(?P<value>\\d{1,3}(?:[.,]\\d{3})*(?:[.,]\\d{2})?)|(?P<plain>\\d+[.,]\\d{2}))",
   "postprocess": "to_float"
 }
