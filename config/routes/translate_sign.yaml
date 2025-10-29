@@ -1,0 +1,26 @@
+{
+  "id": "translate_sign",
+  "capture": {
+    "operator": "image_snapshot",
+    "latency_budget_ms": 150
+  },
+  "perceive": {
+    "operator": "ocr_translate",
+    "languages": ["es", "fr", "de", "it"],
+    "latency_budget_ms": 800
+  },
+  "extract": {
+    "operator": "text",
+    "schema": "text.yaml",
+    "min_confidence": 0.75,
+    "latency_budget_ms": 100
+  },
+  "respond": {
+    "operator": "translate",
+    "template": "translate.j2",
+    "max_words": 35,
+    "low_confidence_tip": "Tip: take another photo or adjust lighting.",
+    "steady_message": "Confidence steady.",
+    "latency_budget_ms": 150
+  }
+}

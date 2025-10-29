@@ -1,0 +1,49 @@
+[
+  {
+    "id": "spanish_warning",
+    "language": "es",
+    "expected_language_name": "Spanish",
+    "original_text": "Cuidado con el perro",
+    "translation": "Beware of the dog",
+    "confidence": 0.92,
+    "glossary_hits": ["warning"],
+    "hazard_level": "warning",
+    "timings": {
+      "capture": 110,
+      "perceive": 540,
+      "extract": 45,
+      "respond": 80
+    }
+  },
+  {
+    "id": "french_exit",
+    "language": "fr",
+    "expected_language_name": "French",
+    "original_text": "Sortie de secours",
+    "translation": "Emergency exit",
+    "confidence": 0.88,
+    "glossary_hits": ["exit", "safety"],
+    "hazard_level": "safety",
+    "timings": {
+      "capture": 95,
+      "perceive": 580,
+      "extract": 40,
+      "respond": 70
+    }
+  },
+  {
+    "id": "german_instruction_low_conf",
+    "language": "de",
+    "expected_language_name": "German",
+    "original_text": "Bitte halten Sie Abstand",
+    "translation": "Please keep your distance",
+    "confidence": 0.62,
+    "glossary_hits": [],
+    "timings": {
+      "capture": 120,
+      "perceive": 610,
+      "extract": 50,
+      "respond": 90
+    }
+  }
+]
