@@ -52,6 +52,13 @@ jobs:
         id: pytest
         run: pytest
 
+      - name: Run audio benchmarks
+        id: audio_bench
+        if: ${{ hashFiles('bench/audio_bench.py') != '' }}
+        run: |
+          mkdir -p artifacts
+          python bench/audio_bench.py || true
+
       - name: Inventory repository
         id: inventory
         run: python scripts/inventory_repo.py --strict
@@ -103,6 +110,107 @@ jobs:
             fi
             if [ "${{ steps.redteam.outcome }}" != "" ]; then
               echo "| Red Team Eval | ${{ steps.redteam.outcome }} |";
+            fi
+            if [ "${{ steps.audio_bench.outcome }}" != "" ]; then
+              echo "| Audio Bench | ${{ steps.audio_bench.outcome }} |";
+            fi
+            echo "";
+            if [ -f artifacts/audio_latency.csv ]; then
+              echo "### Audio Latency Metrics";
+              echo "";
+              python - <<'PY'
+import csv
+from pathlib import Path
+
+path = Path("artifacts/audio_latency.csv")
+rows = []
+with path.open(newline="") as f:
+    reader = csv.reader(f)
+    rows = [row for row in reader if any(cell.strip() for cell in row)]
+
+if not rows:
+    print("_Audio latency metrics file was empty (soft gate active)._\n")
+else:
+    header, *body = rows
+    print("| " + " | ".join(header) + " |")
+    print("| " + " | ".join("---" for _ in header) + " |")
+    for row in body:
+        print("| " + " | ".join(row) + " |")
+    print()
+PY
+            else
+              echo "_Audio latency metrics unavailable (Week 2 soft gate)._";
+              echo "";
+            fi
+            if [ -f artifacts/metrics.jsonl ]; then
+              python - <<'PY'
+import json
+from pathlib import Path
+
+path = Path("artifacts/metrics.jsonl")
+latest = {"asr": None, "vad": None}
+
+def classify(entry):
+    labels = []
+    for key in ("task", "metric", "name", "tag", "category", "label"):
+        value = entry.get(key)
+        if isinstance(value, str):
+            labels.append(value.lower())
+    blob = " ".join(labels)
+    if "asr" in blob or "speech_recognition" in blob:
+        return "asr"
+    if "vad" in blob or "voice_activity" in blob:
+        return "vad"
+    return None
+
+def extract_value(entry):
+    for key in ("value", "score", "wer", "f1", "accuracy", "metric_value"):
+        if key in entry and isinstance(entry[key], (int, float, str)):
+            return entry[key]
+    metrics = entry.get("metrics")
+    if isinstance(metrics, dict):
+        for key in ("value", "score", "wer", "f1", "accuracy"):
+            if key in metrics:
+                return metrics[key]
+    return json.dumps(entry, ensure_ascii=False)
+
+with path.open() as stream:
+    for line in stream:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        bucket = classify(entry)
+        if bucket and entry:
+            latest[bucket] = entry
+
+print("### ASR/VAD Metrics")
+print()
+if not any(latest.values()):
+    print("_No ASR or VAD metrics reported (soft gate)._\n")
+else:
+    print("| Metric | Value | Notes |")
+    print("| --- | --- | --- |")
+    for key, label in (("asr", "ASR"), ("vad", "VAD")):
+        entry = latest[key]
+        if not entry:
+            print(f"| {label} | _missing_ | Week 2 collection pending |")
+            continue
+        value = extract_value(entry)
+        detail = entry.get("details")
+        if isinstance(detail, dict):
+            detail = json.dumps(detail, ensure_ascii=False)
+        elif detail is None:
+            detail = entry.get("timestamp") or entry.get("step") or "Captured from metrics.jsonl"
+        print(f"| {label} | {value} | {detail} |")
+    print()
+    print("_Threshold gating to be introduced in future sprints._\n")
+PY
+            else
+              echo "_ASR/VAD metrics not yet available (soft gate)._";
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
