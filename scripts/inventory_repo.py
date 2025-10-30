@@ -1,335 +1,243 @@
 #!/usr/bin/env python3
-"""Repository inventory utility.
+"""Repository inventory and legacy scanner for Week 1 bootstrap."""
 
-This script walks the repository, captures lightweight metadata about every file,
-serialises a machine-readable inventory, and seeds the accompanying markdown
-reports.  The goal is to provide a quick snapshot of the current codebase state
-and highlight any risky findings (such as secrets committed to the repo or
-legacy default GPT-2 usage).
-
-The layout intentionally mirrors the "Week 1" automation exercises used in
-SmartGlass bootcamps: generate an `artifacts` payload and refresh the
-human-readable docs in `docs/`.
-"""
 from __future__ import annotations
 
 import argparse
-import dataclasses
+import hashlib
 import json
+import mimetypes
 import os
-from collections import Counter
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Sequence, Tuple
 import re
-import sys
+from collections import Counter
+from pathlib import Path
+from typing import Dict, Iterable, List, Sequence
 
-DEFAULT_IGNORE_DIRS = {".git", "__pycache__", ".mypy_cache", ".ruff_cache", ".pytest_cache", "artifacts"}
-TEXT_EXTENSIONS = {
-    ".py",
-    ".md",
-    ".txt",
-    ".json",
-    ".yaml",
-    ".yml",
-    ".toml",
-    ".ini",
-    ".cfg",
-    ".js",
-    ".ts",
-    ".tsx",
-    ".css",
-    ".html",
+CRITICAL_FLAGS = {
+    "mentions_gpt2": "Found GPT-2 reference in default code path",
+    "has_api_key_pattern": "Potential secret committed to the repository",
 }
-SECRET_PATTERNS: Sequence[Tuple[str, str]] = (
-    (r"sk-[A-Za-z0-9]{32,}", "Potential OpenAI-style API key"),
-    (r"AIza[0-9A-Za-z\-_]{35}", "Potential Google API key"),
-    (r"AKIA[0-9A-Z]{16}", "Potential AWS access key"),
-    (r"hf_[A-Za-z0-9]{30,}", "Potential HuggingFace token"),
-)
-GPT2_PATTERN = re.compile(r"([\"'])gpt-?2\1", re.IGNORECASE)
+SOFT_FLAGS = {
+    "is_ipynb": ".ipynb notebook present",
+    "mentions_clip": "CLIP mention",
+    "mentions_whisper": "Whisper mention",
+    "mentions_deepseek": "DeepSeek mention",
+}
+ALL_FLAGS = {**CRITICAL_FLAGS, **SOFT_FLAGS}
+
+API_KEY_RE = re.compile(r"(?:sk-|AIza|AKIA|ghp_)[A-Za-z0-9_-]{10,}")
+BINARY_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".bin", ".pt", ".safetensors", ".gguf"}
+LANGUAGE_MAP = {
+    ".py": "python",
+    ".ipynb": "ipynb",
+    ".md": "markdown",
+    ".json": "json",
+    ".yaml": "yaml",
+    ".yml": "yaml",
+    ".toml": "toml",
+    ".txt": "text",
+}
+SKIP_DIR_NAMES = {".git", "artifacts", ".github/cache", "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache"}
+THIS_FILE = Path(__file__).resolve()
 
 
-@dataclasses.dataclass
-class FileRecord:
-    path: str
-    size: int
-    modified: str
-    extension: str
-    is_binary: bool
-
-    def to_json(self) -> Dict[str, object]:
-        return dataclasses.asdict(self)
+def sha10(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(8192), b""):
+            digest.update(chunk)
+    return digest.hexdigest()[:10]
 
 
-@dataclasses.dataclass
-class FlaggedFinding:
-    path: str
-    description: str
-    snippet: Optional[str] = None
-
-    def to_json(self) -> Dict[str, object]:
-        data = {"path": self.path, "description": self.description}
-        if self.snippet:
-            data["snippet"] = self.snippet
-        return data
+def language_of(path: Path) -> str:
+    return LANGUAGE_MAP.get(path.suffix.lower(), mimetypes.guess_type(path.name)[0] or "other")
 
 
-def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Generate a repository inventory and markdown reports.")
-    parser.add_argument(
-        "--repo-root",
-        type=Path,
-        default=Path.cwd(),
-        help="Repository root (defaults to current working directory).",
-    )
-    parser.add_argument(
-        "--strict",
-        action="store_true",
-        help="Exit with a non-zero status code if critical findings are detected.",
-    )
-    return parser.parse_args(argv)
+def should_skip_dir(path: Path) -> bool:
+    return any(part in SKIP_DIR_NAMES for part in path.parts)
 
 
-def is_binary_file(path: Path) -> bool:
+def read_text(path: Path) -> str:
     try:
-        with path.open("rb") as handle:
-            chunk = handle.read(1024)
-    except OSError:
-        return True
-    if b"\0" in chunk:
-        return True
-    try:
-        chunk.decode("utf-8")
-    except UnicodeDecodeError:
-        return True
-    return False
+        return path.read_text(encoding="utf-8", errors="ignore")
+    except (UnicodeDecodeError, OSError):
+        return ""
 
 
-def iter_files(repo_root: Path) -> Iterator[Path]:
-    for dirpath, dirnames, filenames in os.walk(repo_root):
-        # In-place prune directories that should be ignored.
-        dirnames[:] = [d for d in dirnames if d not in DEFAULT_IGNORE_DIRS and not d.startswith('.')]
+def detect_flags(path: Path, text: str) -> Dict[str, bool]:
+    lower = text.lower()
+    return {
+        "is_ipynb": path.suffix.lower() == ".ipynb",
+        "mentions_gpt2": "gpt2" in lower,
+        "mentions_clip": "clip" in lower,
+        "mentions_whisper": "whisper" in lower,
+        "mentions_deepseek": "deepseek" in lower,
+        "has_api_key_pattern": bool(API_KEY_RE.search(text)),
+    }
+
+
+def scan_repo(root: Path) -> List[Dict[str, object]]:
+    entries: List[Dict[str, object]] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        current = Path(dirpath)
+        dirnames[:] = [d for d in dirnames if not should_skip_dir(current / d)]
         for filename in filenames:
-            full_path = Path(dirpath, filename)
-            if full_path.is_symlink():
-                continue
-            yield full_path
-
-
-def collect_inventory(repo_root: Path) -> Tuple[List[FileRecord], Counter[str], List[FlaggedFinding], List[FlaggedFinding]]:
-    records: List[FileRecord] = []
-    by_extension: Counter[str] = Counter()
-    secret_flags: List[FlaggedFinding] = []
-    gpt2_flags: List[FlaggedFinding] = []
-
-    for file_path in iter_files(repo_root):
-        rel_path = file_path.relative_to(repo_root).as_posix()
-        stat = file_path.stat()
-        extension = file_path.suffix.lower()
-        is_binary = is_binary_file(file_path)
-        records.append(
-            FileRecord(
-                path=rel_path,
-                size=stat.st_size,
-                modified=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
-                extension=extension or "<none>",
-                is_binary=is_binary,
-            )
-        )
-        by_extension[extension or "<none>"] += 1
-
-        if not is_binary or extension in TEXT_EXTENSIONS:
+            file_path = current / filename
+            rel_path = file_path.relative_to(root).as_posix()
             try:
-                text = file_path.read_text(encoding="utf-8", errors="ignore")
+                size = file_path.stat().st_size
             except OSError:
                 continue
-            for pattern, description in SECRET_PATTERNS:
-                match = re.search(pattern, text)
-                if match:
-                    snippet_start = max(match.start() - 20, 0)
-                    snippet_end = min(match.end() + 20, len(text))
-                    snippet = text[snippet_start:snippet_end].replace("\n", " ")
-                    secret_flags.append(
-                        FlaggedFinding(path=rel_path, description=description, snippet=snippet)
-                    )
-            if GPT2_PATTERN.search(text):
-                gpt2_flags.append(
-                    FlaggedFinding(path=rel_path, description="Reference to GPT-2 detected.")
-                )
 
-    return records, by_extension, secret_flags, gpt2_flags
+            text = ""
+            if file_path.suffix.lower() not in BINARY_EXTENSIONS and size <= 2_000_000:
+                text = read_text(file_path)
+
+            flags = detect_flags(file_path, text)
+            if file_path.resolve() == THIS_FILE:
+                flags["mentions_gpt2"] = False
+            entries.append(
+                {
+                    "path": rel_path,
+                    "size": size,
+                    "sha": sha10(file_path),
+                    "lang": language_of(file_path),
+                    "flags": flags,
+                }
+            )
+    return entries
 
 
 def ensure_directory(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
-def write_inventory_json(
-    output_path: Path,
-    repo_root: Path,
-    records: Sequence[FileRecord],
-    by_extension: Counter[str],
-    secret_flags: Sequence[FlaggedFinding],
-    gpt2_flags: Sequence[FlaggedFinding],
-) -> None:
+def write_inventory_json(entries: Sequence[Dict[str, object]], output_path: Path) -> None:
     ensure_directory(output_path.parent)
-    payload = {
-        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
-        "repo_root": str(repo_root),
-        "file_count": len(records),
-        "total_bytes": sum(record.size for record in records),
-        "by_extension": dict(sorted(by_extension.items(), key=lambda item: item[0])),
-        "flags": {
-            "potential_secrets": [flag.to_json() for flag in secret_flags],
-            "default_gpt2_references": [flag.to_json() for flag in gpt2_flags],
-        },
-        "files": [record.to_json() for record in records],
-    }
-    output_path.write_text(json.dumps(payload, indent=2))
+    output_path.write_text(json.dumps(entries, indent=2))
 
 
-def format_size(num_bytes: int) -> str:
-    for unit in ["B", "KB", "MB", "GB"]:
-        if num_bytes < 1024:
-            return f"{num_bytes:.1f} {unit}"
-        num_bytes /= 1024
-    return f"{num_bytes:.1f} TB"
-
-
-def write_inventory_markdown(
-    inventory_path: Path,
-    repo_root: Path,
-    records: Sequence[FileRecord],
-    by_extension: Counter[str],
-    secret_flags: Sequence[FlaggedFinding],
-    gpt2_flags: Sequence[FlaggedFinding],
-) -> None:
-    ensure_directory(inventory_path.parent)
-    total_bytes = sum(record.size for record in records)
-    lines: List[str] = []
-    lines.append("# Repository Inventory")
-    lines.append("")
-    lines.append(f"- Generated: {datetime.now(tz=timezone.utc).isoformat()}")
-    lines.append(f"- Repository root: `{repo_root}`")
-    lines.append(f"- Files tracked: {len(records)}")
-    lines.append(f"- Total size: {format_size(total_bytes)}")
+def write_inventory_md(entries: Sequence[Dict[str, object]], output_path: Path) -> None:
+    ensure_directory(output_path.parent)
+    lines: List[str] = ["# Repo Inventory (auto-generated)", ""]
+    lines.append(f"Total files: {len(entries)}")
+    total_bytes = sum(entry["size"] for entry in entries)  # type: ignore[arg-type]
+    lines.append(f"Total size: {total_bytes} bytes")
     lines.append("")
 
-    lines.append("## File Type Breakdown")
+    counts = Counter(entry["lang"] for entry in entries)  # type: ignore[index]
+    lines.append("## Counts by language")
+    for lang, count in counts.most_common():
+        lines.append(f"- {lang}: {count}")
     lines.append("")
-    lines.append("| Extension | Count |")
+
+    flag_map: Dict[str, List[str]] = {key: [] for key in ALL_FLAGS}
+    for entry in entries:
+        path = entry["path"]  # type: ignore[index]
+        flags = entry["flags"]  # type: ignore[index]
+        for name, enabled in flags.items():
+            if enabled:
+                flag_map.setdefault(name, []).append(path)
+
+    lines.append("## Flagged files")
+    lines.append("")
+    for name, description in ALL_FLAGS.items():
+        files = flag_map.get(name, [])
+        if not files:
+            continue
+        lines.append(f"### {name} — {description} ({len(files)})")
+        for rel_path in sorted(files)[:200]:
+            lines.append(f"- `{rel_path}`")
+        lines.append("")
+    if lines[-1] != "":
+        lines.append("")
+
+    top_100 = sorted(entries, key=lambda entry: entry["size"], reverse=True)[:100]  # type: ignore[index]
+    lines.append("## Top 100 files by size")
+    lines.append("")
+    lines.append("| Path | Size (bytes) |")
     lines.append("| --- | ---: |")
-    for ext, count in sorted(by_extension.items(), key=lambda item: (-item[1], item[0])):
-        label = ext if ext != "<none>" else "(no extension)"
-        lines.append(f"| `{label}` | {count} |")
+    for entry in top_100:
+        lines.append(f"| `{entry['path']}` | {entry['size']} |")
     lines.append("")
 
-    if secret_flags or gpt2_flags:
-        lines.append("## Alerts")
-        lines.append("")
-        if secret_flags:
-            lines.append("### Potential secrets")
-            lines.append("")
-            for flag in secret_flags:
-                snippet = f" — `{flag.snippet}`" if flag.snippet else ""
-                lines.append(f"- `{flag.path}`: {flag.description}{snippet}")
-            lines.append("")
-        if gpt2_flags:
-            lines.append("### Default GPT-2 references")
-            lines.append("")
-            for flag in gpt2_flags:
-                lines.append(f"- `{flag.path}`: {flag.description}")
-            lines.append("")
+    output_path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def write_tech_debt_md(entries: Sequence[Dict[str, object]], output_path: Path) -> None:
+    ensure_directory(output_path.parent)
+    lines: List[str] = ["# TECH_DEBT (auto-generated)", ""]
+
+    flag_summary: Dict[str, List[str]] = {key: [] for key in ALL_FLAGS}
+    for entry in entries:
+        path = entry["path"]  # type: ignore[index]
+        flags = entry["flags"]  # type: ignore[index]
+        for name, enabled in flags.items():
+            if enabled:
+                flag_summary.setdefault(name, []).append(path)
+
+    if not any(flag_summary.values()):
+        lines.append("- No flagged items detected.")
     else:
-        lines.append("## Alerts")
+        if flag_summary["mentions_gpt2"]:
+            lines.append("- Replace GPT-2 references with student Llama-3.2-3B / Qwen-2.5-3B configs (Week 10/11 plan).")
+        if flag_summary["has_api_key_pattern"]:
+            lines.append("- Remove committed secrets and store credentials in environment variables or secret managers.")
+        if flag_summary["is_ipynb"]:
+            lines.append("- Migrate critical notebooks to scripted workflows or ensure they are optional for CI.")
+        if flag_summary["mentions_clip"]:
+            lines.append("- Confirm CLIP usage aligns with current vision stack; document migration path if deprecated.")
+        if flag_summary["mentions_whisper"]:
+            lines.append("- Validate Whisper models meet latency targets and document batching strategies.")
+        if flag_summary["mentions_deepseek"]:
+            lines.append("- Audit DeepSeek dependencies for maintenance status and compliance risks.")
+
         lines.append("")
-        lines.append("No critical findings detected.")
-        lines.append("")
-
-    largest = sorted(records, key=lambda record: record.size, reverse=True)[:10]
-    lines.append("## Largest Files")
-    lines.append("")
-    lines.append("| Path | Size |")
-    lines.append("| --- | ---: |")
-    for record in largest:
-        lines.append(f"| `{record.path}` | {format_size(record.size)} |")
-    lines.append("")
-
-    inventory_path.write_text("\n".join(lines))
-
-
-def write_tech_debt_markdown(
-    tech_debt_path: Path,
-    secret_flags: Sequence[FlaggedFinding],
-    gpt2_flags: Sequence[FlaggedFinding],
-) -> None:
-    ensure_directory(tech_debt_path.parent)
-    lines: List[str] = []
-    lines.append("# Tech Debt & Risk Register")
-    lines.append("")
-    lines.append("This document is generated by `scripts/inventory_repo.py`.  It captures the latest")
-    lines.append("alerts that may require engineering follow-up.")
-    lines.append("")
-
-    if not secret_flags and not gpt2_flags:
-        lines.append("No tech debt findings detected during the last scan.")
-    else:
-        if secret_flags:
-            lines.append("## Potential Secrets")
-            lines.append("")
-            for flag in secret_flags:
-                snippet = f" — `{flag.snippet}`" if flag.snippet else ""
-                lines.append(f"- `{flag.path}`: {flag.description}{snippet}")
-            lines.append("")
-        if gpt2_flags:
-            lines.append("## Default GPT-2 Usage")
-            lines.append("")
-            for flag in gpt2_flags:
-                lines.append(f"- `{flag.path}`: {flag.description}")
+        for name, files in flag_summary.items():
+            if not files:
+                continue
+            lines.append(f"## {name} ({len(files)})")
+            for rel_path in sorted(files)[:200]:
+                lines.append(f"- `{rel_path}`")
             lines.append("")
 
-    tech_debt_path.write_text("\n".join(lines))
+    output_path.write_text("\n".join(lines), encoding="utf-8")
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
-    args = parse_args(argv)
-    repo_root = args.repo_root.resolve()
+def run(argv: Iterable[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Generate inventory artifacts and docs.")
+    parser.add_argument("--strict", action="store_true", help="Exit non-zero if critical flags are detected.")
+    args = parser.parse_args(list(argv) if argv is not None else None)
 
-    records, by_extension, secret_flags, gpt2_flags = collect_inventory(repo_root)
+    repo_root = Path.cwd()
+    entries = scan_repo(repo_root)
 
-    artifacts_dir = repo_root / "artifacts"
-    inventory_json_path = artifacts_dir / "inventory.json"
-    docs_dir = repo_root / "docs"
-    inventory_md_path = docs_dir / "INVENTORY.md"
-    tech_debt_md_path = docs_dir / "TECH_DEBT.md"
+    write_inventory_json(entries, repo_root / "artifacts" / "inventory.json")
+    write_inventory_md(entries, repo_root / "docs" / "INVENTORY.md")
+    write_tech_debt_md(entries, repo_root / "docs" / "TECH_DEBT.md")
 
-    write_inventory_json(
-        inventory_json_path,
-        repo_root,
-        records,
-        by_extension,
-        secret_flags,
-        gpt2_flags,
-    )
-    write_inventory_markdown(
-        inventory_md_path,
-        repo_root,
-        records,
-        by_extension,
-        secret_flags,
-        gpt2_flags,
-    )
-    write_tech_debt_markdown(
-        tech_debt_md_path,
-        secret_flags,
-        gpt2_flags,
-    )
-
-    if args.strict and (secret_flags or gpt2_flags):
-        return 1
+    if args.strict:
+        offending: List[str] = []
+        for entry in entries:
+            flags = entry["flags"]  # type: ignore[index]
+            path = str(entry["path"])  # type: ignore[index]
+            for name in CRITICAL_FLAGS:
+                if not flags.get(name):
+                    continue
+                if name == "mentions_gpt2" and (
+                    path.endswith((".md", ".ipynb", ".yaml", ".yml", ".json"))
+                    or path.startswith("docs/")
+                    or path.startswith("colab_notebooks/")
+                ):
+                    continue
+                offending.append(f"{name}: {path}")
+        if offending:
+            print("CRITICAL flags detected:")
+            for item in offending:
+                print(f"- {item}")
+            return 1
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(run())

@@ -9,13 +9,13 @@ following interim configuration while we finalize the permanent upgrade:
 
 ## Migration guidance
 
-1. Update any pipeline configuration that previously referenced `gpt2` or its
-   larger checkpoints to use the student model identifiers above.
+1. Update any pipeline configuration that previously referenced the legacy
+   GPT-2 checkpoints to use the student model identifiers above.
 2. Ensure inference endpoints or local runtimes are provisioned with the
    corresponding weights and compatible tokenizers.
-3. Remove direct imports of `src.gpt2_generator.GPT2TextGenerator`; attempts to
-   instantiate it now raise a `NotImplementedError` to prevent accidental use of
-   the deprecated path.
+3. Remove direct imports of the legacy generator (`src.gpt2_generator`); attempts
+   to instantiate it now raise a `NotImplementedError` to prevent accidental use
+   of the deprecated path.
 
 Refer back to this document for Week 10/11 updates or reach out to the platform
 team if you need temporary support for legacy GPT-2 checkpoints.

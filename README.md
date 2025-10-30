@@ -54,7 +54,7 @@ from src.smartglass_agent import SmartGlassAgent
 agent = SmartGlassAgent(
     whisper_model="base",
     clip_model="openai/clip-vit-base-patch32",
-    gpt2_model="gpt2"
+    language_model="student"
 )
 
 result = agent.process_multimodal_query(

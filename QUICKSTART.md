@@ -124,7 +124,7 @@ print(response)
 ```python
 agent = SmartGlassAgent(
     whisper_model="tiny",  # Fastest
-    gpt2_model="gpt2"      # Smallest
+    language_model="student-llama-3.2-3b"      # Smallest
 )
 ```
 
@@ -133,7 +133,7 @@ agent = SmartGlassAgent(
 ```python
 agent = SmartGlassAgent(
     whisper_model="small",    # More accurate
-    gpt2_model="gpt2-medium"  # Better generation
+    language_model="student-qwen-2.5-3b"  # Better generation
 )
 ```
 
@@ -142,7 +142,7 @@ agent = SmartGlassAgent(
 ```python
 agent = SmartGlassAgent(
     whisper_model="base",  # Good balance
-    gpt2_model="gpt2"      # Fast and efficient
+    language_model="student-llama-3.2-3b"      # Fast and efficient
 )
 ```
 
@@ -159,7 +159,7 @@ agent = SmartGlassAgent(
 ### Issue: "Out of Memory"
 **Solution**: Use smaller models:
 ```python
-agent = SmartGlassAgent(whisper_model="tiny", gpt2_model="gpt2")
+agent = SmartGlassAgent(whisper_model="tiny", language_model="student-llama-3.2-3b")
 ```
 
 ### Issue: "Model download failed"

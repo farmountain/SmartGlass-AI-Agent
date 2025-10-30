@@ -21,7 +21,7 @@ def main():
     agent = SmartGlassAgent(
         whisper_model="base",      # Use 'tiny' for faster processing, 'base' for better accuracy
         clip_model="openai/clip-vit-base-patch32",
-        gpt2_model="gpt2"
+        language_model="student"
     )
     
     # Display agent information

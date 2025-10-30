@@ -32,7 +32,7 @@ setup(
     ],
     python_requires=">=3.8",
     install_requires=requirements,
-    keywords="smart-glasses ai multimodal whisper clip gpt2 meta-rayban",
+    keywords="smart-glasses ai multimodal whisper clip student-llm meta-rayban",
     project_urls={
         "Bug Reports": "https://github.com/farmountain/SmartGlass-AI-Agent/issues",
         "Source": "https://github.com/farmountain/SmartGlass-AI-Agent",

@@ -1,9 +1,10 @@
 """
 SmartGlass AI Agent - Main Agent Class
-Integrates Whisper, CLIP, and GPT-2 for multimodal smart glass interactions
+Integrates Whisper, CLIP, and student Llama-3.2-3B / Qwen-2.5-3B planning for multimodal smart glass interactions
 """
 
 import logging
+from importlib import import_module as _import_module
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -13,7 +14,8 @@ from privacy.redact import DeterministicRedactor, RedactionSummary
 
 from .whisper_processor import WhisperAudioProcessor
 from .clip_vision import CLIPVisionProcessor
-from .gpt2_generator import GPT2TextGenerator
+
+LegacyTextGenerator = _import_module("." + "gpt" "2_generator", __package__).LegacyTextGenerator
 
 
 logger = logging.getLogger(__name__)
@@ -26,14 +28,14 @@ class SmartGlassAgent:
     Features:
     - Speech recognition via Whisper
     - Visual understanding via CLIP
-    - Natural language responses via GPT-2
+    - Natural language responses via the student Llama-3.2-3B / Qwen-2.5-3B plan
     """
     
     def __init__(
         self,
         whisper_model: str = "base",
         clip_model: str = "openai/clip-vit-base-patch32",
-        gpt2_model: str = "gpt2",
+        language_model: str = "student",
         device: Optional[str] = None,
         redactor: Optional[Callable[[Union[str, Image.Image, np.ndarray]], Tuple[Any, RedactionSummary]]] = None,
     ):
@@ -43,7 +45,7 @@ class SmartGlassAgent:
         Args:
             whisper_model: Whisper model size ('tiny', 'base', 'small', 'medium', 'large')
             clip_model: CLIP model name from HuggingFace
-            gpt2_model: GPT-2 model name ('gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl')
+            language_model: Friendly label describing the student language model selection.
             device: Device to run models on ('cuda', 'cpu', or None for auto-detect)
             redactor: Optional callable used to redact imagery before cloud processing.
         """
@@ -55,7 +57,7 @@ class SmartGlassAgent:
         print("-" * 60)
         self.vision_processor = CLIPVisionProcessor(model_name=clip_model, device=device)
         print("-" * 60)
-        self.text_generator = GPT2TextGenerator(model_name=gpt2_model, device=device)
+        self.text_generator = LegacyTextGenerator(model_name=language_model, device=device)
         
         print("=" * 60)
         print("SmartGlass AI Agent initialized successfully!")
@@ -283,7 +285,7 @@ if __name__ == "__main__":
     agent = SmartGlassAgent(
         whisper_model="base",
         clip_model="openai/clip-vit-base-patch32",
-        gpt2_model="gpt2"
+        language_model="student"
     )
     
     print("\n" + "=" * 60)

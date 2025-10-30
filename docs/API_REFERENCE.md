@@ -6,7 +6,7 @@ Complete API documentation for all components.
 - [SmartGlassAgent](#smartglassagent)
 - [WhisperAudioProcessor](#whisperaudioprocessor)
 - [CLIPVisionProcessor](#clipvisionprocessor)
-- [GPT2TextGenerator](#gpt2textgenerator)
+- [LegacyTextGenerator](#legacytextgenerator)
 
 ---
 
@@ -22,7 +22,7 @@ from src.smartglass_agent import SmartGlassAgent
 agent = SmartGlassAgent(
     whisper_model: str = "base",
     clip_model: str = "openai/clip-vit-base-patch32",
-    gpt2_model: str = "gpt2",
+    language_model: str = "student",
     device: Optional[str] = None
 )
 ```
@@ -30,7 +30,7 @@ agent = SmartGlassAgent(
 **Parameters:**
 - `whisper_model` (str): Whisper model size - 'tiny', 'base', 'small', 'medium', 'large'
 - `clip_model` (str): CLIP model name from HuggingFace
-- `gpt2_model` (str): GPT-2 model name - 'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'
+- `language_model` (str): Friendly identifier for the student LLM configuration (e.g., 'student-llama-3.2-3b').
 - `device` (str, optional): Device to run models - 'cuda', 'cpu', or None for auto-detect
 
 ### Methods
@@ -406,17 +406,19 @@ print(description)
 
 ---
 
-## GPT2TextGenerator
+## LegacyTextGenerator (deprecated)
 
-Text generation using GPT-2.
+Legacy text generation shim retained for import compatibility. Instantiation
+raises `NotImplementedError` with guidance to adopt the Week 10/11 student LLM
+plan.
 
 ### Initialization
 
 ```python
-from src.gpt2_generator import GPT2TextGenerator
+from src.gpt2_generator import LegacyTextGenerator
 
-generator = GPT2TextGenerator(
-    model_name: str = "gpt2",
+generator = LegacyTextGenerator(
+    model_name: str = "student",
     device: Optional[str] = None
 )
 ```
