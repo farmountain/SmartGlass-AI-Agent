@@ -3,13 +3,20 @@ SmartGlass AI Agent - Main Agent Class
 Integrates Whisper, CLIP, and GPT-2 for multimodal smart glass interactions
 """
 
+import logging
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+
 import numpy as np
-from typing import Optional, Union, List, Dict
 from PIL import Image
+
+from privacy.redact import DeterministicRedactor, RedactionSummary
 
 from .whisper_processor import WhisperAudioProcessor
 from .clip_vision import CLIPVisionProcessor
 from .gpt2_generator import GPT2TextGenerator
+
+
+logger = logging.getLogger(__name__)
 
 
 class SmartGlassAgent:
@@ -27,16 +34,18 @@ class SmartGlassAgent:
         whisper_model: str = "base",
         clip_model: str = "openai/clip-vit-base-patch32",
         gpt2_model: str = "gpt2",
-        device: Optional[str] = None
+        device: Optional[str] = None,
+        redactor: Optional[Callable[[Union[str, Image.Image, np.ndarray]], Tuple[Any, RedactionSummary]]] = None,
     ):
         """
         Initialize SmartGlass AI Agent.
-        
+
         Args:
             whisper_model: Whisper model size ('tiny', 'base', 'small', 'medium', 'large')
             clip_model: CLIP model name from HuggingFace
             gpt2_model: GPT-2 model name ('gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl')
             device: Device to run models on ('cuda', 'cpu', or None for auto-detect)
+            redactor: Optional callable used to redact imagery before cloud processing.
         """
         print("Initializing SmartGlass AI Agent...")
         print("=" * 60)
@@ -50,7 +59,10 @@ class SmartGlassAgent:
         
         print("=" * 60)
         print("SmartGlass AI Agent initialized successfully!")
-        
+
+        # Privacy redaction pipeline
+        self.redactor = redactor or DeterministicRedactor()
+
         # Conversation history
         self.conversation_history: List[str] = []
         self.max_history = 5
@@ -153,7 +165,8 @@ class SmartGlassAgent:
         audio_input: Optional[Union[str, np.ndarray]] = None,
         image_input: Optional[Union[str, Image.Image, np.ndarray]] = None,
         text_query: Optional[str] = None,
-        language: Optional[str] = None
+        language: Optional[str] = None,
+        cloud_offload: bool = False,
     ) -> Dict[str, str]:
         """
         Process multimodal query combining audio, vision, and text.
@@ -177,18 +190,34 @@ class SmartGlassAgent:
         
         # Process image if provided
         visual_context = None
+        redaction_summary: Optional[RedactionSummary] = None
         if image_input is not None:
-            scene_analysis = self.analyze_scene(image_input)
+            if cloud_offload:
+                redacted_image, redaction_summary = self.redactor(image_input)
+                logger.info(
+                    "Redaction applied before cloud processing.",
+                    extra={"faces_masked": redaction_summary.faces_masked, "plates_masked": redaction_summary.plates_masked},
+                )
+                image_for_analysis = redacted_image
+            else:
+                logger.info("Processing image locally without redaction.")
+                image_for_analysis = image_input
+
+            scene_analysis = self.analyze_scene(image_for_analysis)
             visual_context = scene_analysis.get("description", "")
         
         # Generate response
         response = self.generate_response(query, visual_context)
         
-        return {
+        result = {
             "query": query,
             "visual_context": visual_context or "No visual input",
-            "response": response
+            "response": response,
         }
+        if redaction_summary is not None:
+            result["redaction"] = redaction_summary.as_dict()
+
+        return result
     
     def help_identify(
         self,
