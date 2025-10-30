@@ -24,7 +24,19 @@ Includes an **18-week learning program** with step-by-step **Google Colab worksh
 
 ## 🚀 Quick Start
 
-### 🔧 Clone and Install
+### 🌐 Contribute Through Pull Requests
+
+1. **Propose your change on the web.** Navigate to the file you want to update in GitHub and choose **Edit this file**. GitHub will automatically fork the repository if needed and open the web editor.
+2. **Describe your intent.** After editing, provide a concise summary of the change, add any relevant testing notes, and click **Propose changes** to start a new pull request.
+3. **Open the pull request.** Review the diff, confirm the base branch, and submit the PR. No local cloning is required.
+4. **Let CI validate the update.** Wait for the automated checks to finish. Inspect the linked logs and artifacts to verify linting, tests, and documentation previews.
+5. **Address feedback.** Use the web editor to push follow-up commits, respond to reviewer comments, and request re-runs of any failed checks.
+
+---
+
+### 📦 Legacy Local Installation (Optional)
+
+If you still need to run the project locally, you can follow the classic setup:
 
 ```bash
 git clone https://github.com/farmountain/SmartGlass-AI-Agent.git
