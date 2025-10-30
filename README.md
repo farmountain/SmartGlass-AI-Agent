@@ -4,7 +4,7 @@ A multimodal AI assistant for smart glasses, integrating:
 
 - **🎙️ Whisper** (speech-to-text)
 - **👁️ CLIP / DeepSeek-Vision** (vision-language understanding)
-- **🧠 GPT-2 / LLMs** (natural language generation)
+- **🧠 student: Llama-3.2-3B / Qwen-2.5-3B (Week 10/11 plan)** for natural language generation (legacy GPT-2 path deprecated)
 
 Built for the **Meta Ray-Ban Wayfarer** and similar wearable devices.  
 Includes an **18-week learning program** with step-by-step **Google Colab workshops**, and a fully functional modular Python agent (`SmartGlassAgent`) for real-world deployment.
@@ -15,7 +15,7 @@ Includes an **18-week learning program** with step-by-step **Google Colab worksh
 
 - 🎤 **Speech Recognition**: Real-time transcription with OpenAI Whisper
 - 👁️ **Visual Understanding**: Scene and object analysis using CLIP or DeepSeek-Vision
-- 💬 **Language Generation**: Responses via GPT-2 (or LLM of your choice)
+- 💬 **Language Generation**: Responses via the student Llama-3.2-3B / Qwen-2.5-3B interim models (GPT-2 deprecated)
 - 🔄 **Multimodal Integration**: Voice + Vision → LLM-powered interaction
 - 🧪 **Google Colab Ready**: Modular 18-week training + live testing
 - 🔧 **Modular Agent SDK**: `SmartGlassAgent` class with clean APIs
