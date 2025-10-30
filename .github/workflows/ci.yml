@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - 'release/**'
+      - 'Week*'
+  pull_request:
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install project dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install ruff pyright pytest
+          if [ -f requirements-optional.txt ]; then
+            pip install -r requirements-optional.txt
+          fi
+          if [ -f optional-requirements.txt ]; then
+            pip install -r optional-requirements.txt
+          fi
+
+      - name: Prepare artifacts directory
+        run: mkdir -p artifacts
+
+      - name: Run ruff
+        id: ruff
+        run: ruff check .
+
+      - name: Run pyright
+        id: pyright
+        continue-on-error: ${{ contains(github.ref_name, 'Week1') || contains(github.ref_name, 'week-1') || contains(github.ref_name, 'week1') || contains(github.head_ref, 'Week1') || contains(github.head_ref, 'week-1') || contains(github.head_ref, 'week1') }}
+        run: pyright
+
+      - name: Run pytest
+        id: pytest
+        run: pytest
+
+      - name: Inventory repository
+        id: inventory
+        run: python scripts/inventory_repo.py --strict
+
+      - name: Run latency benchmark
+        id: latency
+        if: ${{ hashFiles('bench/latency_bench.py') != '' }}
+        run: |
+          set -o pipefail
+          if python bench/latency_bench.py --help >/tmp/latency_help.txt 2>&1; then
+            if grep -q -- '--output' /tmp/latency_help.txt; then
+              python bench/latency_bench.py --output artifacts/latency.csv
+            else
+              python bench/latency_bench.py | tee artifacts/latency.csv
+            fi
+          else
+            python bench/latency_bench.py | tee artifacts/latency.csv
+          fi
+
+      - name: Run red-team evaluation
+        id: redteam
+        if: ${{ hashFiles('redteam/eval.py') != '' }}
+        run: |
+          set -o pipefail
+          if python redteam/eval.py --help >/tmp/redteam_help.txt 2>&1; then
+            if grep -q -- '--output' /tmp/redteam_help.txt; then
+              python redteam/eval.py --output artifacts/redteam_report.json
+            else
+              python redteam/eval.py | tee artifacts/redteam_report.json
+            fi
+          else
+            python redteam/eval.py | tee artifacts/redteam_report.json
+          fi
+
+      - name: Summarize results
+        if: ${{ always() }}
+        run: |
+          {
+            echo "## CI Summary";
+            echo "";
+            echo "| Step | Status |";
+            echo "| --- | --- |";
+            echo "| Ruff | ${{ steps.ruff.outcome }} |";
+            echo "| Pyright | ${{ steps.pyright.outcome }} |";
+            echo "| Pytest | ${{ steps.pytest.outcome }} |";
+            echo "| Inventory | ${{ steps.inventory.outcome }} |";
+            if [ "${{ steps.latency.outcome }}" != "" ]; then
+              echo "| Latency Bench | ${{ steps.latency.outcome }} |";
+            fi
+            if [ "${{ steps.redteam.outcome }}" != "" ]; then
+              echo "| Red Team Eval | ${{ steps.redteam.outcome }} |";
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-artifacts
+          path: artifacts/
+          if-no-files-found: warn
