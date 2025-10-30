@@ -67,6 +67,23 @@ print("Response:", result["response"])
 
 ---
 
+## 📈 Benchmarks
+
+### Audio latency bench
+
+Run the synthetic audio benchmark to profile `EnergyVAD` frame counts and `ASRStream` stability without relying on any
+external recordings:
+
+```bash
+python bench/audio_bench.py --out artifacts/audio_latency.csv
+```
+
+The script procedurally generates deterministic tone, silence, and speech-like signals, replays scripted `MockASR`
+partials, and writes latency/frame/reversal metrics to both `artifacts/audio_latency.csv` and the telemetry metrics
+artifacts for CI consumption.
+
+---
+
 ## 🧭 18-Week Learning Journey (Google Colab Curriculum)
 
 | Week | Module                                                                                        |
