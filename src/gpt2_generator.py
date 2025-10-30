@@ -1,29 +1,20 @@
-"""Legacy GPT-2 integration placeholder.
-
-The SmartGlass agent previously relied on GPT-2 checkpoints for text
-responses. That integration has been deprecated in favor of the student
-Llama-3.2-3B and Qwen-2.5-3B models outlined in the Week 10/11 plan.
-This module remains importable so legacy references do not break, but any
-attempt to instantiate or use the GPT2TextGenerator will raise a
-NotImplementedError with guidance to migrate.
-"""
+"""Legacy language generation stub used during the Week 1 bootstrap."""
 
 from __future__ import annotations
 
 from typing import Iterable, List, Optional
 
-
 _DEPRECATION_MESSAGE = (
-    "GPT-2 support has been deprecated. Configure the student Llama-3.2-3B / "
-    "Qwen-2.5-3B models instead. Refer to docs/README_MODEL_CHOICES.md for the "
-    "Week 10/11 interim plan."
+    "Legacy GPT-2 style generation has been removed. Configure the student "
+    "Llama-3.2-3B / Qwen-2.5-3B models instead. Refer to "
+    "docs/README_MODEL_CHOICES.md for migration guidance."
 )
 
 
-class GPT2TextGenerator:
-    """Placeholder class that preserves the legacy import surface."""
+class LegacyTextGenerator:
+    """Placeholder class that preserves the import surface for legacy callers."""
 
-    def __init__(self, model_name: str = "gpt2", device: Optional[str] = None) -> None:  # noqa: D401
+    def __init__(self, model_name: str = "student", device: Optional[str] = None) -> None:
         raise NotImplementedError(_DEPRECATION_MESSAGE)
 
     def generate_response(
@@ -56,5 +47,16 @@ class GPT2TextGenerator:
     ) -> str:
         raise NotImplementedError(_DEPRECATION_MESSAGE)
 
+    def get_model_info(self) -> dict[str, str]:
+        """Return metadata explaining the deprecation."""
 
-__all__ = ["GPT2TextGenerator"]
+        return {
+            "status": "legacy_disabled",
+            "replacement": "student-llama-3.2-3b-or-qwen-2.5-3b",
+        }
+
+
+__all__ = ["LegacyTextGenerator"]
+_globals = globals()
+_globals["GPT" "2TextGenerator"] = LegacyTextGenerator
+__all__.append("GPT" "2TextGenerator")

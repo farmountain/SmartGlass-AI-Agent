@@ -8,7 +8,7 @@ SmartGlass-AI-Agent/
 │   ├── __init__.py              # Package initialization
 │   ├── whisper_processor.py     # Whisper audio processing
 │   ├── clip_vision.py           # CLIP vision processing
-│   ├── gpt2_generator.py        # GPT-2 text generation
+│   ├── gpt2_generator.py        # Legacy text generation stub (deprecated)
 │   └── smartglass_agent.py      # Main agent integrating all components
 │
 ├── examples/                     # Usage examples
@@ -52,13 +52,12 @@ SmartGlass-AI-Agent/
 - **Use Case**: Understand what the smart glasses see
 
 ### 3. gpt2_generator.py
-- **Purpose**: Natural language generation
-- **Model**: GPT-2
-- **Features**:
-  - Context-aware responses
-  - Conversation management
-  - Text summarization
-- **Use Case**: Generate helpful responses to user queries
+- **Purpose**: Legacy text generation stub preserved for compatibility
+- **Status**: Raises `NotImplementedError` to steer contributors toward the student LLM plan
+- **Guidance**:
+  - See `docs/README_MODEL_CHOICES.md` for the Week 10/11 migration targets
+  - Update pipelines to use student Llama-3.2-3B / Qwen-2.5-3B configs
+- **Use Case**: Acts as a guardrail when older integrations import the module
 
 ### 4. smartglass_agent.py
 - **Purpose**: Main integration layer
@@ -188,7 +187,7 @@ Response to User
 ### Model Selection
 - **Whisper**: tiny, base, small, medium, large
 - **CLIP**: vit-base-patch32, vit-large-patch14
-- **GPT-2**: gpt2, gpt2-medium, gpt2-large, gpt2-xl
+- **Student LLMs**: Llama-3.2-3B, Qwen-2.5-3B (configured via docs/README_MODEL_CHOICES.md)
 
 ### Device Selection
 - Auto-detect (recommended)

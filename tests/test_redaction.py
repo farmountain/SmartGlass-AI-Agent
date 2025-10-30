@@ -73,7 +73,7 @@ class SpyRedactor(DeterministicRedactor):
 def patch_processors(monkeypatch):
     monkeypatch.setattr("src.smartglass_agent.WhisperAudioProcessor", DummyAudioProcessor)
     monkeypatch.setattr("src.smartglass_agent.CLIPVisionProcessor", DummyVisionProcessor)
-    monkeypatch.setattr("src.smartglass_agent.GPT2TextGenerator", DummyTextGenerator)
+    monkeypatch.setattr("src.smartglass_agent.LegacyTextGenerator", DummyTextGenerator)
 
 
 def test_cloud_branch_applies_redaction_before_cloud(monkeypatch, caplog):
