@@ -1,0 +1,5 @@
+# See GitHub documentation for CODEOWNERS format and evaluation rules.
+# Default owners for all files.
+*       @farmountain
+
+docs/   @farmountain
