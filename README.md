@@ -82,6 +82,17 @@ The script procedurally generates deterministic tone, silence, and speech-like s
 partials, and writes latency/frame/reversal metrics to both `artifacts/audio_latency.csv` and the telemetry metrics
 artifacts for CI consumption.
 
+## 🔍 CI Audio Validation
+
+Automated checks exercise both the VAD and ASR stacks entirely with synthetic fixtures so contributors can run the
+suite without credentials or cloud audio services. Unit tests such as `tests/test_vad_thresholds.py` and
+`tests/test_vad_framing.py` validate the energy math in `EnergyVAD`, while `tests/test_asr_interface_contract.py` and
+`tests/test_asr_delta_gate.py` assert that δ-gated streaming transcripts remain stable under injected noise. The
+`bench/audio_bench.py` workflow (added in [PR #25](https://github.com/farmountain/SmartGlass-AI-Agent/pull/25)) is wired
+into CI to publish the `audio_latency.csv` artifact summarising reversal counts and latency distributions. By default
+`ASRStream` instantiates the deterministic `MockASR` unless `SMARTGLASS_USE_WHISPER=1`, keeping the end-to-end validation
+loop entirely offline-friendly.
+
 ---
 
 ## 🧭 18-Week Learning Journey (Google Colab Curriculum)

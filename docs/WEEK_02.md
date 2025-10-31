@@ -1,0 +1,29 @@
+# Week 2 Report
+
+## Goals
+- Harden the audio front-end by characterising the `EnergyVAD` energy curve on synthetic speech/noise mixes and validating δ-gated streaming ASR behaviour.
+- Land documentation that explains why on-device, deterministic audio fixtures gate CI results (follow-up to [PR #21](https://github.com/farmountain/SmartGlass-AI-Agent/pull/21) and [PR #22](https://github.com/farmountain/SmartGlass-AI-Agent/pull/22)).
+- Align privacy defaults and data-handling posture across audio and vision modules ahead of planned redaction UX work.
+
+## Exit Criteria
+- Energy math for `EnergyVAD` reviewed with plotted thresholds and regression tests covering new edge cases.
+- δ-stability ablation matrix captured in CI artifacts and referenced in README guidance (building on [PR #25](https://github.com/farmountain/SmartGlass-AI-Agent/pull/25)).
+- Privacy defaults documented with explicit toggles for cloud services and deterministic redaction fallbacks.
+
+## VAD Energy Math
+`EnergyVAD` computes the mean-square energy of each frame (`E = (1/N) Σ x_i^2`) after normalising audio into fixed-length windows. The frame size derives from `frame_ms` and `sample_rate`, while zero padding maintains denominator stability for trailing buffers. Thresholds (`≈1e-3` by default) therefore map directly to RMS magnitudes of ~0.031, offering millisecond-scale decision latency at 16 kHz sampling. Regression coverage in `tests/test_vad_thresholds.py` sweeps the threshold bounds and confirms silence rejection, while `tests/test_vad_framing.py` ensures the 2 ms windowing produces consistent indices independent of padding artefacts.
+
+## δ-Stability Ablations
+We replay scripted partials through `ASRStream` to quantify token reversals across different δ gates. `tests/test_asr_delta_gate.py` asserts that δ ≤ 0.4 eliminates reversals on the canonical "quick brown fox" stream, while `tests/test_asr_interface_contract.py` verifies interface stability and timestamp propagation. The CI audio benchmark (`bench/audio_bench.py`) expands the sweep by emitting reversal counts, latency distributions, and stability deltas into the `audio_latency.csv` artifact consumed by the [Audio Bench job](https://github.com/farmountain/SmartGlass-AI-Agent/actions?query=workflow%3ACI). Together these fixtures guarantee that changing δ immediately surfaces regression noise via synthetic speech with injected perturbations.
+
+## Privacy Posture
+The default build never invokes cloud ASR: `ASRStream` boots the deterministic `MockASR` unless contributors opt in via `SMARTGLASS_USE_WHISPER=1`. Vision paths route through `privacy.redact.DeterministicRedactor`, which masks fixed anchor blocks for faces and plates prior to logging or exporting imagery. Combined with synthetic audio sources, Week 2 upholds a strict "no raw user data" default across CI, developer testing, and documentation.
+
+## Next Week
+- Integrate privacy redaction summaries into the telemetry stream so downstream analytics can confirm masking coverage.
+- Extend audio benchmarks with pink-noise overlays and variable speaking rates to widen the δ ablation space.
+- Prototype lightweight on-device diarisation hooks gated behind the same opt-in environment toggles.
+
+## Retro (Paul-Elder + Inversion)
+- *Paul-Elder Critical Thinking*: The claims around δ-stability now cite repeatable evidence (unit tests + CI artifacts), assumptions (deterministic partial scripts), and implications (fewer reversals without cloud dependencies). Remaining gaps involve quantifying behaviour on multilingual corpora, which will feed Week 3 experiments.
+- *Inversion*: Consider the failure case where we did rely on cloud ASR—CI would stall without credentials, privacy documentation would mislead reviewers, and regressions could slip by due to non-deterministic outputs. Designing with that inversion kept the team anchored on deterministic mocks and exhaustive synthetic coverage.
