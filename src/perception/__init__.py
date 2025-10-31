@@ -1,8 +1,9 @@
-"""Perception utilities for keyframing, vector quantization, and OCR."""
+"""Perception utilities for keyframing, VAD, vector quantization, and OCR."""
 
 import os
 
 from .ocr import MockOCR
+from .vad import EnergyVAD
 from .vision_keyframe import VQEncoder, select_keyframes
 
 
@@ -44,6 +45,7 @@ __all__ = [
     "get_default_keyframer",
     "get_default_ocr",
     "get_default_vq",
+    "EnergyVAD",
     "select_keyframes",
     "VQEncoder",
 ]

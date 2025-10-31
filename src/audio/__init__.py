@@ -6,7 +6,7 @@ import os
 from typing import Any
 
 from .asr_stream import ASRStream, MockASR, StreamingASR
-from .vad import AudioFrame, EnergyVAD
+from .vad import EnergyVAD
 
 
 def _is_env_enabled(name: str) -> bool:
@@ -58,7 +58,6 @@ __all__ = [
     "ASRStream",
     "MockASR",
     "StreamingASR",
-    "AudioFrame",
     "EnergyVAD",
     "WhisperASRStream",
     "get_default_asr",
