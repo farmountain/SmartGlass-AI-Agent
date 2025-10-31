@@ -1,5 +1,8 @@
-"""Perception utilities for keyframing and vector quantization."""
+"""Perception utilities for keyframing, vector quantization, and OCR."""
 
+import os
+
+from .ocr import MockOCR
 from .vision_keyframe import VQEncoder, select_keyframes
 
 
@@ -7,6 +10,11 @@ def get_default_keyframer():
     """Return the default keyframe selection callable."""
 
     return select_keyframes
+
+
+def _env_flag(name: str) -> bool:
+    value = os.getenv(name, "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
 
 
 def get_default_vq(seed: int | None = None) -> VQEncoder:
@@ -22,4 +30,20 @@ def get_default_vq(seed: int | None = None) -> VQEncoder:
     return VQEncoder(seed=seed)
 
 
-__all__ = ["get_default_keyframer", "get_default_vq", "select_keyframes", "VQEncoder"]
+def get_default_ocr() -> MockOCR:
+    """Return the default OCR backend implementation."""
+
+    if _env_flag("USE_EASYOCR"):
+        raise RuntimeError("EasyOCR backend is not available in offline mode.")
+    if _env_flag("USE_TESSERACT"):
+        raise RuntimeError("Tesseract backend is not available in offline mode.")
+    return MockOCR()
+
+
+__all__ = [
+    "get_default_keyframer",
+    "get_default_ocr",
+    "get_default_vq",
+    "select_keyframes",
+    "VQEncoder",
+]
