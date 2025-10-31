@@ -9,7 +9,7 @@ A multimodal AI assistant for smart glasses, integrating:
 Built for the **Meta Ray-Ban Wayfarer** and similar wearable devices.
 Includes an **18-week learning program** with step-by-step **Google Colab workshops**, and a fully functional modular Python agent (`SmartGlassAgent`) for real-world deployment.
 
-📄 Latest weekly doc: [Week 3 Report](docs/WEEK_03.md).
+📄 Latest weekly doc: [Week 4 Report](docs/WEEK_04.md).
 
 ---
 
