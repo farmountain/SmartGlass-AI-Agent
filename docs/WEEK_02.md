@@ -27,7 +27,7 @@ We replay scripted partials through `ASRStream` to quantify token reversals acro
 With the stricter δ = 0.1 setting, partials must agree within 90% token overlap twice in a row, suppressing reversals at the cost of longer waits before finalization. Relaxing the gate to δ = 0.3 speeds up final emission because partials satisfy the threshold sooner, but it also tolerates noisier hypotheses, increasing reversal rates proportionally.
 
 ## Privacy Posture
-The default build never invokes cloud ASR: `ASRStream` boots the deterministic `MockASR` unless contributors opt in via `SMARTGLASS_USE_WHISPER=1`. Vision paths route through `privacy.redact.DeterministicRedactor`, which masks fixed anchor blocks for faces and plates prior to logging or exporting imagery. Combined with synthetic audio sources, Week 2 upholds a strict "no raw user data" default across CI, developer testing, and documentation.
+The default build never invokes cloud ASR: `ASRStream` boots the deterministic `MockASR` unless contributors opt in via `SMARTGLASS_USE_WHISPER=1`. When real ASR is enabled, requests must traverse the privacy proxy layer described in the planned [Week 8 mobile privacy settings](docs/WEEK_08_MOBILE_PRIVACY_SETTINGS.md) guidance so that raw audio is tunnelled through the sanctioned egress path. Vision paths route through `privacy.redact.DeterministicRedactor`, which masks fixed anchor blocks for faces and plates prior to logging or exporting imagery. Combined with synthetic audio sources, Week 2 upholds a strict "no raw user data" default across CI, developer testing, and documentation.
 
 ## Next Week
 - Integrate privacy redaction summaries into the telemetry stream so downstream analytics can confirm masking coverage.
