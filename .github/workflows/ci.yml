@@ -52,6 +52,13 @@ jobs:
         id: pytest
         run: pytest
 
+      - name: Run image benchmarks
+        id: image_bench
+        if: ${{ hashFiles('bench/image_bench.py') != '' }}
+        run: |
+          mkdir -p artifacts
+          python bench/image_bench.py || true
+
       - name: Run audio benchmarks
         id: audio_bench
         if: ${{ hashFiles('bench/audio_bench.py') != '' }}
@@ -114,6 +121,9 @@ jobs:
             if [ "${{ steps.audio_bench.outcome }}" != "" ]; then
               echo "| Audio Bench | ${{ steps.audio_bench.outcome }} |";
             fi
+            if [ "${{ steps.image_bench.outcome }}" != "" ]; then
+              echo "| Image Bench | ${{ steps.image_bench.outcome }} |";
+            fi
             echo "";
             if [ -f artifacts/audio_latency.csv ]; then
               echo "### Audio Latency Metrics";
@@ -142,6 +152,54 @@ PY
               echo "_Audio latency metrics unavailable (Week 2 soft gate)._";
               echo "";
             fi
+            if [ -f artifacts/image_latency.csv ]; then
+              echo "### Vision Latency Metrics";
+              echo "";
+              python - <<'PY'
+import csv
+from pathlib import Path
+
+path = Path("artifacts/image_latency.csv")
+rows = []
+with path.open(newline="") as f:
+    reader = csv.reader(f)
+    rows = [row for row in reader if any(cell.strip() for cell in row)]
+
+if not rows:
+    print("_Image latency metrics file was empty._\n")
+else:
+    header, *body = rows
+    print("| " + " | ".join(header) + " |")
+    print("| " + " | ".join("---" for _ in header) + " |")
+    for row in body:
+        print("| " + " | ".join(row) + " |")
+    print()
+PY
+            fi
+            if [ -f artifacts/ocr_results.csv ]; then
+              echo "### Synthetic OCR Metrics";
+              echo "";
+              python - <<'PY'
+import csv
+from pathlib import Path
+
+path = Path("artifacts/ocr_results.csv")
+rows = []
+with path.open(newline="") as f:
+    reader = csv.reader(f)
+    rows = [row for row in reader if any(cell.strip() for cell in row)]
+
+if not rows:
+    print("_Synthetic OCR metrics file was empty._\n")
+else:
+    header, *body = rows
+    print("| " + " | ".join(header) + " |")
+    print("| " + " | ".join("---" for _ in header) + " |")
+    for row in body:
+        print("| " + " | ".join(row) + " |")
+    print()
+PY
+            fi
             if [ -f artifacts/metrics.jsonl ]; then
               python - <<'PY'
 import json
@@ -149,6 +207,16 @@ from pathlib import Path
 
 path = Path("artifacts/metrics.jsonl")
 latest = {"asr": None, "vad": None}
+vision_rates = {}
+ocr_precision = None
+
+
+def _coerce_float(value):
+    try:
+        return float(value)
+    except Exception:
+        return None
+
 
 def classify(entry):
     labels = []
@@ -163,6 +231,7 @@ def classify(entry):
         return "vad"
     return None
 
+
 def extract_value(entry):
     for key in ("value", "score", "wer", "f1", "accuracy", "metric_value"):
         if key in entry and isinstance(entry[key], (int, float, str)):
@@ -173,6 +242,7 @@ def extract_value(entry):
             if key in metrics:
                 return metrics[key]
     return json.dumps(entry, ensure_ascii=False)
+
 
 with path.open() as stream:
     for line in stream:
@@ -186,6 +256,14 @@ with path.open() as stream:
         bucket = classify(entry)
         if bucket and entry:
             latest[bucket] = entry
+        metric = entry.get("metric")
+        if metric == "vision.keys_rate":
+            tags = entry.get("tags") or {}
+            clip = str(tags.get("clip", "unknown"))
+            vision_rates[clip] = entry
+        elif metric == "ocr.precision_synth":
+            ocr_precision = entry
+
 
 print("### ASR/VAD Metrics")
 print()
@@ -208,6 +286,50 @@ else:
         print(f"| {label} | {value} | {detail} |")
     print()
     print("_Threshold gating to be introduced in future sprints._\n")
+
+print("### Vision Keyframe Rates")
+print()
+if not vision_rates:
+    print("_No vision keyframe metrics available._\n")
+else:
+    print("| Clip | Rate | Timestamp |")
+    print("| --- | --- | --- |")
+    for clip, entry in sorted(vision_rates.items()):
+        value = entry.get("value")
+        timestamp = entry.get("timestamp", "n/a")
+        print(f"| {clip} | {value} | {timestamp} |")
+    print()
+
+print("### Synthetic OCR Precision")
+print()
+if not ocr_precision:
+    print("_No synthetic OCR metrics available._\n")
+else:
+    value = ocr_precision.get("value")
+    timestamp = ocr_precision.get("timestamp", "n/a")
+    print("| Metric | Value | Timestamp |")
+    print("| --- | --- | --- |")
+    print(f"| ocr.precision_synth | {value} | {timestamp} |")
+    print()
+
+warnings = []
+static_entry = vision_rates.get("static")
+if static_entry:
+    static_rate = _coerce_float(static_entry.get("value"))
+    if static_rate is not None and static_rate > 0.05:
+        warnings.append(":warning: Static clip keyframe rate {:.3f} exceeds expected maximum (0.05).".format(static_rate))
+
+if ocr_precision:
+    precision_value = _coerce_float(ocr_precision.get("value"))
+    if precision_value is not None and precision_value < 0.9:
+        warnings.append(":warning: Synthetic OCR precision {:.3f} fell below expected minimum (0.9).".format(precision_value))
+
+if warnings:
+    print("#### Warnings")
+    print()
+    for line in warnings:
+        print(f"- {line}")
+    print()
 PY
             else
               echo "_ASR/VAD metrics not yet available (soft gate)._";
