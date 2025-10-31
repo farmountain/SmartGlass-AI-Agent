@@ -1,8 +1,16 @@
-from pathlib import Path
-import sys
+"""Test configuration for ensuring the project package is importable."""
 
-# Ensure the "src" package is importable for tests that use the source layout.
-ROOT = Path(__file__).resolve().parents[1]
-SRC_PATH = ROOT / "src"
-if str(SRC_PATH) not in sys.path:
-    sys.path.insert(0, str(SRC_PATH))
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+
+def _ensure_project_on_path() -> None:
+    root = Path(__file__).resolve().parents[1]
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+
+
+_ensure_project_on_path()
+
