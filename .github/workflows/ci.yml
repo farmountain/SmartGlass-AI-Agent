@@ -109,7 +109,12 @@ jobs:
 
       - name: Summarize results
         if: ${{ always() }}
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
         run: |
+          reversal_flag_file="artifacts/reversal_gate.flag"
+          rm -f "$reversal_flag_file"
           {
             echo "## CI Summary";
             echo "";
@@ -284,8 +289,10 @@ else:
 PY
             fi
             if [ -f artifacts/metrics.jsonl ]; then
-              python - <<'PY'
+              REVERSAL_FLAG_PATH="$reversal_flag_file" python - <<'PY'
 import json
+import os
+import re
 from pathlib import Path
 
 path = Path("artifacts/metrics.jsonl")
@@ -295,6 +302,7 @@ ocr_precision = None
 tracked_specs = {
     "asr.total_partials": "ASR total partials",
     "asr.reversal_rate": "ASR reversal rate",
+    "audio_bench.reversal_rate": "Audio bench reversal rate",
     "asr.first_partial_ms": "ASR first partial (ms)",
     "vad.frames_processed": "VAD frames processed",
 }
@@ -302,6 +310,10 @@ tracked_metrics = {
     metric: {"label": label, "value": None, "timestamp": None}
     for metric, label in tracked_specs.items()
 }
+reversal_sources = (
+    "audio_bench.reversal_rate",
+    "asr.reversal_rate",
+)
 
 
 def _coerce_float(value):
@@ -395,6 +407,46 @@ with path.open() as stream:
             ocr_precision = entry
 
 
+def _is_week4_or_later(ref):
+    if not ref:
+        return False
+    match = re.search(r"week[-_\s]?(\d+)", ref, re.IGNORECASE)
+    if match:
+        try:
+            return int(match.group(1)) >= 4
+        except ValueError:
+            return False
+    return False
+
+
+ref_candidates = [
+    os.getenv("GITHUB_REF_NAME", ""),
+    os.getenv("GITHUB_HEAD_REF", ""),
+]
+week_gate_active = any(_is_week4_or_later(ref) for ref in ref_candidates)
+reversal_details = []
+for source in reversal_sources:
+    record = tracked_metrics.get(source)
+    if not record:
+        continue
+    value = _coerce_float(record.get("value"))
+    if value is not None:
+        reversal_details.append((source, value))
+
+flag_path = Path(os.getenv("REVERSAL_FLAG_PATH", "artifacts/reversal_gate.flag"))
+reversal_warning_message = None
+if week_gate_active and reversal_details:
+    preferred_source, preferred_value = reversal_details[0]
+    if preferred_value > 0.5:
+        flag_path.parent.mkdir(parents=True, exist_ok=True)
+        flag_path.write_text(f"{preferred_value:.6f}")
+        reversal_warning_message = (
+            f":warning: Audio reversal rate {preferred_value:.3f} exceeded the 0.5 threshold for Week 4+ runs."
+        )
+elif flag_path.exists():
+    flag_path.unlink()
+
+
 print("### ASR/VAD Metrics")
 print()
 print("| Metric | Value | Timestamp |")
@@ -402,6 +454,7 @@ print("| --- | --- | --- |")
 for metric in (
     "asr.total_partials",
     "asr.reversal_rate",
+    "audio_bench.reversal_rate",
     "asr.first_partial_ms",
     "vad.frames_processed",
 ):
@@ -483,6 +536,9 @@ if ocr_precision:
     if precision_value is not None and precision_value < 0.9:
         warnings.append(":warning: Synthetic OCR precision {:.3f} fell below expected minimum (0.9).".format(precision_value))
 
+if reversal_warning_message:
+    warnings.append(reversal_warning_message)
+
 if warnings:
     print("#### Warnings")
     print()
@@ -494,6 +550,11 @@ PY
               echo "_ASR/VAD metrics not yet available (soft gate)._";
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "$reversal_flag_file" ]; then
+            rate=$(cat "$reversal_flag_file")
+            ref_display="${GITHUB_REF_NAME:-${GITHUB_HEAD_REF:-unknown}}"
+            echo "::warning:: Audio reversal rate ${rate} exceeded 0.5 threshold on ref ${ref_display}."
+          fi
 
       - name: Upload artifacts
         if: ${{ always() }}
