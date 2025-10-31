@@ -9,8 +9,8 @@ if str(ROOT) not in sys.path:
 from src.audio import ASRStream, MockASR
 
 
-def collect_types(events, event_type):
-    return [event for event in events if event["type"] == event_type]
+def collect_by_final_flag(events, *, is_final):
+    return [event for event in events if bool(event.get("is_final")) == is_final]
 
 
 def test_asr_stream_emits_partial_and_final_sequences():
@@ -26,11 +26,15 @@ def test_asr_stream_emits_partial_and_final_sequences():
     stream = ASRStream(asr=mock_asr, stability_window=3, stability_delta=0.34)
 
     events = list(stream.run())
-    partial_events = collect_types(events, "partial")
-    final_events = collect_types(events, "final")
+    partial_events = collect_by_final_flag(events, is_final=False)
+    final_events = collect_by_final_flag(events, is_final=True)
 
     assert [event["text"] for event in partial_events] == [p["text"] for p in partials]
     assert [event["timestamp"] for event in partial_events] == [p["timestamp"] for p in partials]
+
+    assert all("t_ms" in event and "t_first_ms" in event for event in events)
+    first_ms = events[0]["t_ms"] if events else 0.0
+    assert all(abs(event["t_first_ms"] - first_ms) < 1e-9 for event in events)
 
     assert final_events, "expected at least one finalized hypothesis"
     final_texts = [event["text"] for event in final_events]

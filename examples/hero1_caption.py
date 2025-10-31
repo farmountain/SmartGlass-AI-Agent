@@ -170,7 +170,7 @@ def _run_asr(asr_stream: ASRStream) -> Dict[str, object]:
     partials: List[Dict[str, object]] = []
     for chunk in asr_stream.run():
         partials.append(chunk)
-        if chunk.get("type") == "final":
+        if chunk.get("is_final"):
             final_text = str(chunk.get("text", ""))
     return {
         "partials": partials,
