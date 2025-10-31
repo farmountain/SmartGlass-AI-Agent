@@ -292,6 +292,16 @@ path = Path("artifacts/metrics.jsonl")
 latest = {"asr": None, "vad": None}
 vision_rates = {}
 ocr_precision = None
+tracked_specs = {
+    "asr.total_partials": "ASR total partials",
+    "asr.reversal_rate": "ASR reversal rate",
+    "asr.first_partial_ms": "ASR first partial (ms)",
+    "vad.frames_processed": "VAD frames processed",
+}
+tracked_metrics = {
+    metric: {"label": label, "value": None, "timestamp": None}
+    for metric, label in tracked_specs.items()
+}
 
 
 def _coerce_float(value):
@@ -299,6 +309,19 @@ def _coerce_float(value):
         return float(value)
     except Exception:
         return None
+
+
+def _stringify(value):
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(value, ensure_ascii=False)
+    except TypeError:
+        return str(value)
 
 
 def classify(entry):
@@ -340,6 +363,30 @@ with path.open() as stream:
         if bucket and entry:
             latest[bucket] = entry
         metric = entry.get("metric")
+        if metric in tracked_metrics:
+            record = tracked_metrics[metric]
+            value = entry.get("value")
+            if value is None:
+                for key in ("score", "wer", "f1", "accuracy", "metric_value"):
+                    if key in entry:
+                        value = entry[key]
+                        break
+            if value is None:
+                metrics_blob = entry.get("metrics")
+                if isinstance(metrics_blob, dict):
+                    for key in ("value", "score", "wer", "f1", "accuracy"):
+                        if key in metrics_blob:
+                            value = metrics_blob[key]
+                            break
+            record["value"] = value
+            timestamp = entry.get("timestamp")
+            if timestamp is None:
+                timestamp = entry.get("step")
+            if timestamp is None:
+                details = entry.get("details")
+                if isinstance(details, (str, int, float)):
+                    timestamp = details
+            record["timestamp"] = _stringify(timestamp)
         if metric == "vision.keys_rate":
             tags = entry.get("tags") or {}
             clip = str(tags.get("clip", "unknown"))
@@ -350,8 +397,29 @@ with path.open() as stream:
 
 print("### ASR/VAD Metrics")
 print()
+print("| Metric | Value | Timestamp |")
+print("| --- | --- | --- |")
+for metric in (
+    "asr.total_partials",
+    "asr.reversal_rate",
+    "asr.first_partial_ms",
+    "vad.frames_processed",
+):
+    record = tracked_metrics[metric]
+    value = record["value"]
+    timestamp = record["timestamp"]
+    value_display = "n/a" if value is None else _stringify(value)
+    timestamp_display = timestamp if timestamp is not None else "n/a"
+    print(f"| {record['label']} | {value_display} | {timestamp_display} |")
+print()
+
+has_tracked_values = any(record["value"] is not None for record in tracked_metrics.values())
+if not has_tracked_values:
+    print("_ASR/VAD metrics not yet available (soft gate)._\n")
+
 if not any(latest.values()):
-    print("_No ASR or VAD metrics reported (soft gate)._\n")
+    if has_tracked_values:
+        print("_No ASR or VAD metrics reported (soft gate)._\n")
 else:
     print("| Metric | Value | Notes |")
     print("| --- | --- | --- |")
