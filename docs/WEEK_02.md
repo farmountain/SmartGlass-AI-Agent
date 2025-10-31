@@ -33,6 +33,8 @@ The default build never invokes cloud ASR: `ASRStream` boots the deterministic `
 - Integrate privacy redaction summaries into the telemetry stream so downstream analytics can confirm masking coverage.
 - Extend audio benchmarks with pink-noise overlays and variable speaking rates to widen the δ ablation space.
 - Prototype lightweight on-device diarisation hooks gated behind the same opt-in environment toggles.
+- Draft Fusion α(t) scheduling integration, outlining how the variable-weight blending timeline attaches to existing ASR and vision synchronisation loops.
+- Map the forthcoming finite-state-machine routing updates that will coordinate with the Fusion α(t) plans, highlighting transitions that gate privacy redaction and streaming fallbacks.
 
 ## Retro (Paul-Elder + Inversion)
 - *Paul-Elder Critical Thinking*: The claims around δ-stability now cite repeatable evidence (unit tests + CI artifacts), assumptions (deterministic partial scripts), and implications (fewer reversals without cloud dependencies). Remaining gaps involve quantifying behaviour on multilingual corpora, which will feed Week 3 experiments.
