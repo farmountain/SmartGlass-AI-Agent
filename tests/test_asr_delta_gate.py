@@ -40,7 +40,7 @@ def test_delta_gate_reduces_reversals():
     naive_reversals = count_reversals(partial["text"] for partial in noisy_partials)
     stream = ASRStream(asr=MockASR(noisy_partials), stability_window=3, stability_delta=0.4)
 
-    finals = [event["text"] for event in stream.run() if event["type"] == "final"]
+    finals = [event["text"] for event in stream.run() if event.get("is_final")]
     gated_reversals = count_reversals(finals)
 
     assert naive_reversals > 0

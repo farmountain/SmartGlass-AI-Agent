@@ -155,7 +155,7 @@ def _analyse_signal(
     events = list(stream.run())
     asr_runtime_ms = (time.perf_counter() - start) * 1000.0
 
-    finals = [event["text"] for event in events if event.get("type") == "final"]
+    finals = [event["text"] for event in events if event.get("is_final")]
     final_reversals = _count_reversals(finals)
     final_transcript = finals[-1] if finals else ""
 

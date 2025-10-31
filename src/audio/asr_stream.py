@@ -6,6 +6,8 @@ import os
 from collections import Counter, deque
 from typing import Deque, Dict, Iterable, Iterator, List, MutableMapping, Optional, Sequence, Tuple
 
+from src.io.telemetry import log_metric
+
 TokenSequence = List[str]
 Timestamp = Tuple[float, float]
 ASRPartial = MutableMapping[str, object]
@@ -71,6 +73,33 @@ class ASRStream:
         final_tokens: TokenSequence = []
         latest_timestamp: Timestamp = (0.0, 0.0)
 
+        first_partial_ms: Optional[float] = None
+        total_partials = 0
+        rollback_chars = 0
+        previous_partial_text = ""
+
+        def _emit_event(
+            *,
+            text: str,
+            timestamp: Timestamp,
+            stability: float,
+            is_final: bool,
+        ) -> Dict[str, object]:
+            nonlocal first_partial_ms
+            event_time_ms = self._timestamp_to_ms(timestamp)
+            if first_partial_ms is None:
+                first_partial_ms = event_time_ms
+            event = {
+                "type": "final" if is_final else "partial",
+                "text": text,
+                "timestamp": timestamp,
+                "stability": stability,
+                "is_final": is_final,
+                "t_ms": event_time_ms,
+                "t_first_ms": first_partial_ms,
+            }
+            return event
+
         for partial in self.asr.stream(audio_source):
             text = str(partial.get("text", "")).strip()
             timestamp = self._coerce_timestamp(partial.get("timestamp"))
@@ -81,34 +110,45 @@ class ASRStream:
             stable_len, stable_tokens = self._stable_prefix(history, final_tokens)
             stability = stable_len / max(1, len(tokens)) if tokens else 1.0
 
-            yield {
-                "type": "partial",
-                "text": text,
-                "timestamp": timestamp,
-                "stability": stability,
-            }
+            total_partials += 1
+            if len(text) < len(previous_partial_text):
+                rollback_chars += len(previous_partial_text) - len(text)
+            previous_partial_text = text
+
+            yield _emit_event(
+                text=text,
+                timestamp=timestamp,
+                stability=stability,
+                is_final=False,
+            )
 
             if stable_len > len(final_tokens):
-                new_tokens = stable_tokens[len(final_tokens):stable_len]
+                new_tokens = stable_tokens[len(final_tokens) : stable_len]
                 if new_tokens:
                     final_tokens.extend(new_tokens)
-                    yield {
-                        "type": "final",
-                        "text": self._join_tokens(final_tokens),
-                        "timestamp": timestamp,
-                        "stability": stability,
-                    }
+                    yield _emit_event(
+                        text=self._join_tokens(final_tokens),
+                        timestamp=timestamp,
+                        stability=stability,
+                        is_final=True,
+                    )
 
         if history:
             residual = history[-1]
             if len(residual) > len(final_tokens):
                 final_tokens.extend(residual[len(final_tokens) :])
-                yield {
-                    "type": "final",
-                    "text": self._join_tokens(final_tokens),
-                    "timestamp": latest_timestamp,
-                    "stability": 1.0,
-                }
+                yield _emit_event(
+                    text=self._join_tokens(final_tokens),
+                    timestamp=latest_timestamp,
+                    stability=1.0,
+                    is_final=True,
+                )
+
+        first_ms = first_partial_ms if first_partial_ms is not None else 0.0
+        reversal_rate = rollback_chars / max(1, total_partials)
+        log_metric("asr.first_partial_ms", first_ms, unit="ms")
+        log_metric("asr.total_partials", total_partials, unit="count")
+        log_metric("asr.reversal_rate", reversal_rate, unit="ratio")
 
     def _stable_prefix(
         self, history: Deque[TokenSequence], finalized: TokenSequence
@@ -142,6 +182,12 @@ class ASRStream:
             start, end = value
             return float(start), float(end)
         return (0.0, 0.0)
+
+    @staticmethod
+    def _timestamp_to_ms(timestamp: Timestamp) -> float:
+        start, end = timestamp
+        base = end if end > 0.0 else start
+        return float(base) * 1000.0
 
 
 class StreamingASR:
