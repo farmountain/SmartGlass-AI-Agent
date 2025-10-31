@@ -1,48 +1,53 @@
 from pathlib import Path
 import sys
-from typing import Iterable, List
+from typing import Iterable
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.audio import ASRStream, MockASR
+from src.audio.asr_stream import ASRStream, MockASR
 
 
-def count_reversals(transcripts: Iterable[str]) -> int:
-    previous_tokens: List[str] = []
-    reversals = 0
+def rollback_ratio(transcripts: Iterable[str]) -> float:
+    previous = ""
+    rollback_chars = 0
+    total = 0
     for text in transcripts:
-        tokens = text.split()
-        prefix_len = 0
-        for before, after in zip(previous_tokens, tokens):
-            if before == after:
-                prefix_len += 1
-            else:
-                break
-        if prefix_len < len(previous_tokens) and previous_tokens:
-            reversals += 1
-        previous_tokens = tokens
-    return reversals
+        total += 1
+        if len(text) < len(previous):
+            rollback_chars += len(previous) - len(text)
+        previous = text
+    return rollback_chars / total if total else 0.0
 
 
 def test_delta_gate_reduces_reversals():
-    noisy_partials = [
-        {"text": "the quick", "timestamp": (0.0, 0.2)},
-        {"text": "the quick brown", "timestamp": (0.0, 0.4)},
-        {"text": "the quick brwn", "timestamp": (0.0, 0.6)},
-        {"text": "the quick brown", "timestamp": (0.0, 0.8)},
-        {"text": "the quick brown fox", "timestamp": (0.0, 1.0)},
-        {"text": "the quick brown fx", "timestamp": (0.0, 1.2)},
-        {"text": "the quick brown fox", "timestamp": (0.0, 1.4)},
+    scripted_partials = [
+        {"text": "call", "timestamp": (0.0, 0.2)},
+        {"text": "calling", "timestamp": (0.0, 0.4)},
+        {"text": "calli", "timestamp": (0.0, 0.6)},
+        {"text": "calling", "timestamp": (0.0, 0.8)},
+        {"text": "calling back", "timestamp": (0.0, 1.0)},
+        {"text": "calling ba", "timestamp": (0.0, 1.2)},
+        {"text": "calling back soon", "timestamp": (0.0, 1.4)},
+        {"text": "calling back soon", "timestamp": (0.0, 1.6)},
     ]
 
-    naive_reversals = count_reversals(partial["text"] for partial in noisy_partials)
-    stream = ASRStream(asr=MockASR(noisy_partials), stability_window=3, stability_delta=0.4)
+    naive_ratio = rollback_ratio(partial["text"] for partial in scripted_partials)
+    assert naive_ratio > 0.0
 
-    finals = [event["text"] for event in stream.run() if event.get("is_final")]
-    gated_reversals = count_reversals(finals)
+    stream = ASRStream(asr=MockASR(scripted_partials), stability_window=3, stability_delta=0.3)
+    events = list(stream.run())
+    finals = [event for event in events if event.get("is_final")]
 
-    assert naive_reversals > 0
-    assert gated_reversals == 0
-    assert finals[-1] == "the quick brown fox"
+    assert finals, "expected the δ gate to emit finalized transcripts"
+    assert finals[-1]["text"] == scripted_partials[-1]["text"]
+    assert finals[-1]["timestamp"] == scripted_partials[-1]["timestamp"]
+
+    gated_ratio = rollback_ratio(event["text"] for event in finals)
+
+    reduction = (naive_ratio - gated_ratio) / naive_ratio if naive_ratio else 0.0
+    assert reduction >= 0.40
+    assert pytest.approx(finals[-1]["t_ms"]) == scripted_partials[-1]["timestamp"][1] * 1000.0
