@@ -51,61 +51,38 @@ def _noise(duration_s: float, *, sample_rate: int, scale: float, rng: np.random.
 
 
 def _synth_signals(*, sample_rate: int) -> Sequence[SignalSpec]:
-    """Generate deterministic audio buffers and scripted ASR partials."""
+    """Generate three deterministic one-second benchmark signals."""
 
+    if sample_rate != 16_000:
+        raise ValueError("audio bench expects a 16 kHz sample rate")
+
+    duration_s = 1.0
     rng = np.random.default_rng(12345)
 
-    # 1) Baseline silence measurement.
-    silence = _silence(1.0, sample_rate=sample_rate)
+    silence = _silence(duration_s, sample_rate=sample_rate)
     silence_partials: Sequence[Dict[str, object]] = (
         {"text": "", "timestamp": (0.0, 0.5)},
         {"text": "", "timestamp": (0.5, 1.0)},
     )
 
-    # 2) Tone burst simulating a wake-word like signal.
-    burst = np.concatenate(
-        [
-            _silence(0.15, sample_rate=sample_rate),
-            _tone(0.7, freq_hz=440.0, sample_rate=sample_rate, amplitude=0.35),
-            _silence(0.15, sample_rate=sample_rate),
-        ]
-    )
-    burst_partials: Sequence[Dict[str, object]] = (
-        {"text": "wake", "timestamp": (0.0, 0.3)},
-        {"text": "wake word", "timestamp": (0.0, 0.6)},
-        {"text": "wake wrd", "timestamp": (0.0, 0.9)},
-        {"text": "wake word", "timestamp": (0.0, 1.2)},
+    tone = _tone(duration_s, freq_hz=440.0, sample_rate=sample_rate, amplitude=0.5)
+    tone_partials: Sequence[Dict[str, object]] = (
+        {"text": "han", "timestamp": (0.0, 0.33)},
+        {"text": "hann", "timestamp": (0.33, 0.66)},
+        {"text": "hann tone", "timestamp": (0.66, 1.0)},
     )
 
-    # 3) Speech-like pattern with modulated tones and low noise.
-    words = [
-        ("the", 210.0),
-        ("smart", 260.0),
-        ("glasses", 310.0),
-        ("detect", 360.0),
-        ("motion", 410.0),
-        ("quickly", 460.0),
-    ]
-    segments: List[np.ndarray] = []
-    for idx, (token, freq) in enumerate(words):
-        duration = 0.28 + 0.02 * idx
-        envelope = _tone(duration, freq_hz=freq, sample_rate=sample_rate, amplitude=0.45)
-        noise = _noise(duration, sample_rate=sample_rate, scale=0.015, rng=rng)
-        segments.append(envelope + noise)
-        segments.append(_silence(0.06, sample_rate=sample_rate))
-    phrase = np.concatenate(segments[:-1])  # drop trailing silence to keep length tidy
-    phrase_partials: Sequence[Dict[str, object]] = (
-        {"text": "the smart", "timestamp": (0.0, 0.5)},
-        {"text": "the smart glasses", "timestamp": (0.0, 0.8)},
-        {"text": "the smart glasses detect", "timestamp": (0.0, 1.1)},
-        {"text": "the smart glasses detect motion", "timestamp": (0.0, 1.4)},
-        {"text": "the smart glasses detect motion quickly", "timestamp": (0.0, 1.7)},
+    noise = _noise(duration_s, sample_rate=sample_rate, scale=0.1, rng=rng)
+    noise_partials: Sequence[Dict[str, object]] = (
+        {"text": "static", "timestamp": (0.0, 0.4)},
+        {"text": "static noise", "timestamp": (0.4, 0.8)},
+        {"text": "static", "timestamp": (0.8, 1.0)},
     )
 
     return (
         SignalSpec("silence", silence, silence_partials),
-        SignalSpec("tone_burst", burst, burst_partials),
-        SignalSpec("noisy_phrase", phrase, phrase_partials),
+        SignalSpec("hann_sine", tone, tone_partials),
+        SignalSpec("white_noise", noise, noise_partials),
     )
 
 
@@ -135,15 +112,13 @@ def _analyse_signal(
     stability_window: int,
     stability_delta: float,
 ) -> Dict[str, object]:
-    """Measure VAD and ASR behaviour for a given benchmark signal."""
+    """Run a benchmark signal through EnergyVAD and ASRStream."""
 
-    start = time.perf_counter()
-    frames = list(vad.frames(spec.samples))
-    frame_runtime_ms = (time.perf_counter() - start) * 1000.0
-
-    speech_frames = sum(1 for frame in frames if vad.is_speech(frame))
-
-    partial_reversals = _count_reversals(partial["text"] for partial in spec.partials)
+    frames_processed = 0
+    for frame in vad.frames(spec.samples):
+        frames_processed += 1
+        # Exercise the VAD decision path so timing in production stays relevant.
+        vad.is_speech(frame)
 
     stream = ASRStream(
         asr=MockASR(spec.partials),
@@ -151,38 +126,35 @@ def _analyse_signal(
         stability_delta=stability_delta,
     )
 
-    start = time.perf_counter()
-    events = list(stream.run())
-    asr_runtime_ms = (time.perf_counter() - start) * 1000.0
+    first_partial_ms: float = 0.0
+    partials_count = 0
+    partial_texts: List[str] = []
 
-    finals = [event["text"] for event in events if event.get("is_final")]
-    final_reversals = _count_reversals(finals)
-    final_transcript = finals[-1] if finals else ""
+    for event in stream.run():
+        if event.get("is_final"):
+            continue
+        partials_count += 1
+        partial_text = str(event.get("text", ""))
+        partial_texts.append(partial_text)
+        if first_partial_ms == 0.0:
+            first_partial_ms = float(event.get("t_first_ms", 0.0))
 
-    result: Dict[str, object] = {
-        "signal": spec.name,
-        "sample_rate": vad.sample_rate,
-        "frame_ms": vad.frame_ms,
-        "frames": len(frames),
-        "speech_frames": speech_frames,
-        "vad_latency_ms": frame_runtime_ms,
-        "asr_events": len(events),
-        "asr_latency_ms": asr_runtime_ms,
-        "partial_reversals": partial_reversals,
-        "final_reversals": final_reversals,
-        "final_transcript": final_transcript,
-    }
+    reversal_count = _count_reversals(partial_texts)
+    reversal_rate = reversal_count / max(1, partials_count)
 
     tags = {"signal": spec.name}
-    log_metric("audio_bench.vad_frames", len(frames), unit="count", tags=tags)
-    log_metric("audio_bench.vad_speech_frames", speech_frames, unit="count", tags=tags)
-    log_metric("audio_bench.vad_latency", frame_runtime_ms, unit="ms", tags=tags)
-    log_metric("audio_bench.asr_events", len(events), unit="count", tags=tags)
-    log_metric("audio_bench.asr_latency", asr_runtime_ms, unit="ms", tags=tags)
-    log_metric("audio_bench.partial_reversals", partial_reversals, unit="count", tags=tags)
-    log_metric("audio_bench.final_reversals", final_reversals, unit="count", tags=tags)
+    log_metric("audio_bench.first_partial_ms", first_partial_ms, unit="ms", tags=tags)
+    log_metric("audio_bench.partials_count", partials_count, unit="count", tags=tags)
+    log_metric("audio_bench.reversal_rate", reversal_rate, unit="ratio", tags=tags)
+    log_metric("audio_bench.frames_processed", frames_processed, unit="count", tags=tags)
 
-    return result
+    return {
+        "signal": spec.name,
+        "first_partial_ms": first_partial_ms,
+        "partials_count": partials_count,
+        "reversal_rate": reversal_rate,
+        "frames_processed": frames_processed,
+    }
 
 
 def run_audio_bench(
@@ -205,18 +177,12 @@ def run_audio_bench(
     ]
 
     with output_path.open("w", newline="") as fp:
-        fieldnames = list(results[0].keys()) if results else [
+        fieldnames = [
             "signal",
-            "sample_rate",
-            "frame_ms",
-            "frames",
-            "speech_frames",
-            "vad_latency_ms",
-            "asr_events",
-            "asr_latency_ms",
-            "partial_reversals",
-            "final_reversals",
-            "final_transcript",
+            "first_partial_ms",
+            "partials_count",
+            "reversal_rate",
+            "frames_processed",
         ]
         writer = csv.DictWriter(fp, fieldnames=fieldnames)
         writer.writeheader()
