@@ -6,8 +6,10 @@ A multimodal AI assistant for smart glasses, integrating:
 - **👁️ CLIP / DeepSeek-Vision** (vision-language understanding)
 - **🧠 student: Llama-3.2-3B / Qwen-2.5-3B (Week 10/11 plan)** for natural language generation (legacy GPT-2 path deprecated)
 
-Built for the **Meta Ray-Ban Wayfarer** and similar wearable devices.  
+Built for the **Meta Ray-Ban Wayfarer** and similar wearable devices.
 Includes an **18-week learning program** with step-by-step **Google Colab workshops**, and a fully functional modular Python agent (`SmartGlassAgent`) for real-world deployment.
+
+📄 Latest weekly doc: [Week 3 Report](docs/WEEK_03.md).
 
 ---
 
@@ -81,6 +83,18 @@ python bench/audio_bench.py --out artifacts/audio_latency.csv
 The script procedurally generates deterministic tone, silence, and speech-like signals, replays scripted `MockASR`
 partials, and writes latency/frame/reversal metrics to both `artifacts/audio_latency.csv` and the telemetry metrics
 artifacts for CI consumption.
+
+### Image keyframe + OCR bench
+
+Profile the `select_keyframes` and `VQEncoder` pipeline alongside the synthetic OCR mock:
+
+```bash
+python bench/image_bench.py
+```
+
+The script renders deterministic clips (static, gradient, motion), records selection/encoding timings into
+`artifacts/image_latency.csv`, and evaluates `MockOCR` precision on fabricated panels with results stored in
+`artifacts/ocr_results.csv`. See the [Week 3 Report](docs/WEEK_03.md) for design notes, invariances, and interpretation tips.
 
 ## 🔍 CI Audio Validation
 
