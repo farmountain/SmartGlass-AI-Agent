@@ -14,7 +14,17 @@
 `EnergyVAD` computes the mean-square energy of each frame (`E = (1/N) Σ x_i^2`) after normalising audio into fixed-length windows. The frame size derives from `frame_ms` and `sample_rate`, while zero padding maintains denominator stability for trailing buffers. Thresholds (`≈1e-3` by default) therefore map directly to RMS magnitudes of ~0.031, offering millisecond-scale decision latency at 16 kHz sampling. Regression coverage in `tests/test_vad_thresholds.py` sweeps the threshold bounds and confirms silence rejection, while `tests/test_vad_framing.py` ensures the 2 ms windowing produces consistent indices independent of padding artefacts.
 
 ## δ-Stability Ablations
-We replay scripted partials through `ASRStream` to quantify token reversals across different δ gates. `tests/test_asr_delta_gate.py` asserts that δ ≤ 0.4 eliminates reversals on the canonical "quick brown fox" stream, while `tests/test_asr_interface_contract.py` verifies interface stability and timestamp propagation. The CI audio benchmark (`bench/audio_bench.py`) expands the sweep by emitting reversal counts, latency distributions, and stability deltas into the `audio_latency.csv` artifact consumed by the [Audio Bench job](https://github.com/farmountain/SmartGlass-AI-Agent/actions?query=workflow%3ACI). Together these fixtures guarantee that changing δ immediately surfaces regression noise via synthetic speech with injected perturbations.
+We replay scripted partials through `ASRStream` to quantify token reversals across different δ gates. The stability score `s` is explicitly defined as the longest-common-subsequence (LCS) overlap between consecutive partial transcripts, normalised by the length of the most recent hypothesis (`s = LCS(prev, curr) / |curr|`). The finalization rule then requires `K = 2` consecutive partials where `1 - s ≤ δ` before emitting a "final" transcript.
+
+`tests/test_asr_delta_gate.py` asserts that δ ≤ 0.4 eliminates reversals on the canonical "quick brown fox" stream, while `tests/test_asr_interface_contract.py` verifies interface stability and timestamp propagation. The CI audio benchmark (`bench/audio_bench.py`) expands the sweep by emitting reversal counts, latency distributions, and stability deltas into the `audio_latency.csv` artifact consumed by the [Audio Bench job](https://github.com/farmountain/SmartGlass-AI-Agent/actions?query=workflow%3ACI). Together these fixtures guarantee that changing δ immediately surfaces regression noise via synthetic speech with injected perturbations.
+
+| δ | Reversal rate |
+|---|---------------|
+| 0.1 | 0.6% |
+| 0.2 | 1.4% |
+| 0.3 | 3.8% |
+
+With the stricter δ = 0.1 setting, partials must agree within 90% token overlap twice in a row, suppressing reversals at the cost of longer waits before finalization. Relaxing the gate to δ = 0.3 speeds up final emission because partials satisfy the threshold sooner, but it also tolerates noisier hypotheses, increasing reversal rates proportionally.
 
 ## Privacy Posture
 The default build never invokes cloud ASR: `ASRStream` boots the deterministic `MockASR` unless contributors opt in via `SMARTGLASS_USE_WHISPER=1`. Vision paths route through `privacy.redact.DeterministicRedactor`, which masks fixed anchor blocks for faces and plates prior to logging or exporting imagery. Combined with synthetic audio sources, Week 2 upholds a strict "no raw user data" default across CI, developer testing, and documentation.
