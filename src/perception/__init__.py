@@ -2,6 +2,7 @@
 
 import os
 
+from .asr_stream import ASRStream, MockASR
 from .ocr import MockOCR
 from .vad import EnergyVAD
 from .vision_keyframe import VQEncoder, select_keyframes
@@ -42,10 +43,12 @@ def get_default_ocr() -> MockOCR:
 
 
 __all__ = [
+    "ASRStream",
     "get_default_keyframer",
     "get_default_ocr",
     "get_default_vq",
     "EnergyVAD",
+    "MockASR",
     "select_keyframes",
     "VQEncoder",
 ]
