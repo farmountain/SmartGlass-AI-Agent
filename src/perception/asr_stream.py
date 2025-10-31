@@ -6,7 +6,7 @@ from typing import Iterator, Sequence
 
 import numpy as np
 
-__all__ = ["ASRStream", "MockASR"]
+__all__ = ["ASRStream", "MockASR", "WhisperASRStream"]
 
 
 class MockASR:
@@ -182,3 +182,18 @@ class ASRStream:
                     dp[j] = max(dp[j], dp[j - 1])
                 prev_diag = temp
         return dp[-1]
+
+
+class WhisperASRStream(ASRStream):
+    """Placeholder Whisper streaming adapter.
+
+    This stub intentionally raises to remind integrators that the real Whisper
+    client needs to be wired in outside of the CI environment. Keeping the
+    interface available allows downstream modules to import the factory without
+    pulling in optional dependencies during tests.
+    """
+
+    def __init__(self, *args, **kwargs) -> None:  # noqa: D401 - intentionally simple
+        raise NotImplementedError(
+            "Wire your Whisper client here; disabled in CI"
+        )
