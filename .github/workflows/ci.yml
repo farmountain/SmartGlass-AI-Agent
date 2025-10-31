@@ -66,6 +66,13 @@ jobs:
           mkdir -p artifacts
           python bench/audio_bench.py || true
 
+      - name: Run hero benchmark
+        id: hero_bench
+        if: ${{ hashFiles('bench/e2e_demo1_bench.py') != '' }}
+        run: |
+          mkdir -p artifacts
+          python bench/e2e_demo1_bench.py || true
+
       - name: Inventory repository
         id: inventory
         run: python scripts/inventory_repo.py --strict
@@ -124,6 +131,9 @@ jobs:
             if [ "${{ steps.image_bench.outcome }}" != "" ]; then
               echo "| Image Bench | ${{ steps.image_bench.outcome }} |";
             fi
+            if [ "${{ steps.hero_bench.outcome }}" != "" ]; then
+              echo "| Hero Bench | ${{ steps.hero_bench.outcome }} |"; 
+            fi
             echo "";
             if [ -f artifacts/audio_latency.csv ]; then
               echo "### Audio Latency Metrics";
@@ -172,8 +182,81 @@ else:
     print("| " + " | ".join(header) + " |")
     print("| " + " | ".join("---" for _ in header) + " |")
     for row in body:
-        print("| " + " | ".join(row) + " |")
+    print("| " + " | ".join(row) + " |")
     print()
+PY
+            fi
+            if [ -f artifacts/e2e_hero1_summary.json ]; then
+              echo "### Hero Caption Benchmark";
+              echo "";
+              python - <<'PY'
+import json
+from pathlib import Path
+
+summary_path = Path("artifacts/e2e_hero1_summary.json")
+
+summary = json.loads(summary_path.read_text())
+stage_stats = summary.get("stages", {})
+runs = summary.get("runs", 0)
+
+print(f"_Runs: {runs}_")
+print()
+if stage_stats:
+    print("| Stage | p50 (ms) | p95 (ms) |")
+    print("| --- | --- | --- |")
+    for stage, stats in stage_stats.items():
+        label = stage.replace("_", " ")
+        print(f"| {label} | {stats.get('p50_ms', 0.0):.3f} | {stats.get('p95_ms', 0.0):.3f} |")
+    totals = summary.get("totals", {})
+    if totals:
+        print(f"| total | {totals.get('p50_ms', 0.0):.3f} | {totals.get('p95_ms', 0.0):.3f} |")
+    print()
+else:
+    print("_No hero latency metrics available._\n")
+
+fusion = summary.get("fusion", {})
+if fusion:
+    print("#### Fusion Metrics")
+    print()
+    print("| Metric | Value |")
+    print("| --- | --- |")
+    print(f"| audio p50 (ms) | {fusion.get('audio_p50_ms', 0.0):.3f} |")
+    print(f"| vision p50 (ms) | {fusion.get('vision_p50_ms', 0.0):.3f} |")
+    print(f"| combined p50 (ms) | {fusion.get('combined_p50_ms', 0.0):.3f} |")
+    print(f"| mean score | {fusion.get('score_mean', 0.0):.3f} |")
+    print(f"| mean audio confidence | {fusion.get('audio_conf_mean', 0.0):.3f} |")
+    print(f"| mean vision confidence | {fusion.get('vision_conf_mean', 0.0):.3f} |")
+    print()
+
+fsm_counts = summary.get("fsm", {}).get("final_state_counts", {})
+if fsm_counts:
+    print("#### FSM Final State Distribution")
+    print()
+    print("| State | Count |")
+    print("| --- | --- |")
+    for state, count in fsm_counts.items():
+        print(f"| {state} | {count} |")
+    print()
+
+threshold_warnings = []
+for stage, stats in stage_stats.items():
+    p50 = float(stats.get("p50_ms", 0.0))
+    p95 = float(stats.get("p95_ms", 0.0))
+    if p50 > 600.0:
+        threshold_warnings.append(f":warning: {stage} p50 {p50:.1f} ms exceeds 600 ms target.")
+    if p95 > 900.0:
+        threshold_warnings.append(f":warning: {stage} p95 {p95:.1f} ms exceeds 900 ms target.")
+
+if threshold_warnings:
+    print("#### Hero Warnings")
+    print()
+    for line in threshold_warnings:
+        print(f"- {line}")
+    print()
+
+if threshold_warnings:
+    warn_path = Path("artifacts/e2e_hero1_warnings.json")
+    warn_path.write_text(json.dumps(threshold_warnings, indent=2))
 PY
             fi
             if [ -f artifacts/ocr_results.csv ]; then
@@ -313,6 +396,14 @@ else:
     print()
 
 warnings = []
+hero_warn_path = Path("artifacts/e2e_hero1_warnings.json")
+if hero_warn_path.exists():
+    try:
+        hero_warnings = json.loads(hero_warn_path.read_text())
+        if isinstance(hero_warnings, list):
+            warnings.extend(str(item) for item in hero_warnings)
+    except json.JSONDecodeError:
+        warnings.append(":warning: Unable to parse hero benchmark warnings artifact.")
 static_entry = vision_rates.get("static")
 if static_entry:
     static_rate = _coerce_float(static_entry.get("value"))
