@@ -55,6 +55,65 @@ def _ensure_mono_python(buffer: Iterable[float] | Sequence[float]) -> list[float
     return [float(sample) for sample in data]
 
 
+def frames_from_mic(mic: Any, seconds: float = 1.0) -> Iterator[Sequence[float]]:
+    """Yield 20 ms frames from a microphone provider stream.
+
+    The function pulls raw PCM buffers from ``mic.get_frames()`` and stitches
+    them into contiguous 20 millisecond windows assuming a 16 kHz sampling
+    rate. Only the requested duration (defaulting to one second) is consumed
+    from the microphone iterator.
+    """
+
+    duration = float(seconds)
+    if duration <= 0:
+        return
+
+    sample_rate = 16_000
+    frame_samples = int(round(sample_rate * 0.02))
+    total_samples = int(round(sample_rate * duration))
+    if total_samples <= 0:
+        return
+
+    buffer: list[float] = []
+    collected = 0
+
+    for chunk in mic.get_frames():
+        if np is not None and isinstance(chunk, np.ndarray):  # type: ignore[union-attr]
+            samples = _ensure_mono_numpy(chunk, np.float32)  # type: ignore[arg-type]
+        else:
+            samples = _ensure_mono_python(chunk)
+
+        index = 0
+        chunk_length = len(samples)
+        while index < chunk_length and collected < total_samples:
+            remaining = total_samples - collected
+            space = frame_samples - len(buffer)
+            take = min(remaining, space, chunk_length - index)
+            if take <= 0:
+                break
+
+            segment = samples[index : index + take]
+            buffer.extend(float(sample) for sample in segment)
+            index += take
+            collected += take
+
+            if len(buffer) == frame_samples:
+                if np is not None:  # pragma: no branch - numpy available in most environments
+                    yield np.array(buffer, dtype=np.float32)
+                else:
+                    yield list(buffer)
+                buffer.clear()
+
+        if collected >= total_samples:
+            break
+
+    if buffer:
+        if np is not None:
+            yield np.array(buffer, dtype=np.float32)
+        else:
+            yield list(buffer)
+
+
 class EnergyVAD:
     """Energy-based voice activity detector with simple latency controls."""
 
@@ -149,4 +208,4 @@ class EnergyVAD:
         return energy >= self.threshold
 
 
-__all__ = ["EnergyVAD"]
+__all__ = ["EnergyVAD", "frames_from_mic"]
