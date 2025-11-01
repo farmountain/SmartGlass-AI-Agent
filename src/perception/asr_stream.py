@@ -2,9 +2,13 @@
 from __future__ import annotations
 
 import os
-from typing import Iterator, Sequence
+from typing import Any, Iterator, Sequence
 
 import numpy as np
+
+from src.io.telemetry import log_metric
+
+from src.perception.vad import frames_from_mic
 
 __all__ = ["ASRStream", "MockASR", "WhisperASRStream"]
 
@@ -159,6 +163,31 @@ class ASRStream:
                 break
 
             prev_tokens = curr_tokens
+
+    # ------------------------------------------------------------------
+    def run_with_provider(self, provider: Any, *, seconds: float = 1.0) -> Iterator[dict]:
+        """Stream microphone audio from ``provider`` through the stability gate."""
+
+        mic = getattr(provider, "mic", None) or getattr(provider, "microphone", None)
+        if mic is None:
+            raise AttributeError("provider does not expose a 'mic' or 'microphone' attribute")
+
+        provider_name = type(provider).__name__ if provider is not None else "unknown"
+        log_metric("asr.provider", 1.0, tags={"provider": provider_name})
+
+        frame_count = 0
+
+        def counted_frames() -> Iterator[Sequence[float] | np.ndarray]:
+            nonlocal frame_count
+            for frame in frames_from_mic(mic, seconds=seconds):
+                frame_count += 1
+                yield frame
+
+        try:
+            for result in self.run(counted_frames()):
+                yield result
+        finally:
+            log_metric("asr.frames_from_mic", frame_count, unit="count")
 
     # ------------------------------------------------------------------
     def _similarity(self, prev_tokens: Sequence[str], curr_tokens: Sequence[str]) -> float:
