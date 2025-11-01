@@ -1,70 +1,60 @@
-"""Stubs for production hardware integrations."""
+"""Stubs for production-grade driver implementations."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from typing import List, Sequence, Tuple
+from typing import Iterator
 
-from ..interfaces import (
-    AudioOut,
-    CameraIn,
-    DisplayOverlay,
-    Frame,
-    Haptics,
-    MicIn,
-    Permissions,
-)
+import numpy as np
+
+from ..interfaces import AudioOut, CameraIn, DisplayOverlay, Haptics, MicIn, Permissions
 
 
 class MetaCameraIn(CameraIn):
     """Placeholder for the production camera driver."""
 
-    def get_frame(self) -> Tuple[datetime, Frame]:
+    def get_frames(self) -> Iterator[np.ndarray]:  # type: ignore[override]
         raise NotImplementedError
 
 
 class MetaMicIn(MicIn):
     """Placeholder for the production microphone driver."""
 
-    def get_audio_chunk(self) -> Tuple[datetime, List[float]]:
+    def get_frames(self) -> Iterator[np.ndarray]:  # type: ignore[override]
         raise NotImplementedError
 
 
 class MetaAudioOut(AudioOut):
     """Placeholder for the production audio output driver."""
 
-    def play_audio(self, samples: Sequence[float], sample_rate_hz: int) -> float:
+    def speak(self, text: str) -> dict:
         raise NotImplementedError
 
 
 class MetaDisplayOverlay(DisplayOverlay):
-    """Placeholder for the production overlay driver."""
+    """Placeholder for the production overlay renderer."""
 
-    def show_text(self, text: str, duration: timedelta) -> datetime:
+    def render(self, card: dict) -> dict:
         raise NotImplementedError
 
 
 class MetaHaptics(Haptics):
     """Placeholder for the production haptics driver."""
 
-    def pulse(self, pattern: Sequence[float]) -> float:
+    def vibrate(self, ms: int) -> None:
         raise NotImplementedError
 
 
 class MetaPermissions(Permissions):
-    """Placeholder for the production permissions implementation."""
+    """Placeholder for the production permissions broker."""
 
-    def has_permission(self, capability: str) -> bool:
-        raise NotImplementedError
-
-    def require(self, capability: str) -> None:
+    def request(self, capabilities: set[str]) -> dict:
         raise NotImplementedError
 
 
 @dataclass
 class MetaProvider:
-    """Aggregate of the Meta hardware driver placeholders."""
+    """Aggregate of production driver placeholders."""
 
     camera: MetaCameraIn = field(default_factory=MetaCameraIn)
     microphone: MetaMicIn = field(default_factory=MetaMicIn)

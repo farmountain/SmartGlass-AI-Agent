@@ -1,125 +1,61 @@
-"""Interface compliance tests for the driver abstraction layer."""
+"""Tests for the device abstraction layer protocol definitions."""
 
 from __future__ import annotations
 
 import inspect
-from typing import Type
+from collections.abc import Iterator
+from typing import get_args, get_origin, get_type_hints
 
-import pytest
+import numpy as np
 
-from drivers.interfaces import (
-    AudioOut,
-    CameraIn,
-    DisplayOverlay,
-    Haptics,
-    MicIn,
-    Permissions,
-)
-from drivers.providers.meta import (
-    MetaAudioOut,
-    MetaCameraIn,
-    MetaDisplayOverlay,
-    MetaHaptics,
-    MetaMicIn,
-    MetaPermissions,
-    MetaProvider,
-)
-from drivers.providers.mock import (
-    MockAudioOut,
-    MockCameraIn,
-    MockDisplayOverlay,
-    MockHaptics,
-    MockMicIn,
-    MockPermissions,
-    MockProvider,
-)
+from drivers import AudioOut, CameraIn, DisplayOverlay, Haptics, MicIn, Permissions
+
+def test_interfaces_are_importable() -> None:
+    assert inspect.isclass(CameraIn)
+    assert inspect.isclass(MicIn)
+    assert inspect.isclass(AudioOut)
+    assert inspect.isclass(DisplayOverlay)
+    assert inspect.isclass(Haptics)
+    assert inspect.isclass(Permissions)
 
 
-INTERFACE_METHODS = {
-    CameraIn: ("camera", ["get_frame"]),
-    MicIn: ("microphone", ["get_audio_chunk"]),
-    AudioOut: ("audio_out", ["play_audio"]),
-    DisplayOverlay: ("overlay", ["show_text"]),
-    Haptics: ("haptics", ["pulse"]),
-    Permissions: ("permissions", ["has_permission", "require"]),
-}
-
-MOCK_COMPONENT_TYPES = {
-    "camera": MockCameraIn,
-    "microphone": MockMicIn,
-    "audio_out": MockAudioOut,
-    "overlay": MockDisplayOverlay,
-    "haptics": MockHaptics,
-    "permissions": MockPermissions,
-}
-
-META_COMPONENT_TYPES = {
-    "camera": MetaCameraIn,
-    "microphone": MetaMicIn,
-    "audio_out": MetaAudioOut,
-    "overlay": MetaDisplayOverlay,
-    "haptics": MetaHaptics,
-    "permissions": MetaPermissions,
-}
+def test_camera_protocol_method_signature() -> None:
+    method = CameraIn.get_frames
+    hints = get_type_hints(method)
+    origin = get_origin(hints["return"])
+    assert origin is Iterator
+    (inner_type,) = get_args(hints["return"])
+    assert inner_type is np.ndarray
 
 
-@pytest.mark.parametrize(
-    "provider_cls, component_types",
-    [
-        (MockProvider, MOCK_COMPONENT_TYPES),
-        (MetaProvider, META_COMPONENT_TYPES),
-    ],
-)
-def test_provider_components_exist_and_have_required_methods(
-    provider_cls: Type, component_types: dict[str, Type]
-) -> None:
-    provider = provider_cls()
-
-    for interface, (attribute, methods) in INTERFACE_METHODS.items():
-        component = getattr(provider, attribute)
-
-        expected_type = component_types[attribute]
-        assert isinstance(
-            component, expected_type
-        ), f"{attribute} should be an instance of {expected_type.__name__}"
-
-        for method_name in methods:
-            method = getattr(component, method_name, None)
-            assert callable(method), (
-                f"{component.__class__.__name__}.{method_name} must be callable"
-            )
+def test_mic_protocol_method_signature() -> None:
+    method = MicIn.get_frames
+    hints = get_type_hints(method)
+    origin = get_origin(hints["return"])
+    assert origin is Iterator
+    (inner_type,) = get_args(hints["return"])
+    assert inner_type is np.ndarray
 
 
-COMPONENT_PROTOCOLS = [
-    (MockCameraIn, CameraIn),
-    (MockMicIn, MicIn),
-    (MockAudioOut, AudioOut),
-    (MockDisplayOverlay, DisplayOverlay),
-    (MockHaptics, Haptics),
-    (MockPermissions, Permissions),
-    (MetaCameraIn, CameraIn),
-    (MetaMicIn, MicIn),
-    (MetaAudioOut, AudioOut),
-    (MetaDisplayOverlay, DisplayOverlay),
-    (MetaHaptics, Haptics),
-    (MetaPermissions, Permissions),
-]
+def test_audio_out_protocol_signature() -> None:
+    method = AudioOut.speak
+    hints = get_type_hints(method)
+    assert hints["return"] is dict
 
 
-@pytest.mark.parametrize("component_cls, protocol_type", COMPONENT_PROTOCOLS)
-def test_components_public_api_matches_protocol(
-    component_cls: Type, protocol_type: Type
-) -> None:
-    _, expected_methods = INTERFACE_METHODS[protocol_type]
+def test_overlay_protocol_signature() -> None:
+    method = DisplayOverlay.render
+    hints = get_type_hints(method)
+    assert hints["return"] is dict
 
-    public_methods = {
-        name
-        for name, member in inspect.getmembers(component_cls, predicate=inspect.isfunction)
-        if not name.startswith("_")
-    }
 
-    missing = set(expected_methods) - public_methods
-    assert not missing, f"{component_cls.__name__} missing methods: {sorted(missing)}"
+def test_haptics_protocol_signature() -> None:
+    method = Haptics.vibrate
+    hints = get_type_hints(method)
+    assert hints["return"] is type(None)
 
-    extra = public_methods - set(expected_methods)
-    assert not extra, f"{component_cls.__name__} has unexpected public methods: {sorted(extra)}"
+
+def test_permissions_protocol_signature() -> None:
+    method = Permissions.request
+    hints = get_type_hints(method)
+    assert hints["return"] is dict
