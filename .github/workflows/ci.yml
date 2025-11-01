@@ -374,6 +374,7 @@ PY
 import json
 import os
 import re
+import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -624,27 +625,49 @@ else:
     print()
 
 warnings = []
+stderr_messages: list[str] = []
 hero_warn_path = Path("artifacts/e2e_hero1_warnings.json")
 if hero_warn_path.exists():
     try:
         hero_warnings = json.loads(hero_warn_path.read_text())
         if isinstance(hero_warnings, list):
-            warnings.extend(str(item) for item in hero_warnings)
+            hero_lines = [str(item) for item in hero_warnings]
+            warnings.extend(hero_lines)
+            stderr_messages.extend(
+                line.lstrip(":warning:").strip()
+                for line in hero_lines
+                if line
+            )
     except json.JSONDecodeError:
-        warnings.append(":warning: Unable to parse hero benchmark warnings artifact.")
+        message = ":warning: Unable to parse hero benchmark warnings artifact."
+        warnings.append(message)
+        stderr_messages.append(message.lstrip(":warning:").strip())
 static_entry = vision_rates.get("static")
 if static_entry:
     static_rate = _coerce_float(static_entry.get("value"))
     if static_rate is not None and static_rate > 0.05:
-        warnings.append(":warning: Static clip keyframe rate {:.3f} exceeds expected maximum (0.05).".format(static_rate))
+        message = (
+            "Static clip keyframe rate {:.3f} exceeds expected maximum (0.05).".format(
+                static_rate
+            )
+        )
+        warnings.append(f":warning: {message}")
+        stderr_messages.append(message)
 
 if ocr_precision:
     precision_value = _coerce_float(ocr_precision.get("value"))
     if precision_value is not None and precision_value < 0.9:
-        warnings.append(":warning: Synthetic OCR precision {:.3f} fell below expected minimum (0.9).".format(precision_value))
+        message = (
+            "Synthetic OCR precision {:.3f} fell below expected minimum (0.9).".format(
+                precision_value
+            )
+        )
+        warnings.append(f":warning: {message}")
+        stderr_messages.append(message)
 
 if reversal_warning_message:
     warnings.append(reversal_warning_message)
+    stderr_messages.append(reversal_warning_message.lstrip(":warning:").strip())
 
 if warnings:
     print("#### Warnings")
@@ -652,6 +675,11 @@ if warnings:
     for line in warnings:
         print(f"- {line}")
     print()
+
+    for line in stderr_messages:
+        if not line:
+            continue
+        print(f"::warning::{line}", file=sys.stderr)
 PY
             else
               echo "_ASR/VAD metrics not yet available (soft gate)._";
