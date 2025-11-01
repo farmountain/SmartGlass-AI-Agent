@@ -3,7 +3,7 @@
 import os
 
 from .asr_stream import ASRStream, MockASR, WhisperASRStream
-from .ocr import MockOCR
+from .ocr import MockOCR, text_and_boxes
 from .vad import EnergyVAD
 from .vision_keyframe import VQEncoder, select_keyframes
 
@@ -68,14 +68,14 @@ def get_default_vq(seed: int | None = None) -> VQEncoder:
     return VQEncoder(seed=seed)
 
 
-def get_default_ocr() -> MockOCR:
-    """Return the default OCR backend implementation."""
+def get_default_ocr():
+    """Return the default OCR callable."""
 
     if _env_flag("USE_EASYOCR"):
         raise RuntimeError("EasyOCR backend is not available in offline mode.")
     if _env_flag("USE_TESSERACT"):
         raise RuntimeError("Tesseract backend is not available in offline mode.")
-    return MockOCR()
+    return text_and_boxes
 
 
 __all__ = [
