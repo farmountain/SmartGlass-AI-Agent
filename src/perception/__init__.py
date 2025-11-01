@@ -63,6 +63,8 @@ def get_default_vq(seed: int | None = None) -> VQEncoder:
         module default is used.
     """
 
+    if seed is None:
+        return VQEncoder()
     return VQEncoder(seed=seed)
 
 
