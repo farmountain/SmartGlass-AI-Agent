@@ -67,6 +67,22 @@ result = agent.process_multimodal_query(
 print("Response:", result["response"])
 ```
 
+#### Provider selection
+
+The data access layer defaults to the offline `mock` provider so examples and CI run without hardware:
+
+```bash
+export PROVIDER=mock  # default, optional
+```
+
+Switching to the `meta` preview stub keeps the same API surface while the real SDK is under development:
+
+```bash
+export PROVIDER=meta
+```
+
+The `meta` provider currently returns placeholder telemetry, frames, and audio envelopes that mirror the expected Ray-Ban SDK schema.
+
 ---
 
 ## 📈 Benchmarks
