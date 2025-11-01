@@ -5,11 +5,41 @@ alerts that may require engineering follow-up.
 
 ## Default GPT-2 Usage
 
-- `QUICKSTART.md`: Reference to GPT-2 detected.
 - `README.md`: Reference to GPT-2 detected.
+- `QUICKSTART.md`: Reference to GPT-2 detected.
 - `examples/basic_usage.py`: Reference to GPT-2 detected.
 - `colab_notebooks/Session4_Intent_Detection_Prompt_Engineering.ipynb`: Reference to GPT-2 detected.
 - `colab_notebooks/Session10_Caching_Optimization.ipynb`: Reference to GPT-2 detected.
 - `src/smartglass_agent.py`: Reference to GPT-2 detected.
 - `src/gpt2_generator.py`: Reference to GPT-2 detected.
 - `docs/API_REFERENCE.md`: Reference to GPT-2 detected.
+
+## Vendor Lock-In
+
+| Path | Trigger |
+| --- | --- |
+| `README.md` | Meta wearable vendor reference detected. |
+| `requirements.txt` | Tesseract OCR dependency reference detected. |
+| `roadmap.md` | Meta wearable vendor reference detected. |
+| `drivers/interfaces.py` | Meta wearable vendor reference detected. |
+| `colab_notebooks/Session7_Visual_OCR_and_Translation.ipynb` | Tesseract OCR dependency reference detected. |
+| `src/perception/ocr.py` | Tesseract OCR dependency reference detected. |
+| `src/perception/ocr.py` | EasyOCR dependency reference detected. |
+| `src/perception/__init__.py` | Tesseract OCR dependency reference detected. |
+| `src/perception/__init__.py` | EasyOCR dependency reference detected. |
+| `docs/WEEK_03.md` | Tesseract OCR dependency reference detected. |
+| `docs/WEEK_03.md` | EasyOCR dependency reference detected. |
+
+### Move behind DAL
+
+- `README.md` — Meta wearable vendor reference detected.
+- `requirements.txt` — Tesseract OCR dependency reference detected.
+- `roadmap.md` — Meta wearable vendor reference detected.
+- `drivers/interfaces.py` — Meta wearable vendor reference detected.
+- `colab_notebooks/Session7_Visual_OCR_and_Translation.ipynb` — Tesseract OCR dependency reference detected.
+- `src/perception/ocr.py` — Tesseract OCR dependency reference detected.
+- `src/perception/ocr.py` — EasyOCR dependency reference detected.
+- `src/perception/__init__.py` — Tesseract OCR dependency reference detected.
+- `src/perception/__init__.py` — EasyOCR dependency reference detected.
+- `docs/WEEK_03.md` — Tesseract OCR dependency reference detected.
+- `docs/WEEK_03.md` — EasyOCR dependency reference detected.
