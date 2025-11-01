@@ -1,69 +1,59 @@
-"""Interfaces for hardware-style drivers used by the agent runtime."""
+"""Protocol definitions for hardware-style drivers exposed via the DAL."""
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-from typing import List, Protocol, Sequence, Tuple
+from typing import Iterator, Protocol
 
-
-Frame = List[List[int]]
-AudioSamples = Sequence[float]
-HapticPattern = Sequence[float]
+import numpy as np
 
 
 class CameraIn(Protocol):
-    """Capture still frames from a camera feed."""
+    """Capture frames from a camera sensor."""
 
-    def get_frame(self) -> Tuple[datetime, Frame]:
-        """Return a deterministic timestamp and a synthetic greyscale frame."""
+    def get_frames(self) -> Iterator[np.ndarray]:
+        """Yield successive frames as ``numpy.ndarray`` instances."""
 
 
 class MicIn(Protocol):
-    """Capture short audio segments from a microphone input."""
+    """Capture audio frames from a microphone input."""
 
-    def get_audio_chunk(self) -> Tuple[datetime, List[float]]:
-        """Return a timestamp and a single-channel audio buffer."""
+    def get_frames(self) -> Iterator[np.ndarray]:
+        """Yield successive audio buffers as ``numpy.ndarray`` values."""
 
 
 class AudioOut(Protocol):
-    """Send audio to the user's speakers."""
+    """Produce synthesized speech for the user."""
 
-    def play_audio(self, samples: AudioSamples, sample_rate_hz: int) -> float:
-        """Play samples at the requested rate and return the clip duration in seconds."""
+    def speak(self, text: str) -> dict:
+        """Render ``text`` and return structured metadata about the utterance."""
 
 
 class DisplayOverlay(Protocol):
-    """Show text overlays in the user's field of view."""
+    """Render UI overlays to the user's display."""
 
-    def show_text(self, text: str, duration: timedelta) -> datetime:
-        """Display ``text`` for ``duration`` and return the scheduled end time."""
+    def render(self, card: dict) -> dict:
+        """Render ``card`` and return a deterministic rendering payload."""
 
 
 class Haptics(Protocol):
-    """Trigger haptic patterns on wearable hardware."""
+    """Trigger tactile feedback on wearable hardware."""
 
-    def pulse(self, pattern: HapticPattern) -> float:
-        """Activate the pattern and return its total length in seconds."""
+    def vibrate(self, ms: int) -> None:
+        """Vibrate for ``ms`` milliseconds."""
 
 
 class Permissions(Protocol):
-    """Gate access to privileged capabilities."""
+    """Coordinate user permissions for privileged capabilities."""
 
-    def has_permission(self, capability: str) -> bool:
-        """Return ``True`` if the capability may be used without prompting."""
-
-    def require(self, capability: str) -> None:
-        """Raise ``PermissionError`` if the capability is not granted."""
+    def request(self, capabilities: set[str]) -> dict:
+        """Request ``capabilities`` and return a structured permission response."""
 
 
 __all__ = [
     "AudioOut",
-    "AudioSamples",
     "CameraIn",
     "DisplayOverlay",
-    "Frame",
     "Haptics",
-    "HapticPattern",
     "MicIn",
     "Permissions",
 ]

@@ -1,119 +1,131 @@
-"""Deterministic mock implementations of the driver interfaces."""
+"""Deterministic mock implementations of the driver provider interfaces."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-import math
-from typing import Iterable, List, Sequence, Tuple
+from typing import Dict, Iterator, List, Sequence, Set
 
-from ..interfaces import (
-    AudioOut,
-    CameraIn,
-    DisplayOverlay,
-    Frame,
-    Haptics,
-    MicIn,
-    Permissions,
-)
+import numpy as np
+
+from ..interfaces import AudioOut, CameraIn, DisplayOverlay, Haptics, MicIn, Permissions
 
 
 _BASE_TIME = datetime(2024, 1, 1, tzinfo=timezone.utc)
 
 
+def _isoformat(dt: datetime) -> str:
+    return dt.isoformat().replace("+00:00", "Z")
+
+
 class MockCameraIn(CameraIn):
-    """Return synthetic greyscale frames that step through a simple gradient."""
+    """Yield small synthetic frames with a diagonal gradient."""
 
-    def __init__(self) -> None:
-        self._frame_index = 0
+    def __init__(self, size: int = 4) -> None:
+        self._size = size
 
-    def get_frame(self) -> Tuple[datetime, Frame]:
-        timestamp = _BASE_TIME + timedelta(milliseconds=100 * self._frame_index)
-        size = 4
-        frame: Frame = [
-            [((row * size) + col + self._frame_index) % 256 for col in range(size)]
-            for row in range(size)
-        ]
-        self._frame_index += 1
-        return timestamp, frame
+    def get_frames(self) -> Iterator[np.ndarray]:
+        size = self._size
+        base = np.arange(size, dtype=np.uint8)
+        while True:
+            for offset in range(size):
+                frame = (np.add.outer(base, base) + offset).astype(np.uint8)
+                yield frame
 
 
 class MockMicIn(MicIn):
-    """Produce a repeatable single-channel audio waveform."""
+    """Yield deterministic sine wave audio frames."""
 
-    def __init__(self, sample_rate_hz: int = 16000, chunk_size: int = 160) -> None:
+    def __init__(self, sample_rate_hz: int = 16000, frame_size: int = 400) -> None:
         self._sample_rate_hz = sample_rate_hz
-        self._chunk_size = chunk_size
-        self._chunk_index = 0
+        self._frame_size = frame_size
 
-    def get_audio_chunk(self) -> Tuple[datetime, List[float]]:
-        offset_seconds = (self._chunk_size * self._chunk_index) / float(self._sample_rate_hz)
-        timestamp = _BASE_TIME + timedelta(seconds=offset_seconds)
-        phase_offset = self._chunk_index * self._chunk_size
-        samples = [
-            round(math.sin((phase_offset + i) / 40.0), 6)
-            for i in range(self._chunk_size)
-        ]
-        self._chunk_index += 1
-        return timestamp, samples
+    def get_frames(self) -> Iterator[np.ndarray]:
+        t = np.arange(self._frame_size, dtype=np.float32)
+        base_wave = np.sin(2 * np.pi * 440 * t / self._sample_rate_hz).astype(np.float32)
+        index = 0
+        while True:
+            phase = (index % self._sample_rate_hz) / self._sample_rate_hz
+            frame = np.roll(base_wave, index) * np.float32(np.cos(2 * np.pi * phase))
+            yield frame.astype(np.float32)
+            index += 1
 
 
 class MockAudioOut(AudioOut):
-    """Record the playback history and report deterministic durations."""
+    """Record utterances and provide deterministic metadata."""
 
     def __init__(self) -> None:
-        self.history: List[Tuple[Sequence[float], int, float]] = []
+        self.history: List[Dict[str, object]] = []
+        self._utterance_index = 0
 
-    def play_audio(self, samples: Sequence[float], sample_rate_hz: int) -> float:
-        duration = len(samples) / float(sample_rate_hz) if sample_rate_hz else 0.0
-        self.history.append((tuple(samples), sample_rate_hz, duration))
-        return duration
+    def speak(self, text: str) -> dict:
+        timestamp = _BASE_TIME + timedelta(milliseconds=750 * self._utterance_index)
+        words = [word for word in text.strip().split() if word]
+        duration_ms = 400 * len(words or text)
+        payload = {
+            "text": text,
+            "words": words,
+            "duration_ms": duration_ms,
+            "utterance_index": self._utterance_index,
+            "timestamp": _isoformat(timestamp),
+        }
+        self.history.append(payload)
+        self._utterance_index += 1
+        return payload
 
 
 class MockDisplayOverlay(DisplayOverlay):
-    """Keep a log of overlay text that would be shown."""
+    """Record overlay render calls and respond with deterministic payloads."""
 
     def __init__(self) -> None:
-        self.history: List[Tuple[str, timedelta, datetime]] = []
+        self.history: List[Dict[str, object]] = []
+        self._render_index = 0
 
-    def show_text(self, text: str, duration: timedelta) -> datetime:
-        start_time = _BASE_TIME + timedelta(milliseconds=50 * len(self.history))
-        end_time = start_time + duration
-        self.history.append((text, duration, end_time))
-        return end_time
+    def render(self, card: dict) -> dict:
+        rendered_at = _BASE_TIME + timedelta(milliseconds=500 * self._render_index)
+        payload = {
+            "card": card,
+            "render_index": self._render_index,
+            "rendered_at": _isoformat(rendered_at),
+        }
+        self.history.append(payload)
+        self._render_index += 1
+        return payload
 
 
 class MockHaptics(Haptics):
-    """Capture haptic pulse patterns for inspection."""
+    """Capture vibrate calls for later inspection."""
 
     def __init__(self) -> None:
-        self.patterns: List[Tuple[Sequence[float], float]] = []
+        self.patterns: List[int] = []
 
-    def pulse(self, pattern: Sequence[float]) -> float:
-        total = float(sum(pattern))
-        self.patterns.append((tuple(pattern), total))
-        return total
+    def vibrate(self, ms: int) -> None:
+        self.patterns.append(ms)
 
 
 class MockPermissions(Permissions):
-    """Simple permission gate with a configurable allow-list."""
+    """Deterministic permission responses based on an allow-list."""
 
-    def __init__(self, allowed: Iterable[str] | None = None) -> None:
-        self.allowed = set(allowed or {"camera", "microphone", "overlay"})
-        self.requests: List[str] = []
+    def __init__(self, granted: Set[str] | None = None) -> None:
+        self.granted = set(granted or {"camera", "microphone", "overlay"})
+        self.requests: List[Dict[str, Sequence[str]]] = []
 
-    def has_permission(self, capability: str) -> bool:
-        return capability in self.allowed
-
-    def require(self, capability: str) -> None:
-        self.requests.append(capability)
-        if capability not in self.allowed:
-            raise PermissionError(f"Capability '{capability}' is not granted")
+    def request(self, capabilities: set[str]) -> dict:
+        requested = set(capabilities)
+        granted = sorted(capabilities & self.granted)
+        denied = sorted(requested - self.granted)
+        payload = {
+            "requested": sorted(requested),
+            "granted": granted,
+            "denied": denied,
+        }
+        self.requests.append(payload)
+        return payload
 
 
 @dataclass
 class MockProvider:
-    """Aggregate of the mock driver implementations."""
+    """Aggregate of deterministic mock drivers."""
 
     camera: MockCameraIn = field(default_factory=MockCameraIn)
     microphone: MockMicIn = field(default_factory=MockMicIn)
