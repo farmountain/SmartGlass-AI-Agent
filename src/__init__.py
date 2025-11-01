@@ -1,11 +1,31 @@
-"""
-SmartGlass AI Agent Package
+"""SmartGlass AI Agent Package.
 
 A multimodal AI assistant for smart glasses integrating:
 - Whisper for speech recognition
 - CLIP for visual understanding
 - GPT-2 for natural language generation
 """
+
+from __future__ import annotations
+
+import os
+
+
+def _is_truthy(value: str | None) -> bool:
+    """Return ``True`` when the provided string represents a truthy value."""
+
+    if value is None:
+        return False
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
+if _is_truthy(os.getenv("CI")):
+    # Hard block real audio integrations in continuous integration runs. The
+    # mocks provide deterministic behaviour and avoid audio device/network
+    # dependencies.
+    os.environ["PROVIDER"] = "mock"
+    os.environ.pop("USE_WHISPER_STREAMING", None)
+
 
 from .whisper_processor import WhisperAudioProcessor
 from .clip_vision import CLIPVisionProcessor
