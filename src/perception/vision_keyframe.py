@@ -3,26 +3,32 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, List
+from itertools import islice
+from typing import List
 
 import numpy as np
 
 
+def _to_grayscale(frame: np.ndarray) -> np.ndarray:
+    """Convert a frame to grayscale float32 representation."""
+
+    array = np.asarray(frame)
+    if array.ndim == 2:
+        return array.astype(np.float32, copy=False)
+    if array.ndim == 3:
+        return array.mean(axis=-1, dtype=np.float32)
+    raise ValueError("frame must have shape (H, W) or (H, W, C)")
+
+
 def _downsample(frame: np.ndarray) -> np.ndarray:
-    """Downsample a frame to an 8x8 grayscale grid using average pooling.
+    """Downsample a frame to an 8x8 grid via average pooling."""
 
-    The function accepts frames with shapes ``(H, W)`` or ``(H, W, C)`` and
-    returns a float32 array. Channels, if present, are averaged before the
-    spatial reduction. The computation is deterministic and purely uses NumPy
-    operations, ensuring compatibility with environments where OpenCV or PIL are
-    unavailable.
-    """
+    gray = _to_grayscale(frame)
+    height, width = gray.shape
 
-    if frame.ndim == 3:
-        frame = frame.mean(axis=2)
-    frame = np.asarray(frame, dtype=np.float32)
+    if height == 8 and width == 8:
+        return gray.astype(np.float32, copy=False)
 
-    height, width = frame.shape[:2]
     row_edges = np.linspace(0, height, num=9, dtype=int)
     col_edges = np.linspace(0, width, num=9, dtype=int)
 
@@ -35,60 +41,41 @@ def _downsample(frame: np.ndarray) -> np.ndarray:
             c0, c1 = col_edges[j], col_edges[j + 1]
             if c1 <= c0:
                 continue
-            region = frame[r0:r1, c0:c1]
+            region = gray[r0:r1, c0:c1]
             downsampled[i, j] = float(region.mean()) if region.size else 0.0
 
     return downsampled
 
 
 def select_keyframes(frames: np.ndarray, diff_tau: float = 8.0, min_gap: int = 3) -> List[int]:
-    """Select keyframes from a sequence based on downsampled L2 differences.
-
-    Parameters
-    ----------
-    frames:
-        Array of frames with shape ``(T, H, W, C)`` or ``(T, H, W)``.
-    diff_tau:
-        Threshold for the L2 distance between downsampled frames required to
-        accept a new keyframe.
-    min_gap:
-        Minimum number of frames that must separate two keyframes.
-
-    Returns
-    -------
-    list[int]
-        Sorted list of frame indices to retain.
-    """
+    """Select keyframes using downsampled L1 frame differences."""
 
     if min_gap < 1:
         raise ValueError("min_gap must be at least 1")
 
-    frames = np.asarray(frames)
-    if frames.ndim < 3:
-        raise ValueError("frames should have at least 3 dimensions")
+    sequence = np.asarray(frames)
+    if sequence.ndim < 3:
+        raise ValueError("frames should have shape (T, H, W[, C])")
 
-    total_frames = frames.shape[0]
+    total_frames = sequence.shape[0]
     if total_frames == 0:
         return []
 
-    downsampled = np.array([_downsample(f).reshape(-1) for f in frames], dtype=np.float32)
-    if frames.ndim >= 3:
-        scale = (frames.shape[1] * frames.shape[2]) / float(downsampled.shape[1])
-    else:
-        scale = 1.0
+    downsampled = np.array([_downsample(frame).reshape(-1) for frame in sequence], dtype=np.float32)
 
     keyframes: List[int] = [0]
-    last_idx = 0
-    accumulated_diff = 0.0
+    last_selected = 0
+    accumulated = 0.0
+
     for idx in range(1, total_frames):
-        diff = float(np.linalg.norm(downsampled[idx] - downsampled[idx - 1]) * scale)
-        accumulated_diff += diff
-        if idx - last_idx < min_gap:
+        diff = np.sum(np.abs(downsampled[idx] - downsampled[idx - 1]))
+        accumulated += float(diff)
+        if idx - last_selected < min_gap:
             continue
-        if accumulated_diff >= diff_tau:
+        if accumulated >= diff_tau:
             keyframes.append(idx)
-            last_idx = idx
-            accumulated_diff = 0.0
+            last_selected = idx
+            accumulated = 0.0
 
     if keyframes[-1] != total_frames - 1:
         keyframes.append(total_frames - 1)
@@ -96,34 +83,55 @@ def select_keyframes(frames: np.ndarray, diff_tau: float = 8.0, min_gap: int = 3
     return keyframes
 
 
+def frames_from_camera(provider, seconds: float = 1.0) -> np.ndarray:
+    """Fetch a grayscale ``H×W×T`` clip from ``provider.camera``."""
+
+    if seconds <= 0:
+        raise ValueError("seconds must be positive")
+
+    camera = getattr(provider, "camera", None)
+    if camera is None or not hasattr(camera, "get_frames"):
+        raise AttributeError("provider.camera.get_frames is required")
+
+    fps = getattr(camera, "fps", None) or getattr(camera, "frames_per_second", None)
+    if fps is None:
+        frame_count = max(1, int(round(seconds * 10)))
+    else:
+        frame_count = max(1, int(round(float(fps) * float(seconds))))
+
+    iterator = camera.get_frames()
+    frames = list(islice(iterator, frame_count))
+    if not frames:
+        raise RuntimeError("camera returned no frames")
+
+    grayscale = [_to_grayscale(frame) for frame in frames]
+    first_shape = grayscale[0].shape
+    if any(frame.shape != first_shape for frame in grayscale):
+        raise ValueError("camera frames must share dimensions")
+
+    stack = np.stack(grayscale, axis=-1)
+    return stack.astype(np.float32, copy=False)
+
+
 @dataclass
 class VQEncoder:
     """Deterministic vector-quantized encoder for keyframe representations."""
 
-    seed: int | None = None
-    projection_dim: int = 16
-    codebook_size: int = 64
+    codebook_size: int = 256
+    code_dim: int = 8
+    seed: int | None = 0
 
     def __post_init__(self) -> None:
-        rng_seed = 0 if self.seed is None else int(self.seed)
-        self._rng = np.random.default_rng(rng_seed)
-        self._projection = self._rng.standard_normal((64, self.projection_dim), dtype=np.float32)
-        self._codebook = self._rng.standard_normal((self.codebook_size, self.projection_dim), dtype=np.float32)
+        rng = np.random.default_rng(0 if self.seed is None else int(self.seed))
+        self._projection = rng.standard_normal((64, self.code_dim), dtype=np.float32)
+        self._codebook = rng.standard_normal((self.codebook_size, self.code_dim), dtype=np.float32)
 
-    def encode(self, frames: Iterable[np.ndarray]) -> np.ndarray:
-        """Encode frames by quantizing projected, centered 8x8 downsampled grids."""
+    def encode(self, frame: np.ndarray) -> np.ndarray:
+        """Encode a frame by projecting and quantizing to the nearest centroid."""
 
-        features = []
-        for frame in frames:
-            downsampled = _downsample(np.asarray(frame))
-            flat = downsampled.reshape(-1).astype(np.float32)
-            flat -= flat.mean()
-            projected = flat @ self._projection
-            distances = np.sum((self._codebook - projected) ** 2, axis=1)
-            centroid = self._codebook[int(np.argmin(distances))]
-            features.append(centroid)
-
-        if not features:
-            return np.empty((0, self.projection_dim), dtype=np.float32)
-
-        return np.stack(features, axis=0).astype(np.float32)
+        downsampled = _downsample(frame).reshape(-1).astype(np.float32)
+        downsampled -= float(downsampled.mean())
+        projected = downsampled @ self._projection
+        distances = np.sum((self._codebook - projected) ** 2, axis=1)
+        centroid = self._codebook[int(np.argmin(distances))]
+        return centroid.astype(np.float32, copy=True)

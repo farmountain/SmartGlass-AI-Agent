@@ -1,26 +1,31 @@
+"""Tests for the vector-quantised encoder stub."""
+
+from __future__ import annotations
+
 import numpy as np
 
-from src.perception import get_default_vq
+from tests.vision_keyframe_utils import VQEncoder
 
 
-def test_vq_encoder_shape_and_dtype():
-    rng = np.random.default_rng(1234)
-    frames = rng.random((6, 48, 48, 3)).astype(np.float32)
-
-    encoder = get_default_vq()
-    codes = encoder.encode(frames)
-
-    assert isinstance(codes, np.ndarray)
-    assert codes.dtype == np.float32
-    assert codes.shape == (frames.shape[0], encoder.projection_dim)
+def _synthetic_frame(size: int = 32) -> np.ndarray:
+    frame = np.zeros((size, size), dtype=np.float32)
+    frame[size // 4 : size // 4 + 6, size // 3 : size // 3 + 6] = 0.5
+    frame[size // 2 : size // 2 + 4, size // 2 : size // 2 + 4] = 1.0
+    return frame
 
 
-def test_vq_encoder_brightness_invariance():
-    rng = np.random.default_rng(4321)
-    frames = rng.random((4, 32, 32, 3)).astype(np.float32)
+def test_vq_encoder_shape_and_dtype() -> None:
+    encoder = VQEncoder()
+    frame = _synthetic_frame()
+    code = encoder.encode(frame)
+    assert code.shape == (encoder.code_dim,)
+    assert code.dtype == np.float32
 
-    encoder = get_default_vq()
-    base_codes = encoder.encode(frames)
-    shifted_codes = encoder.encode(frames + 5.0)
 
-    assert np.allclose(base_codes, shifted_codes)
+def test_vq_encoder_is_brightness_invariant() -> None:
+    encoder = VQEncoder()
+    frame = _synthetic_frame()
+    brighter = frame + 1.5
+    code = encoder.encode(frame)
+    bright_code = encoder.encode(brighter)
+    np.testing.assert_allclose(code, bright_code)
