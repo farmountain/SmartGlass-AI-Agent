@@ -7,14 +7,18 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.perception.ocr import MockOCR
+import pytest
+
+from src.perception.ocr import MockOCR, text_and_boxes
 
 
-def test_mock_ocr_schema_on_blank_image():
+@pytest.mark.parametrize(
+    "ocr_fn",
+    [lambda image: MockOCR().text_and_boxes(image), text_and_boxes],
+)
+def test_mock_ocr_schema_on_blank_image(ocr_fn):
     image = np.zeros((16, 16), dtype=np.uint8)
-    ocr = MockOCR()
-
-    result = ocr.text_and_boxes(image)
+    result = ocr_fn(image)
 
     assert set(result.keys()) == {"text", "boxes", "conf", "by_word"}
     assert isinstance(result["boxes"], tuple)
