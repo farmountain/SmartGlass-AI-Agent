@@ -143,6 +143,8 @@ jobs:
               echo "| Hero Bench | ${{ steps.hero_bench.outcome }} |";
             fi
             echo "";
+            echo "Provider: ${PROVIDER:-unknown}";
+            echo "";
             echo "### Wearables SDK";
             echo "";
             echo "- Provider: ${PROVIDER:-unknown}";
@@ -362,10 +364,11 @@ PY
 import json
 import os
 import re
+from collections import defaultdict
 from pathlib import Path
 
 path = Path("artifacts/metrics.jsonl")
-latest = {"asr": None, "vad": None}
+DEFAULT_PROVIDER = os.getenv("PROVIDER", "unknown") or "unknown"
 vision_rates = {}
 ocr_precision = None
 tracked_specs = {
@@ -375,14 +378,19 @@ tracked_specs = {
     "asr.first_partial_ms": "ASR first partial (ms)",
     "vad.frames_processed": "VAD frames processed",
 }
-tracked_metrics = {
-    metric: {"label": label, "value": None, "timestamp": None}
-    for metric, label in tracked_specs.items()
-}
 reversal_sources = (
     "audio_bench.reversal_rate",
     "asr.reversal_rate",
 )
+provider_metrics: dict[str, dict[str, dict[str, object | None]]] = {}
+latest = defaultdict(lambda: {"asr": None, "vad": None})
+
+
+def _make_record_table() -> dict[str, dict[str, object | None]]:
+    return {
+        metric: {"label": label, "value": None, "timestamp": None}
+        for metric, label in tracked_specs.items()
+    }
 
 
 def _coerce_float(value):
@@ -440,12 +448,15 @@ with path.open() as stream:
             entry = json.loads(line)
         except json.JSONDecodeError:
             continue
+        tags = entry.get("tags") or {}
+        provider = str(tags.get("provider") or DEFAULT_PROVIDER)
         bucket = classify(entry)
         if bucket and entry:
-            latest[bucket] = entry
+            latest[provider][bucket] = entry
         metric = entry.get("metric")
-        if metric in tracked_metrics:
-            record = tracked_metrics[metric]
+        if metric in tracked_specs:
+            records = provider_metrics.setdefault(provider, _make_record_table())
+            record = records[metric]
             value = entry.get("value")
             if value is None:
                 for key in ("score", "wer", "f1", "accuracy", "metric_value"):
@@ -469,7 +480,6 @@ with path.open() as stream:
                     timestamp = details
             record["timestamp"] = _stringify(timestamp)
         if metric == "vision.keys_rate":
-            tags = entry.get("tags") or {}
             clip = str(tags.get("clip", "unknown"))
             vision_rates[clip] = entry
         elif metric == "ocr.precision_synth":
@@ -494,13 +504,17 @@ ref_candidates = [
 ]
 week_gate_active = any(_is_week4_or_later(ref) for ref in ref_candidates)
 reversal_details = []
-for source in reversal_sources:
-    record = tracked_metrics.get(source)
-    if not record:
-        continue
-    value = _coerce_float(record.get("value"))
-    if value is not None:
-        reversal_details.append((source, value))
+records_for_gate = provider_metrics.get(DEFAULT_PROVIDER)
+if records_for_gate is None and provider_metrics:
+    records_for_gate = next(iter(provider_metrics.values()))
+if records_for_gate:
+    for source in reversal_sources:
+        record = records_for_gate.get(source)
+        if not record:
+            continue
+        value = _coerce_float(record.get("value"))
+        if value is not None:
+            reversal_details.append((source, value))
 
 flag_path = Path(os.getenv("REVERSAL_FLAG_PATH", "artifacts/reversal_gate.flag"))
 reversal_warning_message = None
@@ -518,47 +532,61 @@ elif flag_path.exists():
 
 print("### ASR/VAD Metrics")
 print()
-print("| Metric | Value | Timestamp |")
-print("| --- | --- | --- |")
-for metric in (
-    "asr.total_partials",
-    "asr.reversal_rate",
-    "audio_bench.reversal_rate",
-    "asr.first_partial_ms",
-    "vad.frames_processed",
-):
-    record = tracked_metrics[metric]
-    value = record["value"]
-    timestamp = record["timestamp"]
-    value_display = "n/a" if value is None else _stringify(value)
-    timestamp_display = timestamp if timestamp is not None else "n/a"
-    print(f"| {record['label']} | {value_display} | {timestamp_display} |")
-print()
 
-has_tracked_values = any(record["value"] is not None for record in tracked_metrics.values())
-if not has_tracked_values:
+if not provider_metrics:
     print("_ASR/VAD metrics not yet available (soft gate)._\n")
-
-if not any(latest.values()):
-    if has_tracked_values:
-        print("_No ASR or VAD metrics reported (soft gate)._\n")
 else:
-    print("| Metric | Value | Notes |")
-    print("| --- | --- | --- |")
-    for key, label in (("asr", "ASR"), ("vad", "VAD")):
-        entry = latest[key]
-        if not entry:
-            print(f"| {label} | _missing_ | Week 2 collection pending |")
-            continue
-        value = extract_value(entry)
-        detail = entry.get("details")
-        if isinstance(detail, dict):
-            detail = json.dumps(detail, ensure_ascii=False)
-        elif detail is None:
-            detail = entry.get("timestamp") or entry.get("step") or "Captured from metrics.jsonl"
-        print(f"| {label} | {value} | {detail} |")
-    print()
-    print("_Threshold gating to be introduced in future sprints._\n")
+    has_tracked_values = any(
+        record["value"] is not None
+        for metrics in provider_metrics.values()
+        for record in metrics.values()
+    )
+    printed_latest = False
+    for provider, metrics in sorted(provider_metrics.items()):
+        print(f"#### Provider: {provider}")
+        print()
+        print("| Metric | Value | Timestamp |")
+        print("| --- | --- | --- |")
+        for metric in (
+            "asr.total_partials",
+            "asr.reversal_rate",
+            "audio_bench.reversal_rate",
+            "asr.first_partial_ms",
+            "vad.frames_processed",
+        ):
+            record = metrics[metric]
+            value = record["value"]
+            timestamp = record["timestamp"]
+            value_display = "n/a" if value is None else _stringify(value)
+            timestamp_display = timestamp if timestamp is not None else "n/a"
+            print(f"| {record['label']} | {value_display} | {timestamp_display} |")
+        print()
+
+        provider_latest = latest.get(provider, {"asr": None, "vad": None})
+        if any(provider_latest.values()):
+            printed_latest = True
+            print("| Metric | Value | Notes |")
+            print("| --- | --- | --- |")
+            for key, label in (("asr", "ASR"), ("vad", "VAD")):
+                entry = provider_latest.get(key)
+                if not entry:
+                    print(f"| {label} | _missing_ | Week 2 collection pending |")
+                    continue
+                value = extract_value(entry)
+                detail = entry.get("details")
+                if isinstance(detail, dict):
+                    detail = json.dumps(detail, ensure_ascii=False)
+                elif detail is None:
+                    detail = entry.get("timestamp") or entry.get("step") or "Captured from metrics.jsonl"
+                print(f"| {label} | {value} | {detail} |")
+            print()
+        else:
+            print("_No ASR or VAD metrics reported (soft gate)._\n")
+
+    if not has_tracked_values:
+        print("_ASR/VAD metrics not yet available (soft gate)._\n")
+    if printed_latest:
+        print("_Threshold gating to be introduced in future sprints._\n")
 
 print("### Vision Keyframe Rates")
 print()
