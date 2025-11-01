@@ -5,22 +5,22 @@ from src.perception import get_default_vq
 
 def test_vq_encoder_shape_and_dtype():
     rng = np.random.default_rng(1234)
-    frames = rng.random((6, 48, 48, 3)).astype(np.float32)
+    frame = rng.random((48, 48, 3), dtype=np.float32)
 
     encoder = get_default_vq()
-    codes = encoder.encode(frames)
+    code = encoder.encode(frame)
 
-    assert isinstance(codes, np.ndarray)
-    assert codes.dtype == np.float32
-    assert codes.shape == (frames.shape[0], encoder.projection_dim)
+    assert isinstance(code, np.ndarray)
+    assert code.dtype == np.float32
+    assert code.shape == (encoder.code_dim,)
 
 
 def test_vq_encoder_brightness_invariance():
     rng = np.random.default_rng(4321)
-    frames = rng.random((4, 32, 32, 3)).astype(np.float32)
+    frame = rng.random((32, 32), dtype=np.float32)
 
     encoder = get_default_vq()
-    base_codes = encoder.encode(frames)
-    shifted_codes = encoder.encode(frames + 5.0)
+    base_code = encoder.encode(frame)
+    shifted_code = encoder.encode(frame + 5.0)
 
-    assert np.allclose(base_codes, shifted_codes)
+    assert np.allclose(base_code, shifted_code)
