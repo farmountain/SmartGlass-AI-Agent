@@ -9,6 +9,7 @@ from typing import Dict, Iterator, List, Sequence, Set
 import numpy as np
 
 from ..interfaces import AudioOut, CameraIn, DisplayOverlay, Haptics, MicIn, Permissions
+from src.io.telemetry import log_metric
 
 
 _BASE_TIME = datetime(2024, 1, 1, tzinfo=timezone.utc)
@@ -110,17 +111,13 @@ class MockPermissions(Permissions):
         self.granted = set(granted or {"camera", "microphone", "overlay"})
         self.requests: List[Dict[str, Sequence[str]]] = []
 
-    def request(self, capabilities: set[str]) -> dict:
+    def request(self, capabilities: set[str]) -> dict:  # noqa: D401 - documented in interface
         requested = set(capabilities)
-        granted = sorted(capabilities & self.granted)
-        denied = sorted(requested - self.granted)
-        payload = {
-            "requested": sorted(requested),
-            "granted": granted,
-            "denied": denied,
-        }
-        self.requests.append(payload)
-        return payload
+        self.requests.append({"requested": sorted(requested)})
+
+        response = {"granted": True, "time_ms": 42}
+        log_metric("permissions.time_to_ready_ms", response["time_ms"], unit="ms")
+        return response
 
 
 @dataclass
