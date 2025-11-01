@@ -12,6 +12,8 @@ jobs:
   build:
     name: Build and Test
     runs-on: ubuntu-latest
+    env:
+      PROVIDER: mock
 
     steps:
       - name: Check out repository
@@ -112,6 +114,7 @@ jobs:
         env:
           GITHUB_REF_NAME: ${{ github.ref_name }}
           GITHUB_HEAD_REF: ${{ github.head_ref }}
+          PROVIDER: ${{ env.PROVIDER }}
         run: |
           reversal_flag_file="artifacts/reversal_gate.flag"
           rm -f "$reversal_flag_file"
@@ -137,7 +140,73 @@ jobs:
               echo "| Image Bench | ${{ steps.image_bench.outcome }} |";
             fi
             if [ "${{ steps.hero_bench.outcome }}" != "" ]; then
-              echo "| Hero Bench | ${{ steps.hero_bench.outcome }} |"; 
+              echo "| Hero Bench | ${{ steps.hero_bench.outcome }} |";
+            fi
+            echo "";
+            echo "### Wearables SDK";
+            echo "";
+            echo "- Provider: ${PROVIDER:-unknown}";
+            if [ -f artifacts/metrics.jsonl ]; then
+              python - <<'PY'
+import json
+from pathlib import Path
+
+path = Path("artifacts/metrics.jsonl")
+capabilities_entry = None
+permissions_entry = None
+
+if path.exists():
+    with path.open() as stream:
+        for line in stream:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            metric = entry.get("metric")
+            if metric == "sdk.capabilities" and capabilities_entry is None:
+                capabilities_entry = entry
+            if metric == "permissions.time_to_ready_ms" and permissions_entry is None:
+                permissions_entry = entry
+
+            if capabilities_entry is not None and permissions_entry is not None:
+                break
+
+
+def _format_value(entry):
+    if not entry:
+        return None
+    for key in ("value", "values", "capabilities", "metrics"):
+        if key in entry and entry[key] not in (None, ""):
+            value = entry[key]
+            if isinstance(value, dict):
+                if "value" in value and value["value"] not in (None, ""):
+                    inner = value["value"]
+                    if isinstance(inner, (dict, list, tuple)):
+                        return json.dumps(inner, ensure_ascii=False)
+                    return inner
+                if "time_to_ready_ms" in value and value["time_to_ready_ms"] not in (None, ""):
+                    return value["time_to_ready_ms"]
+                return json.dumps(value, ensure_ascii=False)
+            if isinstance(value, (list, tuple)):
+                return json.dumps(value, ensure_ascii=False)
+            return value
+    return json.dumps(entry, ensure_ascii=False)
+
+
+capabilities_value = _format_value(capabilities_entry)
+permissions_value = _format_value(permissions_entry)
+
+if capabilities_value is not None:
+    print(f"- Capabilities: {capabilities_value}")
+if permissions_value is not None:
+    print(f"- Permissions time to ready (ms): {permissions_value}")
+PY
+            else
+              echo "- Metrics: _artifacts/metrics.jsonl not found_.";
             fi
             echo "";
             if [ -f artifacts/audio_latency.csv ]; then
