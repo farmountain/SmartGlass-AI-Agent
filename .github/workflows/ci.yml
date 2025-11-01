@@ -245,21 +245,26 @@ PY
 import csv
 from pathlib import Path
 
-path = Path("artifacts/image_latency.csv")
-rows = []
-with path.open(newline="") as f:
-    reader = csv.reader(f)
-    rows = [row for row in reader if any(cell.strip() for cell in row)]
 
-if not rows:
-    print("_Image latency metrics file was empty._\n")
-else:
+def render_csv(path: Path, empty_message: str) -> None:
+    with path.open(newline="") as f:
+        reader = csv.reader(f)
+        rows = [row for row in reader if any(cell.strip() for cell in row)]
+
+    if not rows:
+        print(empty_message)
+        print()
+        return
+
     header, *body = rows
     print("| " + " | ".join(header) + " |")
     print("| " + " | ".join("---" for _ in header) + " |")
     for row in body:
-    print("| " + " | ".join(row) + " |")
+        print("| " + " | ".join(row) + " |")
     print()
+
+
+render_csv(Path("artifacts/image_latency.csv"), "_Image latency metrics file was empty._")
 PY
             fi
             if [ -f artifacts/e2e_hero1_summary.json ]; then
@@ -342,21 +347,26 @@ PY
 import csv
 from pathlib import Path
 
-path = Path("artifacts/ocr_results.csv")
-rows = []
-with path.open(newline="") as f:
-    reader = csv.reader(f)
-    rows = [row for row in reader if any(cell.strip() for cell in row)]
 
-if not rows:
-    print("_Synthetic OCR metrics file was empty._\n")
-else:
+def render_csv(path: Path, empty_message: str) -> None:
+    with path.open(newline="") as f:
+        reader = csv.reader(f)
+        rows = [row for row in reader if any(cell.strip() for cell in row)]
+
+    if not rows:
+        print(empty_message)
+        print()
+        return
+
     header, *body = rows
     print("| " + " | ".join(header) + " |")
     print("| " + " | ".join("---" for _ in header) + " |")
     for row in body:
         print("| " + " | ".join(row) + " |")
     print()
+
+
+render_csv(Path("artifacts/ocr_results.csv"), "_Synthetic OCR metrics file was empty._")
 PY
             fi
             if [ -f artifacts/metrics.jsonl ]; then
