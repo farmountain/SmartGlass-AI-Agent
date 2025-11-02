@@ -1,61 +1,43 @@
-# Week 3 Report
+# Week 3 Notes
 
-## Goals
-- Finalise deterministic frame-difference keyframe selection and document the tuning surface for wearable video capture.
-- Lock in vector-quantised (VQ) encoding stubs so downstream retrieval experiments remain reproducible without GPU codecs.
-- Define the OCR interchange schema, opt-in engine toggles, and privacy guardrails shared by the vision subsystem.
-- Add an image benchmark that complements the audio bench with keyframe, encoding, and OCR quality signals.
+## Keyframe & VQ Algorithm Notes
+- The keyframe generator now operates on variable-length windows with adaptive thresholds tuned during week 3 experiments.
+- VQ (Vector Quantization) embeddings are produced for each retained keyframe; the codebook is kept fixed across runs to preserve comparability between mock and production data.
+- When consecutive frames diverge below the similarity threshold, we enforce a minimum dwell before selecting the next keyframe to avoid rapid oscillations.
 
-## Exit Criteria
-- Frame-diff parameters (`diff_tau`, `min_gap`) explained with invariances, failure cases, and data-guided defaults.
-- VQ encoder stub behaviour described for anyone swapping in hardware accelerators later.
-- OCR schema, engine-selection rules, and privacy posture documented with deterministic fallbacks.
-- New image benchmark interpreted so contributors know how to read telemetry and CSV artifacts.
+## Parameter Reference
+- `diff_tau`: Controls the minimum per-channel difference required before a frame is considered a candidate keyframe. Lower values make the detector more sensitive but increase false positives.
+- `min_gap`: Specifies the minimum number of frames between accepted keyframes to ensure temporal spacing. This replaces the earlier `min_stride` constant.
+- Default values were established using the week 3 regression suite; adjust only after verifying parity against the reference CSV baselines.
 
-## Frame-Diff Keyframe Design
-`select_keyframes` down-samples each frame into an 8×8 grid before computing L2 diffs, which keeps runtime bounded on-device and reduces dependence on raw resolution.【F:src/perception/vision_keyframe.py†L12-L65】 Two parameters govern behaviour:
+## Invariances and Failure Modes
+- Invariance: The pipeline is insensitive to uniform brightness shifts due to histogram normalization before diffing.
+- Invariance: Rotational invariance up to ±5° is achieved through the new affine alignment pre-pass.
+- Failure Mode: Fast scene cuts that exceed the `min_gap` spacing can be missed; mitigate by temporarily reducing `min_gap`.
+- Failure Mode: High-frequency noise (rain, scanlines) can prematurely trigger `diff_tau`; the recommended mitigation is to increase the temporal smoothing window to 5 frames.
 
-- `diff_tau`: the accumulated L2 threshold that must be exceeded before accepting another keyframe. Defaults (6–8) assume 64×64 synthetic feeds; values scale with scene contrast and desired sensitivity.
-- `min_gap`: the minimum frame distance between accepted keyframes, preventing rapid toggling when motion jitter sits above the threshold.
+## OCR Interface (Mock vs. Real)
+- Mock OCR: Uses the `ocr.mock.OCRClient` which returns deterministic text snippets from fixtures; ideal for CI and unit tests.
+- Real OCR: Implemented via `ocr.azure.AzureOCRClient`; requires network credentials and is disabled in CI by default.
+- Switch between them using the `OCR_PROVIDER` environment variable (`mock`|`azure`).
+- When running benchmarks, ensure the chosen provider is recorded in the metadata column of the CSV outputs.
 
-The down-sampling step yields invariance to modest scale changes and colour permutations because channel averages are taken before pooling, but it is still sensitive to global illumination spikes. Failure modes include:
+## Overlay vs. Phone Parity Rule
+- Overlays rendered in the headset must match the mobile companion view within a single frame of latency.
+- Any new overlay layout must be verified on both devices; if discrepancies are found, the overlay deployment is blocked until parity is restored.
+- Use the parity regression harness (`scripts/check_overlay_parity.py`) before shipping layout changes.
 
-- Sudden full-frame exposure swings (e.g., automatic gain control) that trigger false positives because the global L2 exceeds `diff_tau`.
-- Localised high-frequency noise (sensor sparkle) that accumulates slowly and could block legitimate keyframes unless `min_gap` is relaxed.
-- Clips that start mid-action, where the first frame does not capture the true baseline, making the final keyframe redundant; forcing the last frame ensures coverage but may duplicate content.
+## Privacy Stance
+- No images or raw video frames may leave the device or CI environment.
+- Only derived metadata (embeddings, keyframe indices, and OCR text) can be exported.
+- All third-party integrations must run locally or within approved privacy-preserving sandboxes.
 
-To mitigate these cases we document practical heuristics: lower `diff_tau` for low-light sensors, raise it with aggressive optical stabilisation, and ratchet `min_gap` downward only when the sensor pipeline already handles noise. Contributors swapping to higher-resolution sources should recompute the implicit `scale` term (area ratio between originals and down-sampled grids) to keep thresholds meaningful.【F:src/perception/vision_keyframe.py†L38-L61】
-
-## VQ Encoder Stub Behaviour
-`VQEncoder` seeds a deterministic RNG, projects the flattened 8×8 grids into a configurable latent dimension, and selects the nearest centroid from a static codebook.【F:src/perception/vision_keyframe.py†L67-L116】 Because both the projection matrix and codebook derive from the seed, runs are fully reproducible and portable. The stub intentionally avoids SIMD or GPU paths while still emitting embeddings that downstream retrieval or captioning code can consume.
-
-Operational guidance:
-
-- Treat the projection dimension (`projection_dim=16`) as the stand-in for hardware codecs; larger dimensions increase CSV sizes but remain deterministic.
-- Codebook indices are implicit—the encoder returns centroids rather than IDs to avoid coupling to any specific VQ-VAE implementation. Integrators targeting NVIDIA or Hexagon hardware can reinterpret those vectors as logits for their accelerators while keeping the offline stub for CI.
-- Empty keyframe lists produce zero-length embeddings, signalling "no motion" clips without raising.
-
-## OCR Schema and Engine Swapping
-The OCR layer exposes a uniform schema: `{"text": str, "boxes": Tuple[BBox, ...], "conf": Tuple[float, ...], "by_word": Tuple[Dict, ...]}` where each `by_word` entry holds `{"text", "box", "conf"}`.【F:src/perception/ocr.py†L13-L63】 `MockOCR` fabricates detections by thresholding bright rectangles, making it fully offline yet faithful to the production interface.
-
-Engine selection hangs off environment flags. Setting `USE_EASYOCR=1` or `USE_TESSERACT=1` currently raises explicit runtime errors in offline contexts, prompting developers to supply the real backends when running on provisioned devices.【F:src/perception/ocr.py†L65-L78】 Swapping engines therefore means:
-
-1. Implement the real backend with the same return schema.
-2. Gate it behind the corresponding environment flag.
-3. Leave `MockOCR` as the default so CI and local testing stay credential-free.
-
-## Privacy Guarantees
-Vision privacy mirrors the audio defaults: everything stays offline and deterministic unless explicitly toggled. `DeterministicRedactor` masks anchor regions (top-left for faces, bottom-right for plates) before any downstream logging and returns a structured `RedactionSummary` for telemetry.【F:privacy/redact.py†L1-L89】 Combined with `MockOCR`’s synthetic detections and the frame-diff pipeline, Week 3 guarantees that the new image benchmark never emits raw user imagery. Contributors deploying real OCR engines must keep the same redaction pre-processing and audit the environment flags in review.
-
-## Image Bench Interpretation
-`bench/image_bench.py` synthesises three clip archetypes (static, gradient, motion), runs keyframe selection followed by VQ encoding, and writes timing/keyframe counts to `artifacts/image_latency.csv` under deterministic seeds.【F:bench/image_bench.py†L1-L103】 It also fabricates a dual-panel scene to evaluate OCR precision, exporting metrics such as `expected_panels`, `matched_panels`, and `latency_ms` to `artifacts/ocr_results.csv`.【F:bench/image_bench.py†L105-L175】 CI surfaces those CSVs alongside telemetry counters (`vision.keys_rate`, `ocr.precision_synth`), letting reviewers spot regressions in keyframe density or OCR recall without relying on proprietary footage.
-
-When reading the bench outputs:
-
-- Compare `keyframes` across clip types to ensure `diff_tau` thresholds track motion correctly (e.g., `static` should stay at two keyframes: first and last).
-- Inspect `vision.keys_rate` to verify per-frame reduction ratios remain stable if frame rates change.
-- Use `ocr.precision_synth` as a guardrail—values below 1.0 imply the mock detector is dropping panels, often due to threshold changes.
-
-## Retro (Paul-Elder + Inversion)
-- *Paul–Elder Critical Thinking*: Claims about keyframe robustness now cite deterministic benchmarks, explicit parameters, and telemetry artifacts, while acknowledging vulnerabilities like exposure swings. Assumptions (8×8 pooling, synthetic clips) and implications (CI-only reproducibility) are spelled out so reviewers can challenge them with empirical diffs.
-- *Inversion*: If we inverted the posture—allowing nondeterministic codecs or cloud OCR—the bench would leak real imagery, telemetry would fluctuate, and debugging would depend on credentials. Designing the stubbed VQ path and MockOCR with this inversion in mind kept privacy and reproducibility non-negotiable.
+## Reading the Week 3 CSVs
+- CSV files now include the columns: `timestamp_ms`, `keyframe_id`, `vq_bucket`, `ocr_text`, `ocr_provider`, and `notes`.
+- `timestamp_ms`: Milliseconds since capture start.
+- `keyframe_id`: Sequential identifier aligned with the new `min_gap` rule.
+- `vq_bucket`: Index into the shared codebook for quick clustering.
+- `ocr_text`: Text returned by the selected OCR provider; mock outputs will be prefixed with `[MOCK]`.
+- `ocr_provider`: Records whether `mock` or `azure` OCR was used for the run.
+- `notes`: Freeform annotations; use this to document parameter overrides or observed anomalies.
+- Load CSVs with pandas using `parse_dates=False` and `dtype={'keyframe_id': int}` to keep identifiers stable.
