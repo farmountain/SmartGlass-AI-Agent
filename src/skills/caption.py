@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Sequence
+from typing import Any, Iterable, Sequence
 
 import numpy as np
 
-from src.perception.vision_keyframe import VQEncoder, select_keyframes
+from src.perception.vision_keyframe import VQEncoder, frames_from_camera, select_keyframes
 
-__all__ = ["MockCaptioner", "caption_from_frames"]
+__all__ = ["MockCaptioner", "caption_from_frames", "caption_from_provider"]
 
 
 def _to_array(frames: Sequence[np.ndarray] | np.ndarray) -> np.ndarray:
@@ -132,3 +132,34 @@ class MockCaptioner:
         )
 
     __call__ = generate
+
+
+def caption_from_provider(
+    provider: Any,
+    *,
+    seconds: int = 1,
+    captioner: MockCaptioner | None = None,
+) -> dict:
+    """Generate and present a caption using a provider's hardware hooks."""
+
+    clip = frames_from_camera(provider, seconds=seconds)
+    frames = np.moveaxis(clip, -1, 0)
+
+    engine = captioner or MockCaptioner()
+    text = engine.generate(frames)
+
+    speaker = getattr(provider, "audio", None) or getattr(provider, "audio_out", None)
+    if speaker is None or not hasattr(speaker, "speak"):
+        raise AttributeError("Provider must expose an audio.speak method")
+    speaker.speak(text)
+
+    payload = {"type": "caption", "text": text}
+
+    has_display = getattr(provider, "has_display", None)
+    if callable(has_display) and has_display():
+        display = getattr(provider, "display", None) or getattr(provider, "overlay", None)
+        if display is None or not hasattr(display, "render"):
+            raise AttributeError("Provider with display must expose display.render")
+        display.render(payload)
+
+    return payload
