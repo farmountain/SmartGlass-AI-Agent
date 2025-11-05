@@ -1,0 +1,117 @@
+{
+  "skills": [
+    {
+      "id": "skill_001",
+      "name": "Placeholder Navigation Skill",
+      "description": "Guides agents through generic environments using placeholder heuristics.",
+      "version": "0.1.0",
+      "model_path": "models/navigation/skill_001_model.bin",
+      "stats_path": "stats/navigation/skill_001_stats.json",
+      "capabilities": ["navigation", "placeholder"]
+    },
+    {
+      "id": "skill_002",
+      "name": "Placeholder Object Detection Skill",
+      "description": "Detects basic objects using synthetic model weights for integration testing.",
+      "version": "0.1.0",
+      "model_path": "models/vision/skill_002_model.bin",
+      "stats_path": "stats/vision/skill_002_stats.json",
+      "capabilities": ["vision", "detection", "placeholder"]
+    },
+    {
+      "id": "skill_003",
+      "name": "Placeholder Speech Recognition Skill",
+      "description": "Transcribes short audio snippets using placeholder acoustic models.",
+      "version": "0.1.0",
+      "model_path": "models/audio/skill_003_model.bin",
+      "stats_path": "stats/audio/skill_003_stats.json",
+      "capabilities": ["audio", "speech", "placeholder"]
+    },
+    {
+      "id": "skill_004",
+      "name": "Placeholder Text Summarization Skill",
+      "description": "Produces concise summaries leveraging dummy language models.",
+      "version": "0.1.0",
+      "model_path": "models/nlp/skill_004_model.bin",
+      "stats_path": "stats/nlp/skill_004_stats.json",
+      "capabilities": ["nlp", "summarization", "placeholder"]
+    },
+    {
+      "id": "skill_005",
+      "name": "Placeholder Sentiment Analysis Skill",
+      "description": "Evaluates sentiment labels using test-only classifiers.",
+      "version": "0.1.0",
+      "model_path": "models/nlp/skill_005_model.bin",
+      "stats_path": "stats/nlp/skill_005_stats.json",
+      "capabilities": ["nlp", "classification", "placeholder"]
+    },
+    {
+      "id": "skill_006",
+      "name": "Placeholder Gesture Recognition Skill",
+      "description": "Interprets simple gestures via mock spatiotemporal models.",
+      "version": "0.1.0",
+      "model_path": "models/vision/skill_006_model.bin",
+      "stats_path": "stats/vision/skill_006_stats.json",
+      "capabilities": ["vision", "gesture", "placeholder"]
+    },
+    {
+      "id": "skill_007",
+      "name": "Placeholder Path Planning Skill",
+      "description": "Computes routes using fabricated planning heuristics.",
+      "version": "0.1.0",
+      "model_path": "models/navigation/skill_007_model.bin",
+      "stats_path": "stats/navigation/skill_007_stats.json",
+      "capabilities": ["navigation", "planning", "placeholder"]
+    },
+    {
+      "id": "skill_008",
+      "name": "Placeholder Scene Captioning Skill",
+      "description": "Generates captions for images employing dummy encoder-decoder weights.",
+      "version": "0.1.0",
+      "model_path": "models/vision/skill_008_model.bin",
+      "stats_path": "stats/vision/skill_008_stats.json",
+      "capabilities": ["vision", "nlp", "placeholder"]
+    },
+    {
+      "id": "skill_009",
+      "name": "Placeholder Audio Classification Skill",
+      "description": "Classifies audio events using placeholder spectrogram embeddings.",
+      "version": "0.1.0",
+      "model_path": "models/audio/skill_009_model.bin",
+      "stats_path": "stats/audio/skill_009_stats.json",
+      "capabilities": ["audio", "classification", "placeholder"]
+    },
+    {
+      "id": "skill_010",
+      "name": "Placeholder Question Answering Skill",
+      "description": "Answers questions with deterministic template responses for testing.",
+      "version": "0.1.0",
+      "model_path": "models/nlp/skill_010_model.bin",
+      "stats_path": "stats/nlp/skill_010_stats.json",
+      "capabilities": ["nlp", "qa", "placeholder"]
+    },
+    {
+      "id": "skill_011",
+      "name": "Placeholder Time Series Forecasting Skill",
+      "description": "Forecasts signals using simplified statistical placeholders.",
+      "version": "0.1.0",
+      "model_path": "models/timeseries/skill_011_model.bin",
+      "stats_path": "stats/timeseries/skill_011_stats.json",
+      "capabilities": ["timeseries", "forecasting", "placeholder"]
+    },
+    {
+      "id": "skill_012",
+      "name": "Placeholder Reinforcement Learning Skill",
+      "description": "Evaluates policies using stubbed reward models for integration flows.",
+      "version": "0.1.0",
+      "model_path": "models/rl/skill_012_model.bin",
+      "stats_path": "stats/rl/skill_012_stats.json",
+      "capabilities": ["rl", "planning", "placeholder"]
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "generated_at": "2024-01-01T00:00:00Z",
+    "notes": "Placeholder skill catalogue for scaffolding and validation pipelines."
+  }
+}
