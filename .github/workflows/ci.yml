@@ -279,6 +279,10 @@ summary_path = Path("artifacts/e2e_hero1_summary.json")
 summary = json.loads(summary_path.read_text())
 stage_stats = summary.get("stages", {})
 runs = summary.get("runs", 0)
+totals = summary.get("totals", {})
+fusion = summary.get("fusion", {})
+aggregates = summary.get("aggregates", {})
+providers = aggregates.get("providers") or summary.get("providers") or []
 
 print(f"_Runs: {runs}_")
 print()
@@ -288,14 +292,36 @@ if stage_stats:
     for stage, stats in stage_stats.items():
         label = stage.replace("_", " ")
         print(f"| {label} | {stats.get('p50_ms', 0.0):.3f} | {stats.get('p95_ms', 0.0):.3f} |")
-    totals = summary.get("totals", {})
     if totals:
         print(f"| total | {totals.get('p50_ms', 0.0):.3f} | {totals.get('p95_ms', 0.0):.3f} |")
     print()
 else:
-    print("_No hero latency metrics available._\n")
+    print("_No hero latency metrics available._")
+    print()
 
-fusion = summary.get("fusion", {})
+caption_p50 = aggregates.get("caption_p50_ms")
+vision_audio_p50 = aggregates.get("vision_audio_p50_ms")
+total_p50 = aggregates.get("total_p50_ms") or totals.get("p50_ms")
+total_p95 = aggregates.get("total_p95_ms") or totals.get("p95_ms")
+
+if caption_p50 is not None or vision_audio_p50 is not None:
+    print("#### End-to-End Metrics")
+    print()
+    header = ["Provider", "total p50 (ms)", "total p95 (ms)", "caption p50 (ms)", "vision+audio p50 (ms)"]
+    print("| " + " | ".join(header) + " |")
+    print("| " + " | ".join("---" for _ in header) + " |")
+    provider_label = ", ".join(providers) if providers else "unknown"
+    print(
+        "| {provider} | {total_p50:.3f} | {total_p95:.3f} | {caption:.3f} | {vision_audio:.3f} |".format(
+            provider=provider_label,
+            total_p50=float(total_p50 or 0.0),
+            total_p95=float(total_p95 or 0.0),
+            caption=float(caption_p50 or 0.0),
+            vision_audio=float(vision_audio_p50 or 0.0),
+        )
+    )
+    print()
+
 if fusion:
     print("#### Fusion Metrics")
     print()
@@ -320,13 +346,14 @@ if fsm_counts:
     print()
 
 threshold_warnings = []
-for stage, stats in stage_stats.items():
-    p50 = float(stats.get("p50_ms", 0.0))
-    p95 = float(stats.get("p95_ms", 0.0))
-    if p50 > 600.0:
-        threshold_warnings.append(f":warning: {stage} p50 {p50:.1f} ms exceeds 600 ms target.")
-    if p95 > 900.0:
-        threshold_warnings.append(f":warning: {stage} p95 {p95:.1f} ms exceeds 900 ms target.")
+if caption_p50 is not None and float(caption_p50) > 600.0:
+    threshold_warnings.append(
+        ":warning: caption p50 {:.1f} ms exceeds 600 ms target.".format(float(caption_p50))
+    )
+if vision_audio_p50 is not None and float(vision_audio_p50) > 900.0:
+    threshold_warnings.append(
+        ":warning: vision+audio p50 {:.1f} ms exceeds 900 ms target.".format(float(vision_audio_p50))
+    )
 
 if threshold_warnings:
     print("#### Hero Warnings")
