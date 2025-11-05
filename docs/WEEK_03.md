@@ -41,3 +41,25 @@
 - `ocr_provider`: Records whether `mock` or `azure` OCR was used for the run.
 - `notes`: Freeform annotations; use this to document parameter overrides or observed anomalies.
 - Load CSVs with pandas using `parse_dates=False` and `dtype={'keyframe_id': int}` to keep identifiers stable.
+
+## Retro: Paul-Elder + Inversion
+
+### Purpose
+- Capture lessons from week 3 perception + OCR workstreams and connect them to the guard-rails enforced by the CI suites (`tests/test_keyframes_rate.py`, `tests/test_vq_code_shape.py`, `tests/test_keyframes_provider_contract.py`, `tests/test_ocr_schema.py`, `tests/test_ocr_mock_panels.py`, `tests/test_ocr_overlay_parity.py`, `tests/test_perception_factories.py`).
+
+### Key Questions
+- Are we explicit about the goals and acceptance criteria for keyframe density, VQ embeddings, and OCR overlays?
+- Do the mock implementations still exercise the same user journeys as the HUD + phone pairing?
+- Where do the invariants in CI map to field hypotheses (e.g., minimum gap vs. missed events)?
+
+### Information
+- CI dashboards: [Keyframes](https://ci.internal/keyframes-week3), [VQ](https://ci.internal/vq-week3), [OCR Parity](https://ci.internal/ocr-parity-week3).
+- Reference diff thresholds (`diff_tau`) and `min_gap` defaults are stored in the perception factory helpers and are validated by the regression tests listed above.
+- Overlay parity traces live in `scripts/check_overlay_parity.py`; the mock suite replays the same fixtures to catch divergence early.
+
+### Inferences
+- τ / `min_gap` tuning: Tightening `diff_tau` without relaxing `min_gap` results in under-sampling fast motion; CI catches this via `test_keyframes_rate.py` and `test_keyframes_provider_contract.py`.
+- Display parity: Passing `test_ocr_overlay_parity.py` implies that HUD + phone payloads remain byte-for-byte identical for a given OCR result, so UI regressions surface before release.
+
+### Inversion Check
+- If the HUD display path drops frames or is unavailable, the phone companion experience must still satisfy every acceptance test. The mocks emulate this by routing through the phone card path even when `has_display()` is false, ensuring parity obligations are met.
