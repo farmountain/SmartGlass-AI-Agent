@@ -1,0 +1,13 @@
+stage,target_p95_ms,observed_p50_ms,observed_p95_ms
+synth_clip_ms,5,0.339,1.790
+synth_audio_ms,5,0.228,0.936
+vad_ms,6,3.529,4.510
+asr_ms,5,0.120,0.438
+keyframe_ms,40,31.755,34.980
+fusion_audio_ms,1,0.007,0.009
+fusion_vision_ms,1,0.001,0.001
+fusion_gate_ms,1,0.026,0.037
+fsm_ms,2,0.005,0.009
+caption_ms,55,43.512,48.493
+tts_ms,8,1.249,1.534
+total,95,80.910,90.670
