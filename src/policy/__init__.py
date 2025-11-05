@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from src.fusion import ConfidenceFusion
 
 from .fsm import Event, FSMRouter, State
@@ -12,21 +10,16 @@ __all__ = [
     "Event",
     "State",
     "FSMRouter",
-    "PolicyBundle",
     "get_default_policy",
 ]
 
 
-@dataclass(frozen=True)
-class PolicyBundle:
-    """Container bundling policy-level primitives."""
+def get_default_policy() -> tuple[FSMRouter, ConfidenceFusion]:
+    """Return the default policy primitives.
 
-    router: FSMRouter
-    fusion: ConfidenceFusion
-
-
-def get_default_policy() -> PolicyBundle:
-    """Return the default policy bundle used by the SmartGlass agent."""
+    The router encapsulates the finite-state machine transitions for the agent,
+    while the fusion object is used to combine multi-sensor confidence scores.
+    """
 
     states = [
         State("IDLE"),
@@ -42,4 +35,4 @@ def get_default_policy() -> PolicyBundle:
 
     router = FSMRouter(states, events, initial_state="IDLE")
     fusion = ConfidenceFusion()
-    return PolicyBundle(router=router, fusion=fusion)
+    return router, fusion
