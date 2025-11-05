@@ -402,7 +402,7 @@ import json
 import os
 import re
 import sys
-from collections import defaultdict
+from collections import defaultdict, deque
 from pathlib import Path
 
 path = Path("artifacts/metrics.jsonl")
@@ -477,6 +477,81 @@ def extract_value(entry):
     return json.dumps(entry, ensure_ascii=False)
 
 
+def _init_fusion_fsm():
+    return {
+        "fusion.alpha_last": None,
+        "fusion.alpha_avg": None,
+        "tts.ms": None,
+        "overlay.render_ms": None,
+        "transitions": [],
+    }
+
+
+FUSION_METRIC_LABELS = {
+    "fusion.alpha_last": "Fusion α last",
+    "fusion.alpha_avg": "Fusion α avg",
+    "tts.ms": "TTS (ms)",
+    "overlay.render_ms": "Overlay render (ms)",
+}
+
+
+def _format_metric_value(entry):
+    if not entry:
+        return "n/a"
+    value = extract_value(entry)
+    if value is None:
+        return "n/a"
+    numeric = _coerce_float(value)
+    if numeric is not None:
+        if float(numeric).is_integer():
+            return str(int(numeric))
+        return f"{numeric:.3f}"
+    return _stringify(value)
+
+
+def _format_metric_details(entry):
+    if not entry:
+        return "n/a"
+    parts = []
+    timestamp = entry.get("timestamp") or entry.get("step")
+    if timestamp not in (None, ""):
+        parts.append(f"ts={timestamp}")
+    tags = dict((entry.get("tags") or {}))
+    tags.pop("provider", None)
+    if tags:
+        parts.append("tags=" + json.dumps(tags, ensure_ascii=False))
+    details = entry.get("details")
+    if details not in (None, ""):
+        parts.append("details=" + _stringify(details))
+    return "; ".join(parts) if parts else "n/a"
+
+
+def _summarize_transitions(entries):
+    if not entries:
+        return "n/a", "n/a"
+    counts = defaultdict(int)
+    last_entry = None
+    for entry in entries:
+        tags = entry.get("tags") or {}
+        from_state = tags.get("from") or tags.get("source") or tags.get("prev") or tags.get("state") or "?"
+        to_state = (
+            tags.get("to")
+            or tags.get("dest")
+            or tags.get("next")
+            or tags.get("target")
+            or tags.get("state_to")
+            or "?"
+        )
+        label = f"{from_state}->{to_state}"
+        counts[label] += 1
+        last_entry = entry
+    summary = ", ".join(f"{label} ({count})" for label, count in sorted(counts.items()))
+    details = _format_metric_details(last_entry)
+    return summary or "n/a", details
+
+
+entries_tail = deque(maxlen=200)
+fusion_fsm_data = defaultdict(_init_fusion_fsm)
 with path.open() as stream:
     for line in stream:
         line = line.strip()
@@ -486,6 +561,7 @@ with path.open() as stream:
             entry = json.loads(line)
         except json.JSONDecodeError:
             continue
+        entries_tail.append(entry)
         tags = entry.get("tags") or {}
         provider = str(tags.get("provider") or DEFAULT_PROVIDER)
         bucket = classify(entry)
@@ -522,6 +598,18 @@ with path.open() as stream:
             vision_rates[clip] = entry
         elif metric == "ocr.precision_synth":
             ocr_precision = entry
+
+
+for entry in entries_tail:
+    metric = entry.get("metric")
+    if metric not in FUSION_METRIC_LABELS and metric != "fsm.transitions":
+        continue
+    provider = str((entry.get("tags") or {}).get("provider") or DEFAULT_PROVIDER)
+    data = fusion_fsm_data[provider]
+    if metric == "fsm.transitions":
+        data["transitions"].append(entry)
+    else:
+        data[metric] = entry
 
 
 def _is_week4_or_later(ref):
@@ -599,6 +687,29 @@ else:
             timestamp_display = timestamp if timestamp is not None else "n/a"
             print(f"| {record['label']} | {value_display} | {timestamp_display} |")
         print()
+
+        fusion_block = fusion_fsm_data.get(provider)
+        has_fusion_metrics = False
+        if fusion_block:
+            has_named_metrics = any(
+                fusion_block.get(key) is not None
+                for key in FUSION_METRIC_LABELS
+            )
+            has_transitions = bool(fusion_block.get("transitions"))
+            has_fusion_metrics = has_named_metrics or has_transitions
+        if has_fusion_metrics:
+            print("##### Fusion/FSM")
+            print()
+            print("| Metric | Value | Details |")
+            print("| --- | --- | --- |")
+            for metric_key, label in FUSION_METRIC_LABELS.items():
+                entry = fusion_block.get(metric_key) if fusion_block else None
+                value_display = _format_metric_value(entry)
+                detail_display = _format_metric_details(entry)
+                print(f"| {label} | {value_display} | {detail_display} |")
+            summary, detail = _summarize_transitions(fusion_block.get("transitions") if fusion_block else None)
+            print(f"| FSM transitions | {summary} | {detail} |")
+            print()
 
         provider_latest = latest.get(provider, {"asr": None, "vad": None})
         if any(provider_latest.values()):
