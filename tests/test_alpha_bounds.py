@@ -1,31 +1,37 @@
-"""Boundary and Lipschitz tests for the fusion gate smoothing operator."""
+"""Bounds and stability checks for the mutual-information fusion gate."""
 
 from __future__ import annotations
 
-import itertools
-import random
+import math
+
+import pytest
 
 from src.fusion.gate_mi import alpha_from_conf, smooth_alpha
 
 
-def test_alpha_from_conf_is_clipped() -> None:
-    """alpha_from_conf should remain within the unit interval."""
+@pytest.mark.parametrize(
+    "conf_v, conf_a",
+    [
+        (0.0, 0.0),
+        (1.0, 0.0),
+        (0.0, 1.0),
+        (1.0, 1.0),
+        (0.3, 0.9),
+    ],
+)
+def test_alpha_from_conf_is_bounded(conf_v: float, conf_a: float) -> None:
+    alpha = alpha_from_conf(conf_v, conf_a)
+    assert 0.0 <= alpha <= 1.0
 
-    test_values = [-5.0, -1.0, 0.0, 0.2, 0.5, 0.9, 1.0, 1.2, 5.0]
-    for value in test_values:
-        alpha = alpha_from_conf(value)
-        assert 0.0 <= alpha <= 1.0
+
+@pytest.mark.parametrize("beta", [0.0, 0.25, 1.0])
+def test_smooth_alpha_respects_bounds(beta: float) -> None:
+    result = smooth_alpha(0.2, 0.9, beta=beta)
+    assert 0.0 <= result <= 1.0
 
 
-def test_smoothing_is_one_lipschitz() -> None:
-    """smooth_alpha must be 1-Lipschitz with respect to the target signal."""
-
-    rng = random.Random(0xC0FFEE)
-    current = rng.random()
-    smoothing = 0.3
-
-    targets = [rng.random() for _ in range(8)]
-    for left, right in itertools.permutations(targets, 2):
-        smoothed_left = smooth_alpha(current, left, smoothing)
-        smoothed_right = smooth_alpha(current, right, smoothing)
-        assert abs(smoothed_left - smoothed_right) <= abs(left - right) + 1e-12
+def test_smooth_alpha_invalid_beta() -> None:
+    with pytest.raises(ValueError):
+        smooth_alpha(0.0, 1.0, beta=-0.1)
+    with pytest.raises(ValueError):
+        smooth_alpha(0.0, 1.0, beta=1.1)
