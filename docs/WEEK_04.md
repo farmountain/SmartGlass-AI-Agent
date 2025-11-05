@@ -57,3 +57,16 @@ CI stores both raw stage timings and fused-score statistics (`score_mean` = 0.65
 
 ## Privacy Note
 Hero-1 validation remains fully synthetic: clips, speech, and overlays are generated offline, and any downstream frame logging still routes through the deterministic redaction stub before persistence. No real user data is processed in CI or shared artifacts.【F:examples/hero1_caption.py†L202-L318】【F:privacy/redact.py†L1-L75】
+
+## Retro – Paul-Elder + Inversion
+**Purpose** – Capture week-four learning loops so that future Hero-1 reviews have a single reference for the α(t) gate, FSM behaviour, and latency tooling.【F:src/fusion/gate_mi.py†L10-L94】【F:examples/hero1_caption.py†L230-L348】
+
+**Questions at issue** – Where do α(t) drift risks originate, and how do we maintain FSM guarantees while respecting the 95 ms latency envelope?【F:src/fusion/gate_mi.py†L10-L94】【F:examples/hero1_caption.py†L274-L348】
+
+**Evidence** – Provider-backed E2E CSV timings plus the CI summary confirm that fusion, captioning, and overlay paths remain within budget (`total_p95` = 90.670 ms).【F:docs/artifacts/week_04_e2e_hero1.csv†L1-L13】【F:docs/artifacts/week_04_e2e_hero1_summary.json†L1-L52】
+
+**Inferences** – β tuning and `min_gap` spacing jointly stabilise α(t): increasing β when modality gaps are sparse recovers responsiveness, while widening `min_gap` suppresses frame spam without starving the overlay.【F:src/fusion/gate_mi.py†L45-L94】【F:examples/hero1_caption.py†L258-L318】
+
+**Implications** – Before committing adjustments, validate via provider confirm signals so the FSM does not emit duplicate speech/actions under latency stress.【F:examples/hero1_caption.py†L274-L318】【F:tests/test_fsm_confirm_required.py†L1-L59】
+
+**Inversion** – If latency regresses, audit keyframe density and reduce β or raise `min_gap`; if overlays vanish, remember the phone card parity invariant still holds, so validate parity handlers before touching fusion heuristics.【F:docs/artifacts/week_04_e2e_hero1_summary.json†L1-L52】【F:examples/hero1_caption.py†L288-L318】【F:tests/test_speak_overlay_parity.py†L1-L63】
