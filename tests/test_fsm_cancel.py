@@ -6,25 +6,41 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from policy.fsm import Event, FSMRouter, State
 
 
-def test_cancel_returns_to_idle_without_irreversible_side_effects():
+def _build_router() -> FSMRouter:
     states = [
         State("IDLE"),
-        State("PREPARING"),
-        State("EXECUTING", irreversible=True),
+        State("PERCEIVE"),
+        State("FUSE"),
+        State("CAPTION"),
+        State("SPEAK", irreversible=True),
+        State("CONFIRM"),
     ]
     events = [
-        Event("start", "IDLE", "PREPARING"),
-        Event("cancel", "PREPARING", "IDLE"),
-        Event("execute", "PREPARING", "EXECUTING"),
+        Event("WAKE", "IDLE", "PERCEIVE"),
+        Event("FRAME", "PERCEIVE", "FUSE"),
+        Event("FUSED", "FUSE", "CAPTION"),
+        Event("CAPTION_READY", "CAPTION", "CONFIRM"),
+        Event("CONFIRM_YES", "CONFIRM", "SPEAK"),
+        Event("CONFIRM_NO", "CONFIRM", "CAPTION"),
+        Event("CANCEL", ("PERCEIVE", "FUSE", "CAPTION", "CONFIRM", "SPEAK"), "IDLE"),
+        Event("TIMEOUT", "CONFIRM", "IDLE"),
+        Event("SPEAK_DONE", "SPEAK", "IDLE"),
     ]
-    router = FSMRouter(states, events, initial_state="IDLE")
+    return FSMRouter(states, events, initial_state="IDLE")
+
+
+def test_cancel_returns_to_idle_without_irreversible_side_effects():
+    router = _build_router()
 
     executed_hooks = []
-    router.on_enter_state("EXECUTING", lambda prev, cur, event: executed_hooks.append(event.name))
+    router.on_enter_state("SPEAK", lambda *args: executed_hooks.append("SPEAK"))
 
-    router.transition("start")
-    assert router.state.name == "PREPARING"
+    router.transition("WAKE")
+    router.transition("FRAME")
+    router.transition("FUSED")
+    router.transition("CAPTION_READY")
+    assert router.state.name == "CONFIRM"
 
-    router.transition("cancel")
+    router.transition("CANCEL")
     assert router.state.name == "IDLE"
     assert executed_hooks == []
