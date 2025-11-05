@@ -1,34 +1,44 @@
-# Week 4 Report
+# Week 4 – Fusion α(t), FSM, and Hero-1 Latency
 
-## Highlights
-- Finalised the confidence fusion gate so audio and vision scores blend deterministically and expose timing telemetry for CI.
-- Documented the hero interaction FSM and handshake fallbacks so degradations and reconnects stay within UX latency budgets.
-- Benchmarked the hero caption pipeline (20 runs) to validate that every stage remains inside the week-4 latency targets while staying privacy-safe.
+## Fusion α(t) Schedule and Smoothing
+We parameterise the audio/vision blend with an adaptive gate α(t) derived from the relative modality confidences:
 
-## Fusion Gate Behaviour
-The confidence gate normalises the requested modality weights, squashes both signals through a sigmoid, and produces a blended score that only trips when it clears the 0.35 threshold. The implementation publishes per-modality milliseconds so the benchmark can attribute outliers to either branch before the combined total is recorded.【F:src/fusion/confidence.py†L28-L81】 During the hero run the gate received a VAD-derived speech ratio and a keyframe density heuristic, yielding a p50 decision latency of 0.026 ms (total) with the individual modal transforms completing in 0.007 ms (audio) and 0.001 ms (vision).【F:examples/hero1_caption.py†L214-L266】【F:docs/artifacts/week_04_e2e_hero1_summary.json†L4-L53】
+\[
+\alpha_{\text{raw}}(t) = \sigma\big(k \cdot (c_v(t) - c_a(t)) + b\big)
+\]
 
-### Operating Tips
-- Keep the weights positive and non-zero; they are renormalised internally, so 45/55 is functionally identical to 9/11 but easier to review.
-- Raising the threshold above 0.35 is the quickest way to enforce “vision must agree” behaviours; lowering it favours audio wins when the wearable is in noisy, low-light contexts.
-- Telemetry consumers should key off `fusion_gate_ms` for the end-to-end cost, reserving the per-modality values for diagnostics.
+where `σ` is the numerically stable logistic function, `k` controls transition steepness, and `b` shifts the midpoint.【F:src/fusion/gate_mi.py†L10-L44】 The raw value feeds an exponential smoother so that abrupt modality swings do not thrash downstream policies:
 
-## FSM Overview
-The hero pipeline uses a minimal four-state router—`IDLE → LISTENING → ANALYSING → RESPONDING`—to prevent regressions that would allow double responses or stuck transitions.【F:examples/hero1_caption.py†L181-L246】 Handshake recovery continues to rely on the timed degradations laid out in `HandshakeFSM`, where p50/p95 budgets arm primary and guard timers and force reconnects when the wearable stops heartbeating.【F:fsm/handshake.py†L37-L200】 The diagram below captures the steady-state interaction flow:
+\[
+\alpha(t) = (1-\beta)\,\alpha(t-1) + \beta\,\alpha_{\text{raw}}(t), \quad \beta \in [0,1]
+\]
 
-```mermaid
-stateDiagram-v2
-    [*] --> IDLE
-    IDLE --> LISTENING : activate
-    LISTENING --> ANALYSING : observe
-    ANALYSING --> RESPONDING : respond (confirmed)
-    RESPONDING --> [*]
+with bounds enforcement to keep α(t) ∈ [0,1].【F:src/fusion/gate_mi.py†L45-L88】 Small β (e.g., 0.25) privileges temporal stability, while larger β lets fast-changing sensors steer the blend quickly. As the vision confidence `c_v` rises relative to audio `c_a`, α(t) approaches 1.0 and the fusion output emphasises the visual signal; when audio confidence dominates, α(t) decays toward 0.0, biasing the policy toward speech cues. Equal confidences converge to α(t) ≈ 0.5 after the smoother settles, ensuring symmetric weighting.
+
+## Interaction FSM (ASCII)
 ```
++-------+   activate    +-----------+   observe    +------------+
+| IDLE  | ----------->  | LISTENING | ---------->  | ANALYSING  |
++-------+               +-----------+              +------------+
+     ^                       |   respond(confirm)          |
+     |                       v                             v
+     +------------------  +-----------+  <---------------+
+                          | RESPONDING|
+                          +-----------+
+```
+The router instantiates four states (`IDLE`, `LISTENING`, `ANALYSING`, `RESPONDING`) with irreversible completion once the caption is emitted, mirroring the guardrails in the hero caption pipeline.【F:examples/hero1_caption.py†L189-L239】
 
-## Hero Pipeline Latency Targets vs. Bench Results
-Latency goals balance a sub-100 ms (p95) end-to-end budget against realistic CPU-only execution. The synthetic bench executed 20 runs and surfaced the following distributions:
+## Hero-1 End-to-End Flow
+1. **Provider I/O bootstrap** – Resolve the wearable provider, capture metadata, and set up audio/display capabilities.【F:examples/hero1_caption.py†L226-L277】
+2. **Perception** – Synthesise the evaluation clip and audio, run VAD and ASR to obtain speech ratio and transcript candidates, and extract visual keyframes.【F:examples/hero1_caption.py†L202-L261】
+3. **Fusion** – Map VAD/keyframe confidences into modality signals, evaluate the fusion gate, and update α(t) diagnostics before publishing blended scores and latency telemetry.【F:examples/hero1_caption.py†L262-L279】【F:src/fusion/gate_mi.py†L31-L88】
+4. **Policy** – Step the FSM router through activation, observation, and response transitions, guaranteeing a single outbound reply per activation window.【F:examples/hero1_caption.py†L240-L256】
+5. **Outputs** – Generate the caption, hand it to the provider’s audio/display channels, and record overlay rendering plus total runtime for CI inspection.【F:examples/hero1_caption.py†L280-L318】
 
-| Stage | Target p95 (ms) | p50 (ms) | p95 (ms) |
+## Latency Budget and CI Aggregates
+Weekly targets hold the end-to-end hero path under 95 ms (p95). Continuous integration captures 20-run aggregates using the synthetic scenario; the latest summary is below.【F:docs/artifacts/week_04_e2e_hero1_summary.json†L1-L47】
+
+| Stage | Target p95 (ms) | Observed p50 (ms) | Observed p95 (ms) |
 | --- | --- | --- | --- |
 | synth_clip_ms | ≤ 5 | 0.339 | 1.790 |
 | synth_audio_ms | ≤ 5 | 0.228 | 0.936 |
@@ -43,11 +53,7 @@ Latency goals balance a sub-100 ms (p95) end-to-end budget against realistic CP
 | tts_ms | ≤ 8 | 1.249 | 1.534 |
 | **total** | **≤ 95** | **80.910** | **90.670** |
 
-The fusion p50 combined latency (audio + vision) is 0.008 ms with a mean fused confidence of 0.659, providing ample margin for noisier sensors while staying within the target envelope.【F:docs/artifacts/week_04_e2e_hero1_summary.json†L4-L45】【885a42†L1-L18】
+CI stores both raw stage timings and fused-score statistics (`score_mean` = 0.659), giving reviewers early warning if α(t) drifts toward a modality lockout.【F:docs/artifacts/week_04_e2e_hero1_summary.json†L35-L47】
 
-## Privacy Notes
-The hero bench continues to generate synthetic frames and audio procedurally, keeping the dataset entirely deterministic and offline-friendly.【F:examples/hero1_caption.py†L1-L257】 Any downstream image logging still passes through the deterministic redaction stub that masks the expected face and license plate anchors before persistence, ensuring the synthetic pathway matches production privacy guardrails.【F:privacy/redact.py†L1-L75】
-
-## Retro (Paul–Elder + Inversion)
-- **Paul–Elder Critical Thinking**: Claims about fusion robustness now cite weight normalisation, sigmoid squashing, and instrumented timings, making assumptions about signal scaling explicit while documenting the diagnostic breadcrumbs reviewers need to challenge them.
-- **Inversion**: If we inverted the latency posture—allowing non-synthetic inputs or skipping redaction—the bench could leak identifiable footage and the fusion timers would absorb real network jitter, making the deterministic telemetry meaningless. Guardrails stay in place because we designed them assuming that inversion from day one.
+## Privacy Note
+Hero-1 validation remains fully synthetic: clips, speech, and overlays are generated offline, and any downstream frame logging still routes through the deterministic redaction stub before persistence. No real user data is processed in CI or shared artifacts.【F:examples/hero1_caption.py†L202-L318】【F:privacy/redact.py†L1-L75】
