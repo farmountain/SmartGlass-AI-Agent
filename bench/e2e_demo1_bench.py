@@ -11,7 +11,7 @@ import types
 from collections import Counter
 from pathlib import Path
 from statistics import mean
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Set
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -28,6 +28,7 @@ if str(EXAMPLES_PATH) not in sys.path:
     sys.path.insert(0, str(EXAMPLES_PATH))
 
 from examples.hero1_caption import HERO_STAGE_ORDER, run_hero_pipeline  # noqa: E402
+from src.io.telemetry import log_metric  # noqa: E402
 
 
 def _percentile(samples: List[float], percentile: float) -> float:
@@ -61,6 +62,7 @@ def run_benchmark(*, runs: int, output_csv: Path, summary_path: Path) -> Dict[st
     fusion_vision_lat: List[float] = []
     totals: List[float] = []
     final_states: Counter[str] = Counter()
+    providers: Set[str] = set()
 
     rows: List[Dict[str, object]] = []
 
@@ -69,7 +71,10 @@ def run_benchmark(*, runs: int, output_csv: Path, summary_path: Path) -> Dict[st
         latencies = result["latencies"]
         metadata = result["metadata"]
 
-        row: Dict[str, object] = {"run": run_idx}
+        provider_name = str(result.get("provider", {}).get("name", "unknown"))
+        providers.add(provider_name)
+
+        row: Dict[str, object] = {"run": run_idx, "provider": provider_name}
         total = 0.0
         for stage in HERO_STAGE_ORDER:
             value = float(latencies.get(stage, 0.0))
@@ -96,7 +101,16 @@ def run_benchmark(*, runs: int, output_csv: Path, summary_path: Path) -> Dict[st
         rows.append(row)
 
     with output_csv.open("w", newline="") as fp:
-        fieldnames = ["run"] + HERO_STAGE_ORDER + ["total_ms", "fusion_score", "fusion_decision", "fsm_state", "caption_length"]
+        fieldnames = [
+            "run",
+            "provider",
+            *HERO_STAGE_ORDER,
+            "total_ms",
+            "fusion_score",
+            "fusion_decision",
+            "fsm_state",
+            "caption_length",
+        ]
         writer = csv.DictWriter(fp, fieldnames=fieldnames)
         writer.writeheader()
         for row in rows:
@@ -126,7 +140,45 @@ def run_benchmark(*, runs: int, output_csv: Path, summary_path: Path) -> Dict[st
         "fsm": {
             "final_state_counts": dict(sorted(final_states.items())),
         },
+        "providers": sorted(providers),
     }
+
+    caption_p50 = summary["stages"].get("caption_ms", {}).get("p50_ms", 0.0)
+    fusion_audio_p50 = summary["stages"].get("fusion_audio_ms", {}).get("p50_ms", 0.0)
+    fusion_vision_p50 = summary["stages"].get("fusion_vision_ms", {}).get("p50_ms", 0.0)
+    vision_audio_p50 = fusion_audio_p50 + fusion_vision_p50
+
+    summary["aggregates"] = {
+        "caption_p50_ms": caption_p50,
+        "vision_audio_p50_ms": vision_audio_p50,
+        "providers": summary["providers"],
+        "total_p50_ms": summary["totals"].get("p50_ms", 0.0),
+        "total_p95_ms": summary["totals"].get("p95_ms", 0.0),
+    }
+
+    if providers:
+        primary_provider = sorted(providers)[0]
+    else:
+        primary_provider = "unknown"
+
+    log_metric("hero1.p50", summary["totals"].get("p50_ms", 0.0), unit="ms", tags={"provider": primary_provider})
+    log_metric("hero1.p95", summary["totals"].get("p95_ms", 0.0), unit="ms", tags={"provider": primary_provider})
+    log_metric("hero1.va_p50", vision_audio_p50, unit="ms", tags={"provider": primary_provider})
+
+    p50_row = {"run": "p50", "provider": ",".join(sorted(providers)) or primary_provider}
+    p95_row = {"run": "p95", "provider": ",".join(sorted(providers)) or primary_provider}
+
+    for stage in HERO_STAGE_ORDER:
+        p50_row[stage] = f"{summary['stages'][stage]['p50_ms']:.6f}"
+        p95_row[stage] = f"{summary['stages'][stage]['p95_ms']:.6f}"
+
+    p50_row["total_ms"] = f"{summary['totals']['p50_ms']:.6f}"
+    p95_row["total_ms"] = f"{summary['totals']['p95_ms']:.6f}"
+
+    with output_csv.open("a", newline="") as fp:
+        writer = csv.DictWriter(fp, fieldnames=fieldnames)
+        writer.writerow(p50_row)
+        writer.writerow(p95_row)
 
     with summary_path.open("w", encoding="utf-8") as fp:
         json.dump(summary, fp, indent=2)
@@ -136,7 +188,7 @@ def run_benchmark(*, runs: int, output_csv: Path, summary_path: Path) -> Dict[st
 
 def _parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--runs", type=int, default=5, help="Number of benchmark runs to execute")
+    parser.add_argument("--runs", type=int, default=30, help="Number of benchmark runs to execute")
     parser.add_argument(
         "--csv",
         type=Path,

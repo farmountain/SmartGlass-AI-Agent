@@ -3,9 +3,9 @@
 The pipeline synthesises a simple moving-square video clip alongside a
 corresponding synthetic audio stream. The clip is passed through the
 energy-based VAD, streaming ASR mock, keyframe selector, fusion gate,
-FSM router, caption skill, and TTS stub. Each stage records its latency
-so that downstream tooling (for example the hero benchmark) can report
-aggregate performance metrics.
+FSM router, caption skill, and the provider's TTS/overlay surfaces.
+Each stage records its latency so downstream tooling (for example the
+hero benchmark) can report aggregate performance metrics.
 
 Running this module directly prints a concise summary of the generated
 caption together with per-stage latencies.
@@ -29,13 +29,15 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 SRC_PATH = ROOT / "src"
+if str(SRC_PATH) not in sys.path:
+    sys.path.insert(0, str(SRC_PATH))
 if "src" not in sys.modules:
     src_pkg = types.ModuleType("src")
     src_pkg.__path__ = [str(SRC_PATH)]
     sys.modules["src"] = src_pkg
 
+from drivers.factory import Provider, get_provider  # noqa: E402
 from src.audio import ASRStream, EnergyVAD, MockASR  # noqa: E402
-from src.io.tts import speak  # noqa: E402
 from src.perception import get_default_keyframer  # noqa: E402
 from src.policy.fsm import Event, FSMRouter, State  # noqa: E402
 from src.skills import MockCaptioner  # noqa: E402
@@ -61,6 +63,7 @@ HERO_STAGE_ORDER = [
     "fsm_ms",
     "caption_ms",
     "tts_ms",
+    "overlay_ms",
 ]
 
 
@@ -197,11 +200,40 @@ def _format_stage(stage: str, ms: float) -> str:
     return f"  - {stage}: {ms:.3f} ms"
 
 
-def run_hero_pipeline(*, log: bool = True) -> Dict[str, object]:
+def _resolve_audio_out(provider: Provider) -> object:
+    for attr in ("audio_out", "audio"):
+        target = getattr(provider, attr, None)
+        if target is not None and hasattr(target, "speak"):
+            return target
+    raise AttributeError("provider does not expose an audio_out/audio.speak implementation")
+
+
+def _provider_has_display(provider: Provider) -> bool:
+    probe = getattr(provider, "has_display", None)
+    if callable(probe):
+        try:
+            return bool(probe())
+        except Exception:  # pragma: no cover - defensive against provider quirks
+            return bool(getattr(provider, "overlay", None))
+    return bool(getattr(provider, "overlay", None))
+
+
+def _render_overlay(provider: Provider, payload: dict) -> dict | None:
+    if not _provider_has_display(provider):
+        return None
+    overlay = getattr(provider, "overlay", None) or getattr(provider, "display", None)
+    if overlay is None or not hasattr(overlay, "render"):
+        return None
+    return overlay.render(payload)
+
+
+def run_hero_pipeline(*, log: bool = True, provider: Provider | None = None) -> Dict[str, object]:
     """Execute the hero caption pipeline and return structured results."""
 
+    provider = provider or get_provider()
+
     latencies: Dict[str, float] = {}
-    metadata: Dict[str, object] = {}
+    metadata: Dict[str, object] = {"provider": {"name": type(provider).__name__}}
 
     start = time.perf_counter()
     frames = generate_moving_square_clip()
@@ -250,9 +282,15 @@ def run_hero_pipeline(*, log: bool = True) -> Dict[str, object]:
     caption = captioner.generate(frames, ocr_text="Exit")
     latencies["caption_ms"] = (time.perf_counter() - start) * 1000.0
 
+    audio_out = _resolve_audio_out(provider)
     start = time.perf_counter()
-    tts_result = speak(caption)
+    tts_payload = audio_out.speak(caption)
     latencies["tts_ms"] = (time.perf_counter() - start) * 1000.0
+
+    overlay_payload = {"type": "caption", "text": caption}
+    overlay_start = time.perf_counter()
+    overlay_result = _render_overlay(provider, overlay_payload)
+    latencies["overlay_ms"] = (time.perf_counter() - overlay_start) * 1000.0
 
     total_ms = sum(latencies.values())
 
@@ -279,10 +317,9 @@ def run_hero_pipeline(*, log: bool = True) -> Dict[str, object]:
         "count": len(key_indices),
         "indices": key_indices,
     }
-    metadata["tts"] = {
-        "char_count": tts_result.char_count,
-        "duration": tts_result.duration,
-    }
+    metadata["tts"] = tts_payload
+    if overlay_result is not None:
+        metadata["overlay"] = overlay_result
 
     result = {
         "frames": frames,
@@ -291,6 +328,7 @@ def run_hero_pipeline(*, log: bool = True) -> Dict[str, object]:
         "latencies": latencies,
         "metadata": metadata,
         "total_ms": total_ms,
+        "provider": metadata["provider"],
     }
 
     if log:
@@ -300,6 +338,7 @@ def run_hero_pipeline(*, log: bool = True) -> Dict[str, object]:
             if value is not None:
                 print(_format_stage(stage, value))
         print(_format_stage("total", total_ms))
+        print(f"  - provider: {metadata['provider']['name']}")
         print(f"  - caption: {caption}")
         print(f"  - transcript: {metadata['asr']['transcript']}")
         print(
