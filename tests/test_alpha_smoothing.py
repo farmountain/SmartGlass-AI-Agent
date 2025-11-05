@@ -1,29 +1,34 @@
-"""Smoothing behaviour for the mutual-information fusion gate."""
+"""Behavioural tests for the smoothed fusion controller."""
 
 from __future__ import annotations
 
-from src.fusion.gate_mi import ConfidenceFusion
+import logging
+
+from src.fusion.gate_mi import ConfidenceFusion, alpha_from_conf, smooth_alpha
 
 
-def test_alpha_converges_under_updates() -> None:
-    """Repeated updates with the same confidence should converge."""
-
-    fusion = ConfidenceFusion(smoothing=0.2, initial_alpha=0.0)
-    target_confidence = 0.85
-
-    for _ in range(64):
-        alpha = fusion.update(target_confidence)
-
-    target_alpha = fusion.target_from_conf(target_confidence)
-    assert abs(alpha - target_alpha) < 1e-3
+def test_smooth_alpha_matches_ema() -> None:
+    prev = 0.2
+    new = 0.8
+    beta = 0.25
+    expected = (1.0 - beta) * prev + beta * new
+    assert smooth_alpha(prev, new, beta=beta) == expected
 
 
-def test_alpha_updates_remain_bounded() -> None:
-    """Ensure the running alpha never leaves the unit interval."""
+def test_confidence_fusion_updates_and_logs(caplog) -> None:
+    fusion = ConfidenceFusion(beta=0.5, initial_alpha=0.0)
 
-    fusion = ConfidenceFusion(smoothing=0.5, initial_alpha=0.2)
-    confidences = [0.1, 0.4, 0.9, 0.95, 0.6, 0.2]
+    with caplog.at_level(logging.DEBUG, logger="fusion"):
+        alpha1 = fusion.update(0.9, 0.1)
+        alpha2 = fusion.update(0.9, 0.1)
 
-    for confidence in confidences:
-        alpha = fusion.update(confidence)
-        assert 0.0 <= alpha <= 1.0
+    assert 0.0 <= alpha1 <= 1.0
+    assert alpha2 >= alpha1
+    assert any("fusion.alpha_last" in message for message in caplog.messages)
+    assert any("fusion.alpha_avg" in message for message in caplog.messages)
+
+
+def test_confidence_fusion_uses_bias() -> None:
+    higher_bias = alpha_from_conf(0.4, 0.6, bias=1.0)
+    lower_bias = alpha_from_conf(0.4, 0.6, bias=-1.0)
+    assert higher_bias > lower_bias
