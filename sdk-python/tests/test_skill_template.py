@@ -20,10 +20,19 @@ def test_modules_importable(module):
     assert module is not None
 
 
-def test_mock_workflows_execute(tmp_path):
-    config = trainer.TrainingConfig(epochs=2, sleep_seconds=0.01)
-    mock_trainer = trainer.MockTrainer(config)
-    mock_trainer.train()
+def test_workflows_execute(tmp_path):
+    args = Namespace(
+        dataset="math_reasoning_v1",
+        epochs=5,
+        learning_rate=0.05,
+        hidden_dim=8,
+        train_samples=64,
+        eval_samples=8,
+        seed=0,
+        weight_decay=0.0,
+        noise_floor=1e-3,
+    )
+    trainer.run(args)
 
     export_path = tmp_path / "model.onnx"
     args = Namespace(output=str(export_path), validation_seconds=0.0)
@@ -51,8 +60,8 @@ def test_train_pack_command_generates_artifacts(tmp_path):
         str(output_root),
         "--epochs",
         "1",
-        "--sleep",
-        "0.0",
+        "--learning-rate",
+        "0.01",
         "--validation-seconds",
         "0.0",
     ]
