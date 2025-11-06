@@ -6,7 +6,9 @@ import kotlin.test.assertTrue
 import rayskillkit.core.Decision
 import rayskillkit.core.OrtHub
 import rayskillkit.core.Router
+import rayskillkit.core.SkillDescriptor
 import rayskillkit.core.SkillRegistry
+import rayskillkit.core.SkillRunner
 import rayskillkit.core.Telemetry
 import rayskillkit.ui.TTS
 
@@ -21,12 +23,16 @@ class CoreSmokeTest {
         assertFalse(ortHub.isConnected("local"))
 
         val registry = SkillRegistry()
-        val handler = Any()
-        registry.registerSkill("demo", handler)
+        val descriptor = object : SkillDescriptor<Any, List<Int>, Boolean> {
+            override fun buildFeatures(payload: Any): List<Int> = listOf(1)
+            override val runner = SkillRunner<List<Int>, Boolean> { true }
+        }
+        registry.registerSkill("demo", descriptor)
         assertTrue(registry.listSkills().contains("demo"))
 
         val router = Router(registry)
-        assertTrue(router.route("demo", Any()))
+        val routeResult = router.routeSkill<Any, List<Int>, Boolean>("demo", Any())
+        assertTrue(routeResult is Router.RouteResult.Success<Boolean>)
 
         val decision = Decision(id = "1", skillName = "demo", confidence = 0.75f)
         assertTrue(decision.isConfident())

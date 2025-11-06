@@ -1,10 +1,37 @@
 package rayskillkit.core
 
-class Router(private val registry: SkillRegistry) {
-    fun route(skillName: String, payload: Any): Boolean {
-        val skill = registry.getSkill(skillName) ?: return false
-        // In a real implementation, the payload would be dispatched to the skill handler.
-        // This placeholder simply indicates that the skill exists and can handle the payload.
-        return skillName.isNotEmpty() && payload != null
+class Router(
+    private val registry: SkillRegistry,
+    private val telemetry: Telemetry? = null
+) {
+    sealed class RouteResult<out Result> {
+        data class Success<Result>(val value: Result) : RouteResult<Result>()
+        data class Failure(val error: Throwable) : RouteResult<Nothing>()
+    }
+
+    fun <Payload : Any, Features : Any, Result : Any> routeSkill(
+        skillName: String,
+        payload: Payload
+    ): RouteResult<Result> {
+        val descriptor = registry.getSkill<Payload, Features, Result>(skillName)
+            ?: return handleFailure(skillName, SkillNotFoundException(skillName))
+
+        return try {
+            val features = descriptor.buildFeatures(payload)
+            val result = descriptor.runner.runSkill(features)
+            telemetry?.record("router.success.$skillName")
+            RouteResult.Success(result)
+        } catch (error: Exception) {
+            handleFailure(skillName, error)
+        }
+    }
+
+    private fun handleFailure(skillName: String, error: Throwable): RouteResult.Failure {
+        telemetry?.record("router.failure.$skillName:${error.message}")
+        return RouteResult.Failure(error)
     }
 }
+
+class SkillNotFoundException(skillName: String) : IllegalArgumentException(
+    "Skill '$skillName' is not registered"
+)
