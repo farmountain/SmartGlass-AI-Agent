@@ -1,8 +1,8 @@
 package rayskillkit.core
 
-import java.io.InputStream
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.InputStream
 
 private const val DEFAULT_SKILLS_RESOURCE = "skills.json"
 
@@ -22,7 +22,19 @@ class SkillRegistry {
         resourceName: String = DEFAULT_SKILLS_RESOURCE,
         runnerFactory: (String) -> SkillRunner<FloatArray, FloatArray> = { SkillRunner { features -> features } }
     ) {
-        loadDefinitions(resourceName).forEach { definition ->
+        val stream = locateResource(resourceName)
+            ?: throw IllegalStateException("Unable to locate $resourceName on the classpath.")
+
+        stream.use { input ->
+            initializeFromStream(input, runnerFactory)
+        }
+    }
+
+    fun initializeFromStream(
+        stream: InputStream,
+        runnerFactory: (String) -> SkillRunner<FloatArray, FloatArray> = { SkillRunner { features -> features } }
+    ) {
+        loadDefinitions(stream).forEach { definition ->
             val featureBuilder = builderForSkill(definition.featureBuilder)
                 ?: throw IllegalArgumentException(
                     "Unknown feature builder '${definition.featureBuilder}' for skill '${definition.id}'"
@@ -114,32 +126,27 @@ class SkillRegistry {
 
     private fun normalizeTrigger(trigger: String): String = trigger.trim().lowercase()
 
-    private fun loadDefinitions(resourceName: String): List<SkillDefinition> {
-        val stream = locateResource(resourceName)
-            ?: throw IllegalStateException("Unable to locate $resourceName on the classpath.")
+    private fun loadDefinitions(stream: InputStream): List<SkillDefinition> {
+        val content = stream.bufferedReader().use { it.readText() }
+        if (content.isBlank()) {
+            return emptyList()
+        }
 
-        stream.use { input ->
-            val content = input.bufferedReader().use { it.readText() }
-            if (content.isBlank()) {
-                return emptyList()
-            }
-
-            val root = JSONObject(content)
-            val skillsArray = root.optJSONArray("skills") ?: return emptyList()
-            return buildList {
-                for (index in 0 until skillsArray.length()) {
-                    val skill = skillsArray.getJSONObject(index)
-                    val id = skill.getString("id")
-                    val featureBuilder = skill.getString("featureBuilder")
-                    val triggers = parseTriggers(skill)
-                    add(
-                        SkillDefinition(
-                            id = id,
-                            featureBuilder = featureBuilder,
-                            triggerPhrases = triggers
-                        )
+        val root = JSONObject(content)
+        val skillsArray = root.optJSONArray("skills") ?: return emptyList()
+        return buildList {
+            for (index in 0 until skillsArray.length()) {
+                val skill = skillsArray.getJSONObject(index)
+                val id = skill.getString("id")
+                val featureBuilder = skill.getString("featureBuilder")
+                val triggers = parseTriggers(skill)
+                add(
+                    SkillDefinition(
+                        id = id,
+                        featureBuilder = featureBuilder,
+                        triggerPhrases = triggers
                     )
-                }
+                )
             }
         }
     }
