@@ -1,0 +1,19 @@
+{
+  "skills": [
+    {
+      "id": "education_assistant",
+      "featureBuilder": "education",
+      "triggers": ["education", "school", "learning"]
+    },
+    {
+      "id": "retail_helper",
+      "featureBuilder": "retail",
+      "triggers": ["retail", "store", "shopping"]
+    },
+    {
+      "id": "travel_planner",
+      "featureBuilder": "travel",
+      "triggers": ["travel", "journey", "trip"]
+    }
+  ]
+}

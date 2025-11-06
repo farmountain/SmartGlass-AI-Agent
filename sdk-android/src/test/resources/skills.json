@@ -1,0 +1,14 @@
+{
+  "skills": [
+    {
+      "id": "education_assistant",
+      "featureBuilder": "education",
+      "triggers": ["education", "school"]
+    },
+    {
+      "id": "travel_planner",
+      "featureBuilder": "travel",
+      "triggers": ["travel", "journey"]
+    }
+  ]
+}
