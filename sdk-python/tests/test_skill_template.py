@@ -4,6 +4,7 @@ import argparse
 import json
 from argparse import Namespace
 
+import onnxruntime as ort
 import pytest
 
 from sdk_python import raycli
@@ -34,10 +35,36 @@ def test_workflows_execute(tmp_path):
     )
     trainer.run(args)
 
-    export_path = tmp_path / "model.onnx"
-    args = Namespace(output=str(export_path), validation_seconds=0.0)
-    export_onnx.run(args)
-    assert export_path.exists()
+    export_args = Namespace(
+        skill_id="demo_skill",
+        output_dir=tmp_path,
+        opset_version=17,
+        dataset=args.dataset,
+        epochs=args.epochs,
+        learning_rate=args.learning_rate,
+        hidden_dim=args.hidden_dim,
+        train_samples=args.train_samples,
+        eval_samples=args.eval_samples,
+        seed=args.seed,
+        weight_decay=args.weight_decay,
+        noise_floor=args.noise_floor,
+    )
+    export_onnx.run(export_args)
+
+    model_path = tmp_path / "demo_skill_int8.onnx"
+    stats_path = tmp_path / "demo_skill_stats.json"
+
+    assert model_path.exists()
+    assert stats_path.exists()
+
+    session = ort.InferenceSession(str(model_path))
+    assert session is not None
+
+    stats_payload = json.loads(stats_path.read_text())
+    assert stats_payload["skill_id"] == "demo_skill"
+    assert "y_mean" in stats_payload
+    assert "y_std" in stats_payload
+
 
     eval_args = Namespace(samples=1, sleep=0.0)
     eval_module.run(eval_args)
@@ -89,8 +116,11 @@ def test_train_pack_command_generates_artifacts(tmp_path):
     model_path = models_dir / sample.model_basename
     stats_path = stats_dir / sample.stats_basename
 
-    assert model_path.read_text().strip() == "mock onnx data"
+    assert model_path.exists()
+    session = ort.InferenceSession(str(model_path))
+    assert session is not None
 
     stats_payload = json.loads(stats_path.read_text())
     assert stats_payload["skill_id"] == sample.skill_id
-    assert stats_payload["training"]["epochs"] == 1
+    assert "y_mean" in stats_payload
+    assert "y_std" in stats_payload
