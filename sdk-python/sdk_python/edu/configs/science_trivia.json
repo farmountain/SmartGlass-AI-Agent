@@ -1,0 +1,8 @@
+{
+  "skill_id": "edu_science_trivia",
+  "display_name": "Science Trivia Mentor",
+  "subject": "science",
+  "dataset": "science_trivia_v1",
+  "curriculum": ["biology", "chemistry", "physics"],
+  "version": "0.1.0"
+}
