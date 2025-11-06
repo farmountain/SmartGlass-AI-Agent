@@ -1,0 +1,8 @@
+{
+  "skill_id": "edu_math_reasoning",
+  "display_name": "Math Reasoning Coach",
+  "subject": "mathematics",
+  "dataset": "math_reasoning_v1",
+  "curriculum": ["addition", "subtraction", "word problems"],
+  "version": "0.1.0"
+}
