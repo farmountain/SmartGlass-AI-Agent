@@ -9,6 +9,7 @@ from typing import Callable, Dict
 
 from .edu import default_config_dir, default_output_root, load_configs
 from .skill_template import export_onnx, eval as eval_module, trainer
+from .skills_impl import load_y_form_parser
 
 LOGGER = logging.getLogger(__name__)
 
@@ -119,7 +120,15 @@ def _run_train_pack(args: argparse.Namespace) -> int:
         )
 
         stats_path = stats_dir / config.stats_basename
-        stats_path.write_text(json.dumps(export_result.stats, indent=2))
+        stats_payload = dict(export_result.stats)
+        try:
+            parser = load_y_form_parser(skill_config.dataset)
+        except ImportError:
+            parser = None
+        else:
+            examples = parser(train_dataset.features[: min(5, train_dataset.batch_size)])
+            stats_payload["y_form_examples"] = examples
+        stats_path.write_text(json.dumps(stats_payload, indent=2))
         if export_result.stats_path.exists():
             export_result.stats_path.unlink()
         LOGGER.info(

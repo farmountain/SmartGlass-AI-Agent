@@ -1,0 +1,8 @@
+{
+  "skill_id": "edu_linear_equations",
+  "display_name": "Linear Equations Tutor",
+  "subject": "mathematics",
+  "dataset": "edu_linear_eq",
+  "curriculum": ["linear equations", "slope-intercept form"],
+  "version": "0.1.0"
+}
