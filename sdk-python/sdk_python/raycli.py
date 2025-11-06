@@ -7,12 +7,7 @@ import logging
 from pathlib import Path
 from typing import Callable, Dict
 
-from .edu import (
-    default_config_dir,
-    default_output_root,
-    load_configs,
-    synthesize_stats,
-)
+from .edu import default_config_dir, default_output_root, load_configs
 from .skill_template import export_onnx, eval as eval_module, trainer
 
 LOGGER = logging.getLogger(__name__)
@@ -41,7 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
     trainer.add_arguments(train_parser)
 
     export_parser = subparsers.add_parser(
-        "export", help="Export the trained model to ONNX (mock)."
+        "export", help="Export the trained model to an INT8 ONNX artifact."
     )
     export_onnx.add_arguments(export_parser)
 
@@ -96,28 +91,43 @@ def _run_train_pack(args: argparse.Namespace) -> int:
     base_config = trainer.build_config(args)
     for config in configs:
         LOGGER.info("Training education skill: %s", config.skill_id)
-        skill_trainer = trainer.SkillTrainer(base_config.with_dataset(config.dataset))
-        skill_trainer.fit()
+        skill_config = base_config.with_dataset(config.dataset)
+        skill_trainer = trainer.SkillTrainer(skill_config)
+        fit_result = skill_trainer.fit()
 
-        model_path = models_dir / config.model_basename
-        export_args = argparse.Namespace(
-            output=str(model_path),
-            validation_seconds=args.validation_seconds,
+        calibration = trainer.load_dataset(
+            skill_config.dataset,
+            "validation",
+            samples=skill_config.eval_samples,
+            seed=skill_config.seed + 1,
         )
-        export_onnx.run(export_args)
+        train_dataset = trainer.load_dataset(
+            skill_config.dataset,
+            "train",
+            samples=skill_config.train_samples,
+            seed=skill_config.seed,
+        )
 
-        stats_payload = synthesize_stats(
-            config,
-            epochs=base_config.epochs,
-            sleep_seconds=0.0,
+        export_result = export_onnx.export_int8(
+            export_onnx.ExportConfig(
+                skill_id=config.skill_id,
+                model=skill_trainer.get_model(),
+                sample_input=calibration.features,
+                targets=train_dataset.targets,
+                output_dir=models_dir,
+            )
         )
+
         stats_path = stats_dir / config.stats_basename
-        stats_path.write_text(json.dumps(stats_payload, indent=2))
+        stats_path.write_text(json.dumps(export_result.stats, indent=2))
+        if export_result.stats_path.exists():
+            export_result.stats_path.unlink()
         LOGGER.info(
-            "Artifacts generated for %s: model=%s stats=%s",
+            "Artifacts generated for %s: model=%s stats=%s (loss=%.4f)",
             config.skill_id,
-            model_path,
+            export_result.model_path,
             stats_path,
+            fit_result.final_loss,
         )
 
     return 0

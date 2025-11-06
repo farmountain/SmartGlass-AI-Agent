@@ -49,11 +49,11 @@ class EduSkillConfig:
 
     @property
     def model_basename(self) -> str:
-        return self.model_filename or f"{self.skill_id}.onnx"
+        return self.model_filename or f"{self.skill_id}_int8.onnx"
 
     @property
     def stats_basename(self) -> str:
-        return self.stats_filename or f"{self.skill_id}.json"
+        return self.stats_filename or f"{self.skill_id}_stats.json"
 
 
 def default_config_dir() -> Path:

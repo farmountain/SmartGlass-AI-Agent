@@ -97,6 +97,13 @@ class SkillTrainer:
         sigma = torch.full_like(outputs, self._sigma)
         return outputs.cpu(), sigma.cpu()
 
+    def get_model(self) -> nn.Module:
+        """Return the underlying trained :class:`~torch.nn.Module`."""
+
+        if self._model is None:
+            raise RuntimeError("Model has not been trained yet.")
+        return self._model
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
