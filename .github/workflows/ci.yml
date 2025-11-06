@@ -38,8 +38,42 @@ jobs:
             pip install -r optional-requirements.txt
           fi
 
+      - name: Validate skills schema
+        id: validate_skills
+        run: python cicd/validate_skills.py
+
       - name: Prepare artifacts directory
         run: mkdir -p artifacts
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Cache Gradle packages
+        id: gradle_cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Assemble Android SDK
+        id: android_assemble
+        run: ./gradlew :sdk-android:assemble
+
+      - name: Upload Android AAR artifact
+        id: upload_android_aar
+        if: ${{ success() && steps.android_assemble.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-aar
+          path: sdk-android/build/outputs/aar/*.aar
+          if-no-files-found: error
 
       - name: Run ruff
         id: ruff
@@ -123,12 +157,25 @@ jobs:
             echo "";
             echo "| Step | Status |";
             echo "| --- | --- |";
+            if [ "${{ steps.validate_skills.outcome }}" != "" ]; then
+              echo "| Validate Skills | ${{ steps.validate_skills.outcome }} |";
+            fi
+            if [ "${{ steps.gradle_cache.outcome }}" != "" ]; then
+              echo "| Gradle Cache | ${{ steps.gradle_cache.outcome }} |";
+            fi
+            if [ "${{ steps.android_assemble.outcome }}" != "" ]; then
+              echo "| Android Assemble | ${{ steps.android_assemble.outcome }} |";
+            fi
+            if [ "${{ steps.upload_android_aar.outcome }}" != "" ]; then
+              echo "| Upload Android AAR | ${{ steps.upload_android_aar.outcome }} |";
+            fi
             echo "| Ruff | ${{ steps.ruff.outcome }} |";
             echo "| Pyright | ${{ steps.pyright.outcome }} |";
             echo "| Pytest | ${{ steps.pytest.outcome }} |";
             echo "| Inventory | ${{ steps.inventory.outcome }} |";
+
             if [ "${{ steps.latency.outcome }}" != "" ]; then
-              echo "| Latency Bench | ${{ steps.latency.outcome }} |";
+              echo "| Latency Bench | ${{ steps.latency.outcome }} |"; 
             fi
             if [ "${{ steps.redteam.outcome }}" != "" ]; then
               echo "| Red Team Eval | ${{ steps.redteam.outcome }} |";
