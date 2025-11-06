@@ -16,6 +16,7 @@ class CoreSmokeTest {
     @Test
     fun instantiateCoreComponents() {
         val ortHub = OrtHub()
+        ortHub.init()
         assertFalse(ortHub.isConnected("local"))
         assertTrue(ortHub.connect("local"))
         assertTrue(ortHub.isConnected("local"))
