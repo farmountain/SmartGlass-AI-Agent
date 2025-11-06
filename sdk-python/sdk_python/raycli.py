@@ -93,10 +93,11 @@ def _run_train_pack(args: argparse.Namespace) -> int:
         LOGGER.error("No education skill configs found in %s", config_root)
         return 1
 
-    trainer_args = argparse.Namespace(epochs=args.epochs, sleep=args.sleep)
+    base_config = trainer.build_config(args)
     for config in configs:
         LOGGER.info("Training education skill: %s", config.skill_id)
-        trainer.run(trainer_args)
+        skill_trainer = trainer.SkillTrainer(base_config.with_dataset(config.dataset))
+        skill_trainer.fit()
 
         model_path = models_dir / config.model_basename
         export_args = argparse.Namespace(
@@ -107,8 +108,8 @@ def _run_train_pack(args: argparse.Namespace) -> int:
 
         stats_payload = synthesize_stats(
             config,
-            epochs=trainer_args.epochs,
-            sleep_seconds=trainer_args.sleep,
+            epochs=base_config.epochs,
+            sleep_seconds=0.0,
         )
         stats_path = stats_dir / config.stats_basename
         stats_path.write_text(json.dumps(stats_payload, indent=2))
