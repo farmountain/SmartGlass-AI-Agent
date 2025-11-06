@@ -3,12 +3,16 @@ from __future__ import annotations
 
 import importlib
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, Sequence
 
 import torch
 from torch import Tensor
 
-__all__ = ["SynthesizedDataset", "load_synthesized_dataset"]
+__all__ = [
+    "SynthesizedDataset",
+    "load_synthesized_dataset",
+    "load_y_form_parser",
+]
 
 
 @dataclass(frozen=True)
@@ -39,6 +43,11 @@ class DatasetLoader(Protocol):
         ...
 
 
+class YFormParser(Protocol):
+    def __call__(self, features: Tensor) -> Sequence[str]:
+        ...
+
+
 def load_synthesized_dataset(
     name: str, split: str, *, num_samples: int, seed: int
 ) -> SynthesizedDataset:
@@ -60,3 +69,27 @@ def load_synthesized_dataset(
         dataset.targets.detach().clone().view(-1, 1),
         float(dataset.noise_std),
     )
+
+
+def load_y_form_parser(name: str) -> YFormParser:
+    """Return the ``features``→``y_form`` parser for ``name``."""
+
+    module = importlib.import_module(f"{__name__}.{name}")
+    try:
+        parser: YFormParser = getattr(module, "features_to_y_form")
+    except AttributeError as exc:  # pragma: no cover - defensive programming
+        raise ImportError(
+            f"Dataset module '{name}' does not expose features_to_y_form"
+        ) from exc
+
+    def _wrapped(features: Tensor) -> list[str]:
+        if not isinstance(features, Tensor):
+            raise TypeError("features must be a torch.Tensor")
+        results = parser(features)
+        if not isinstance(results, Sequence):
+            raise TypeError(
+                f"features_to_y_form for '{name}' returned unsupported type {type(results)!r}"
+            )
+        return [str(item) for item in results]
+
+    return _wrapped

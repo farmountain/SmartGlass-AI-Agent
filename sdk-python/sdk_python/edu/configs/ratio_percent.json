@@ -1,0 +1,8 @@
+{
+  "skill_id": "edu_ratio_percent",
+  "display_name": "Ratios to Percentages",
+  "subject": "mathematics",
+  "dataset": "edu_ratio_percent",
+  "curriculum": ["ratios", "percentages", "fractions"],
+  "version": "0.1.0"
+}

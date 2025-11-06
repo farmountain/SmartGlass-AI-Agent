@@ -1,0 +1,8 @@
+{
+  "skill_id": "edu_geometry_basics",
+  "display_name": "Geometry Basics Coach",
+  "subject": "mathematics",
+  "dataset": "edu_geo_basic",
+  "curriculum": ["area", "shapes", "geometry"],
+  "version": "0.1.0"
+}
