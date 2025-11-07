@@ -4,14 +4,83 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Dict
+from typing import Any, Callable, Dict
 
 from .edu import default_config_dir, default_output_root, load_configs
 from .skill_template import export_onnx, eval as eval_module, trainer
 from .skills_impl import load_y_form_parser
 
 LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class TravelSkillSpec:
+    """Configuration describing a travel skill training/export job."""
+
+    skill_id: str
+    dataset: str
+    display_name: str
+    description: str
+    capabilities: tuple[str, ...]
+    version: str = "0.1.0"
+
+    @property
+    def model_basename(self) -> str:
+        return f"{self.skill_id}_int8.onnx"
+
+    @property
+    def stats_basename(self) -> str:
+        return f"{self.skill_id}_stats.json"
+
+    def manifest_entry(
+        self,
+        *,
+        model_path: str,
+        stats_path: str,
+        metrics: dict[str, float],
+    ) -> dict[str, Any]:
+        """Return a manifest payload for this skill."""
+
+        entry: dict[str, Any] = {
+            "id": self.skill_id,
+            "name": self.display_name,
+            "description": self.description,
+            "version": self.version,
+            "model_path": model_path,
+            "stats_path": stats_path,
+            "capabilities": list(self.capabilities),
+            "metrics": metrics,
+            "dataset": self.dataset,
+        }
+        return entry
+
+
+TRAVEL_SKILL_SPECS: tuple[TravelSkillSpec, ...] = (
+    TravelSkillSpec(
+        skill_id="travel_fastlane",
+        dataset="tr_fastlane",
+        display_name="Airport FastLane Wait Estimator",
+        description="Predicts FastLane wait times from queue and traveler signals.",
+        capabilities=("travel", "operations", "regression"),
+    ),
+    TravelSkillSpec(
+        skill_id="travel_safebubble",
+        dataset="tr_safebubble",
+        display_name="Air Travel SafeBubble Risk Assessor",
+        description="Estimates exposure risk for flights under varied mitigation setups.",
+        capabilities=("travel", "safety", "regression"),
+    ),
+    TravelSkillSpec(
+        skill_id="travel_bargaincoach",
+        dataset="tr_bargaincoach",
+        display_name="BargainCoach Fare Forecaster",
+        description="Scores airfare savings opportunities using itinerary context.",
+        capabilities=("travel", "commerce", "forecasting"),
+    ),
+)
 
 
 def _configure_logging(verbose: bool) -> None:
@@ -66,6 +135,24 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=0.0,
         help="Mock validation time when exporting ONNX artifacts.",
+    )
+
+    travel_pack_parser = subparsers.add_parser(
+        "train_travel_pack",
+        help="Train and export the travel skill matrix, updating the manifest.",
+    )
+    trainer.add_arguments(travel_pack_parser)
+    travel_pack_parser.add_argument(
+        "--output-root",
+        type=Path,
+        default=default_output_root(),
+        help="Destination root for generated skill artifacts.",
+    )
+    travel_pack_parser.add_argument(
+        "--manifest-path",
+        type=Path,
+        default=_default_manifest_path(),
+        help="Path to the rayskillkit skills manifest to update.",
     )
 
     return parser
@@ -142,6 +229,132 @@ def _run_train_pack(args: argparse.Namespace) -> int:
     return 0
 
 
+def _default_manifest_path() -> Path:
+    repo_root = Path(__file__).resolve().parents[3]
+    return repo_root / "rayskillkit" / "skills.json"
+
+
+def _load_manifest(path: Path) -> dict[str, Any]:
+    if path.exists():
+        try:
+            return json.loads(path.read_text())
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Failed to parse manifest at {path}: {exc}") from exc
+    return {"skills": [], "metadata": {"version": "0.0.0"}}
+
+
+def _upsert_manifest_entry(
+    manifest: dict[str, Any], entry: dict[str, Any]
+) -> dict[str, Any]:
+    skills: list[dict[str, Any]]
+    if "skills" not in manifest or not isinstance(manifest["skills"], list):
+        skills = []
+    else:
+        skills = list(manifest["skills"])
+    for index, existing in enumerate(skills):
+        if isinstance(existing, dict) and existing.get("id") == entry["id"]:
+            skills[index] = entry
+            break
+    else:
+        skills.append(entry)
+    manifest["skills"] = skills
+    return manifest
+
+
+def _save_manifest(path: Path, manifest: dict[str, Any]) -> None:
+    serialized = json.dumps(manifest, indent=2) + "\n"
+    path.write_text(serialized)
+
+
+def _relative_path(target: Path, base: Path) -> str:
+    target_resolved = target.resolve()
+    base_resolved = base.resolve()
+    try:
+        relative = target_resolved.relative_to(base_resolved)
+    except ValueError:
+        relative = Path(os.path.relpath(target_resolved, base_resolved))
+    return relative.as_posix()
+
+
+def _run_train_travel_pack(args: argparse.Namespace) -> int:
+    output_root = Path(args.output_root)
+    manifest_path = Path(args.manifest_path)
+    models_dir = output_root / "models" / "travel"
+    stats_dir = output_root / "stats" / "travel"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    stats_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+
+    manifest = _load_manifest(manifest_path)
+    base_config = trainer.build_config(args)
+
+    for spec in TRAVEL_SKILL_SPECS:
+        LOGGER.info("Training travel skill: %s", spec.skill_id)
+        skill_config = base_config.with_dataset(spec.dataset)
+        skill_trainer = trainer.SkillTrainer(skill_config)
+        fit_result = skill_trainer.fit()
+
+        calibration = trainer.load_dataset(
+            skill_config.dataset,
+            "validation",
+            samples=skill_config.eval_samples,
+            seed=skill_config.seed + 1,
+        )
+        train_dataset = trainer.load_dataset(
+            skill_config.dataset,
+            "train",
+            samples=skill_config.train_samples,
+            seed=skill_config.seed,
+        )
+
+        export_result = export_onnx.export_int8(
+            export_onnx.ExportConfig(
+                skill_id=spec.skill_id,
+                model=skill_trainer.get_model(),
+                sample_input=calibration.features,
+                targets=train_dataset.targets,
+                output_dir=models_dir,
+            )
+        )
+
+        stats_path = stats_dir / spec.stats_basename
+        stats_payload = dict(export_result.stats)
+        stats_payload["final_loss"] = fit_result.final_loss
+        stats_payload["residual_std"] = fit_result.residual_std
+        try:
+            parser = load_y_form_parser(skill_config.dataset)
+        except ImportError:
+            parser = None
+        else:
+            examples = parser(train_dataset.features[: min(5, train_dataset.batch_size)])
+            stats_payload["y_form_examples"] = examples
+        stats_path.write_text(json.dumps(stats_payload, indent=2))
+        if export_result.stats_path.exists():
+            export_result.stats_path.unlink()
+
+        metrics = {
+            "final_loss": round(fit_result.final_loss, 6),
+            "residual_std": round(fit_result.residual_std, 6),
+        }
+        entry = spec.manifest_entry(
+            model_path=_relative_path(export_result.model_path, manifest_path.parent),
+            stats_path=_relative_path(stats_path, manifest_path.parent),
+            metrics=metrics,
+        )
+        manifest = _upsert_manifest_entry(manifest, entry)
+        _save_manifest(manifest_path, manifest)
+
+        LOGGER.info(
+            "Artifacts generated for %s: model=%s stats=%s (loss=%.4f)",
+            spec.skill_id,
+            export_result.model_path,
+            stats_path,
+            fit_result.final_loss,
+        )
+
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -152,6 +365,7 @@ def main(argv: list[str] | None = None) -> int:
         "export": export_onnx.run,
         "eval": eval_module.run,
         "train_pack": _run_train_pack,
+        "train_travel_pack": _run_train_travel_pack,
     }
 
     LOGGER.debug("Dispatching command: %s", args.command)
