@@ -7,6 +7,7 @@ import kotlin.test.assertTrue
 import kotlin.test.fail
 import rayskillkit.core.DEFAULT_FEATURE_INPUT_DIM
 import rayskillkit.core.FeaturePayload
+import rayskillkit.core.MockOrt
 import rayskillkit.core.OrtHub
 import rayskillkit.core.Router
 import rayskillkit.core.SkillPostProcessors
@@ -48,6 +49,12 @@ class CoreIntegrationTest {
         }
 
         assertEquals(DEFAULT_FEATURE_INPUT_DIM, featureVector.size)
+        val registration = ortHub.skillRegistry()
+            .getRegistration<FeaturePayload, FloatArray, FloatArray>("education_assistant")
+            ?: fail("education_assistant not registered")
+        val builtFeatures = registration.descriptor.buildFeatures(payload)
+        val expectedOutput = MockOrt().infer("education_assistant", builtFeatures)
+        assertTrue(featureVector.contentEquals(expectedOutput))
         assertEquals(listOf("router.success.education_assistant"), telemetry.events())
 
         val localized = SkillPostProcessors.postProcess(

@@ -9,10 +9,11 @@ import java.nio.file.Paths
 private const val SKILLS_ASSET_NAME = "skills.json"
 
 class OrtHub(
-    private val registry: SkillRegistry = SkillRegistry()
+    private val registry: SkillRegistry = SkillRegistry(),
+    private val ortWrapper: OrtWrapper = defaultOrtWrapper(),
 ) {
     private val connectedEndpoints = mutableSetOf<String>()
-    private val sessionStubs = mutableMapOf<String, OrtSessionStub>()
+    private val sessions = mutableMapOf<String, OrtSession>()
     private var initialized = false
 
     fun init(context: Context? = null) {
@@ -47,12 +48,12 @@ class OrtHub(
 
     fun isConnected(endpoint: String): Boolean = endpoint in connectedEndpoints
 
-    fun sessionStub(skillId: String): OrtSessionStub? = sessionStubs[skillId]
+    fun session(skillId: String): OrtSession? = sessions[skillId]
 
     fun skillRegistry(): SkillRegistry = registry
 
-    private fun ensureSession(skillId: String): OrtSessionStub =
-        sessionStubs.getOrPut(skillId) { OrtSessionStub(skillId) }
+    private fun ensureSession(skillId: String): OrtSession =
+        sessions.getOrPut(skillId) { OrtSession(skillId, ortWrapper) }
 
     private fun loadSkillsMetadata(context: Context?): InputStream {
         val assetStream = context?.let {
@@ -89,7 +90,15 @@ class OrtHub(
     }
 }
 
-class OrtSessionStub(private val skillId: String) {
-    fun run(features: FloatArray): FloatArray = features
-    override fun toString(): String = "OrtSessionStub(skillId=$skillId)"
+private fun defaultOrtWrapper(): OrtWrapper {
+    return if (BuildConfig.USE_ANDROID_ORT) {
+        AndroidOrtWrapper()
+    } else {
+        MockOrt()
+    }
+}
+
+class OrtSession(private val skillId: String, private val ortWrapper: OrtWrapper) {
+    fun run(features: FloatArray): FloatArray = ortWrapper.infer(skillId, features)
+    override fun toString(): String = "OrtSession(skillId=$skillId)"
 }
