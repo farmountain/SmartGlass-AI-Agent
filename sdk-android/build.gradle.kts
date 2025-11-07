@@ -11,6 +11,11 @@ android {
         minSdk = 24
         targetSdk = 34
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("boolean", "USE_ANDROID_ORT", "false")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     compileOptions {
