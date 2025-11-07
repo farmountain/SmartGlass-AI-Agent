@@ -1,0 +1,16 @@
+{
+  "skill_id": "travel_bargaincoach",
+  "model_path": "travel_bargaincoach_int8.onnx",
+  "exported_at": "2024-05-18T00:10:00Z",
+  "y_mean": 284.116,
+  "y_std": 47.903,
+  "num_targets": 512,
+  "opset_version": 17,
+  "final_loss": 0.674331,
+  "residual_std": 0.843721,
+  "y_form_examples": [
+    "BargainCoach fare input: 1820 km route, demand index 0.47, 32 days out, loyalty tier Silver.",
+    "BargainCoach fare input: 940 km route, demand index 0.81, 14 days out, loyalty tier Basic.",
+    "BargainCoach fare input: 3480 km route, demand index 0.22, 58 days out, loyalty tier Gold."
+  ]
+}

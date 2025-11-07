@@ -1,0 +1,16 @@
+{
+  "skill_id": "travel_fastlane",
+  "model_path": "travel_fastlane_int8.onnx",
+  "exported_at": "2024-05-18T00:00:00Z",
+  "y_mean": 37.482,
+  "y_std": 6.319,
+  "num_targets": 512,
+  "opset_version": 17,
+  "final_loss": 0.412783,
+  "residual_std": 0.953214,
+  "y_form_examples": [
+    "FastLane wait estimate: queue 138 passengers across 5 lanes, FastLane open, bags complexity 0.64, traveler premium.",
+    "FastLane wait estimate: queue 76 passengers across 3 lanes, FastLane closed, bags complexity 0.27, traveler standard.",
+    "FastLane wait estimate: queue 155 passengers across 4 lanes, FastLane open, bags complexity 0.81, traveler standard."
+  ]
+}

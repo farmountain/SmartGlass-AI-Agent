@@ -24,7 +24,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^skill_\\d{3}$"
+            "pattern": "^(skill_\\d{3}|travel_[a-z0-9_]+)$"
           },
           "name": {
             "type": "string",
@@ -40,11 +40,11 @@
           },
           "model_path": {
             "type": "string",
-            "pattern": "^models/.+"
+            "pattern": "^(skills/)?models/.+"
           },
           "stats_path": {
             "type": "string",
-            "pattern": "^stats/.+"
+            "pattern": "^(skills/)?stats/.+"
           },
           "capabilities": {
             "type": "array",
@@ -53,6 +53,19 @@
             "items": {
               "type": "string",
               "minLength": 1
+            }
+          },
+          "dataset": {
+            "type": "string",
+            "minLength": 1
+          },
+          "metrics": {
+            "type": "object",
+            "required": ["final_loss", "residual_std"],
+            "additionalProperties": true,
+            "properties": {
+              "final_loss": {"type": "number"},
+              "residual_std": {"type": "number"}
             }
           }
         }

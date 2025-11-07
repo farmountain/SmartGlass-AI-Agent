@@ -1,0 +1,16 @@
+{
+  "skill_id": "travel_safebubble",
+  "model_path": "travel_safebubble_int8.onnx",
+  "exported_at": "2024-05-18T00:05:00Z",
+  "y_mean": 0.412,
+  "y_std": 0.086,
+  "num_targets": 512,
+  "opset_version": 17,
+  "final_loss": 0.538211,
+  "residual_std": 0.882104,
+  "y_form_examples": [
+    "SafeBubble exposure input: 92cm spacing, 78% masks, HEPA 4, 5.6h flight, crowding index 0.42.",
+    "SafeBubble exposure input: 74cm spacing, 63% masks, HEPA 3, 8.1h flight, crowding index 0.51.",
+    "SafeBubble exposure input: 88cm spacing, 84% masks, HEPA 5, 3.2h flight, crowding index 0.28."
+  ]
+}
