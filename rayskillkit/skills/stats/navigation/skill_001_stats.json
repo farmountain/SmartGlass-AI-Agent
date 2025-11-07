@@ -1,0 +1,6 @@
+{
+  "skill_id": "skill_001",
+  "model_path": "skill_001_model.bin",
+  "notes": "Legacy navigation baseline stats placeholder.",
+  "num_targets": 0
+}
