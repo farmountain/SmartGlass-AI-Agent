@@ -1,0 +1,14 @@
+{
+  "skill_id": "retail_capsule_gaps",
+  "model_path": "retail_capsule_gaps_int8.onnx",
+  "exported_at": "2025-11-09T12:44:26.272825+00:00",
+  "y_mean": 32.733097076416016,
+  "y_std": 19.276748657226562,
+  "num_targets": 512,
+  "opset_version": 17,
+  "y_form_examples": [
+    "Capsule Gaps input: 18 items, season match 0.60, versatility 0.93, color fit 0.43, budget $415.71.",
+    "Capsule Gaps input: 16 items, season match 0.26, versatility 0.59, color fit 0.89, budget $553.09.",
+    "Capsule Gaps input: 2 items, season match 0.79, versatility 0.87, color fit 0.57, budget $437.54."
+  ]
+}
