@@ -1,0 +1,14 @@
+{
+  "skill_id": "retail_minute_meal",
+  "model_path": "retail_minute_meal_int8.onnx",
+  "exported_at": "2025-11-09T12:44:37.387682+00:00",
+  "y_mean": 39.2844352722168,
+  "y_std": 12.247230529785156,
+  "num_targets": 512,
+  "opset_version": 17,
+  "y_form_examples": [
+    "Minute Meal input: 8 ingredients, complexity 0.60, method stovetop, skill level 0.43, 11 steps.",
+    "Minute Meal input: 11 ingredients, complexity 0.26, method stovetop, skill level 0.89, 8 steps.",
+    "Minute Meal input: 9 ingredients, complexity 0.79, method stovetop, skill level 0.57, 5 steps."
+  ]
+}

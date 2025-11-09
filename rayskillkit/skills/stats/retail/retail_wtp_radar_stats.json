@@ -1,0 +1,14 @@
+{
+  "skill_id": "retail_wtp_radar",
+  "model_path": "retail_wtp_radar_int8.onnx",
+  "exported_at": "2025-11-09T12:44:15.294209+00:00",
+  "y_mean": 332.59661865234375,
+  "y_std": 182.91249084472656,
+  "num_targets": 512,
+  "opset_version": 17,
+  "y_form_examples": [
+    "WTP Radar input: base price $447.02, brand score 0.60, income percentile 0.93, uniqueness 0.43, competitor ratio 0.92.",
+    "WTP Radar input: base price $461.75, brand score 0.26, income percentile 0.59, uniqueness 0.89, competitor ratio 1.05.",
+    "WTP Radar input: base price $222.29, brand score 0.79, income percentile 0.87, uniqueness 0.57, competitor ratio 0.94."
+  ]
+}
