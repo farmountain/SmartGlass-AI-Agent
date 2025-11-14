@@ -1,0 +1,16 @@
+{
+  "skill_id": "hc_sun_hydro",
+  "model_path": "hc_sun_hydro_int8.onnx.pbtxt",
+  "exported_at": "2024-06-15T00:00:00Z",
+  "y_mean": 84.815,
+  "y_std": 14.616,
+  "num_targets": 512,
+  "opset_version": 17,
+  "final_loss": 15.952591,
+  "residual_std": 3.818138,
+  "y_form_examples": [
+    "Sun Hydro input: UV index 6.8, temp 42.0C, activity 0.48, hydration 0.41, sunscreen factor 0.91, exposure 82 min.",
+    "Sun Hydro input: UV index 3.6, temp 34.8C, activity 0.67, hydration 0.31, sunscreen factor 0.93, exposure 96 min.",
+    "Sun Hydro input: UV index 6.6, temp 36.7C, activity 0.95, hydration 0.47, sunscreen factor 0.33, exposure 54 min."
+  ]
+}

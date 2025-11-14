@@ -10,6 +10,7 @@ from torch import Tensor
 
 _TRAVEL_DATASETS = {"tr_fastlane", "tr_safebubble", "tr_bargaincoach"}
 _RETAIL_DATASETS = {"rt_wtp_radar", "rt_capsule_gaps", "rt_minute_meal"}
+_HEALTH_DATASETS = {"hc_gait_guard", "hc_med_sentinel", "hc_sun_hydro"}
 
 __all__ = [
     "SynthesizedDataset",
@@ -17,6 +18,7 @@ __all__ = [
     "load_y_form_parser",
     *_TRAVEL_DATASETS,
     *_RETAIL_DATASETS,
+    *_HEALTH_DATASETS,
 ]
 
 
@@ -101,7 +103,7 @@ def load_y_form_parser(name: str) -> YFormParser:
 
 
 def __getattr__(name: str):  # pragma: no cover - thin convenience wrapper
-    if name in _TRAVEL_DATASETS | _RETAIL_DATASETS:
+    if name in _TRAVEL_DATASETS | _RETAIL_DATASETS | _HEALTH_DATASETS:
         module = importlib.import_module(f"{__name__}.{name}")
         globals()[name] = module
         return module
