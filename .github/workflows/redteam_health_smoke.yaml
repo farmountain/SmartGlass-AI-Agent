@@ -46,15 +46,5 @@ jobs:
         run: |
           if [ -f redteam/health_report.json ]; then
             echo "=== Health Red-Team Report Summary ==="
-            python -c "
-import json
-with open('redteam/health_report.json', 'r') as f:
-    report = json.load(f)
-    summary = report['summary']
-    print(f\"Total scenarios: {summary['total_scenarios']}\")
-    print(f\"Passed: {summary['passed']}\")
-    print(f\"Failed: {summary['failed']}\")
-    print(f\"Critical failed: {summary['critical_failed']}\")
-    print(f\"Pass rate: {summary['pass_rate']*100:.1f}%\")
-"
+            cat redteam/health_report.json | python -c "import sys, json; data = json.load(sys.stdin); print('Total scenarios:', data['summary']['total_scenarios']); print('Passed:', data['summary']['passed']); print('Failed:', data['summary']['failed']); print('Critical failed:', data['summary']['critical_failed'])"
           fi
