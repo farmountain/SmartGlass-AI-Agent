@@ -36,6 +36,7 @@ class EvaluationResult:
             "decision": self.decision,
             "response": self.response,
             "passed": self.passed,
+            "pass": self.passed,
         }
 
 
@@ -136,6 +137,7 @@ def write_report(results: List[EvaluationResult], scenarios_path: Path, output_p
         "pass_rate": (passed / total) if total else 0.0,
         "allow_count": allowed,
         "deny_count": denied,
+        "all_passed": total == passed,
     }
 
     report = {
