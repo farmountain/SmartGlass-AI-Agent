@@ -3,7 +3,10 @@
 import argparse
 import json
 from argparse import Namespace
+from pathlib import Path
 
+import onnx
+from google.protobuf import text_format
 import onnxruntime as ort
 import pytest
 
@@ -19,6 +22,16 @@ from sdk_python.skill_template import export_onnx, eval as eval_module, trainer
 def test_modules_importable(module):
     """Ensure each template module can be imported without side effects."""
     assert module is not None
+
+
+def _create_session(model_path: Path) -> ort.InferenceSession:
+    """Return an ONNX Runtime session, handling text-formatted models."""
+
+    if model_path.suffix == ".pbtxt":
+        proto = onnx.ModelProto()
+        text_format.Parse(model_path.read_text(), proto)
+        return ort.InferenceSession(proto.SerializeToString())
+    return ort.InferenceSession(str(model_path))
 
 
 def test_workflows_execute(tmp_path):
@@ -51,13 +64,13 @@ def test_workflows_execute(tmp_path):
     )
     export_onnx.run(export_args)
 
-    model_path = tmp_path / "demo_skill_int8.onnx"
+    model_path = tmp_path / "demo_skill_int8.onnx.pbtxt"
     stats_path = tmp_path / "demo_skill_stats.json"
 
     assert model_path.exists()
     assert stats_path.exists()
 
-    session = ort.InferenceSession(str(model_path))
+    session = _create_session(model_path)
     assert session is not None
 
     stats_payload = json.loads(stats_path.read_text())
@@ -117,7 +130,7 @@ def test_train_pack_command_generates_artifacts(tmp_path):
     stats_path = stats_dir / sample.stats_basename
 
     assert model_path.exists()
-    session = ort.InferenceSession(str(model_path))
+    session = _create_session(model_path)
     assert session is not None
 
     stats_payload = json.loads(stats_path.read_text())

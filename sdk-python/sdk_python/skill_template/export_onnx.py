@@ -12,6 +12,9 @@ from typing import Any
 import torch
 from torch import Tensor, nn
 
+import onnx
+from google.protobuf import text_format
+
 try:  # pragma: no cover - import guard makes testing easier on minimal envs
     from onnxruntime.quantization import QuantType, quantize_dynamic
 except Exception as exc:  # pragma: no cover
@@ -58,12 +61,14 @@ class Int8Exporter:
     def export(self) -> ExportResult:
         float_model_path = self._export_float_model()
         quantized_model_path = self._quantize_model(float_model_path)
-        stats_path, stats = self._persist_stats(quantized_model_path)
+        text_model_path = self._convert_to_pbtxt(quantized_model_path)
+        stats_path, stats = self._persist_stats(text_model_path)
         float_model_path.unlink(missing_ok=True)
+        quantized_model_path.unlink(missing_ok=True)
         LOGGER.info(
-            "Exported INT8 model for %s -> %s", self.config.skill_id, quantized_model_path
+            "Exported INT8 model for %s -> %s", self.config.skill_id, text_model_path
         )
-        return ExportResult(quantized_model_path, stats_path, stats)
+        return ExportResult(text_model_path, stats_path, stats)
 
     # ------------------------------------------------------------------
     # Helpers
@@ -96,6 +101,15 @@ class Int8Exporter:
             weight_type=QuantType.QInt8,
         )
         return quantized_path
+
+    def _convert_to_pbtxt(self, model_path: Path) -> Path:
+        """Convert a binary ONNX model into a text protobuf representation."""
+
+        LOGGER.debug("Serialising ONNX model to text format: %s", model_path)
+        proto = onnx.load(model_path)
+        text_path = model_path.with_suffix(model_path.suffix + ".pbtxt")
+        text_path.write_text(text_format.MessageToString(proto))
+        return text_path
 
     def _persist_stats(self, model_path: Path) -> tuple[Path, dict[str, Any]]:
         targets = self.config.targets.detach().cpu()

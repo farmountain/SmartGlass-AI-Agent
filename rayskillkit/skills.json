@@ -7,7 +7,10 @@
       "version": "0.2.0",
       "model_path": "skills/models/navigation/skill_001_model.bin",
       "stats_path": "skills/stats/navigation/skill_001_stats.json",
-      "capabilities": ["navigation", "routing"]
+      "capabilities": [
+        "navigation",
+        "routing"
+      ]
     },
     {
       "id": "skill_002",
@@ -16,7 +19,10 @@
       "version": "0.2.0",
       "model_path": "skills/models/vision/skill_002_model.bin",
       "stats_path": "skills/stats/vision/skill_002_stats.json",
-      "capabilities": ["vision", "detection"]
+      "capabilities": [
+        "vision",
+        "detection"
+      ]
     },
     {
       "id": "skill_003",
@@ -25,7 +31,10 @@
       "version": "0.2.0",
       "model_path": "skills/models/audio/skill_003_model.bin",
       "stats_path": "skills/stats/audio/skill_003_stats.json",
-      "capabilities": ["audio", "speech"]
+      "capabilities": [
+        "audio",
+        "speech"
+      ]
     },
     {
       "id": "travel_fastlane",
@@ -34,9 +43,16 @@
       "version": "0.1.0",
       "model_path": "skills/models/travel/travel_fastlane_int8.onnx",
       "stats_path": "skills/stats/travel/travel_fastlane_stats.json",
-      "capabilities": ["travel", "operations", "regression"],
+      "capabilities": [
+        "travel",
+        "operations",
+        "regression"
+      ],
       "dataset": "tr_fastlane",
-      "metrics": {"final_loss": 0.412783, "residual_std": 0.953214}
+      "metrics": {
+        "final_loss": 0.412783,
+        "residual_std": 0.953214
+      }
     },
     {
       "id": "travel_safebubble",
@@ -45,9 +61,16 @@
       "version": "0.1.0",
       "model_path": "skills/models/travel/travel_safebubble_int8.onnx",
       "stats_path": "skills/stats/travel/travel_safebubble_stats.json",
-      "capabilities": ["travel", "safety", "regression"],
+      "capabilities": [
+        "travel",
+        "safety",
+        "regression"
+      ],
       "dataset": "tr_safebubble",
-      "metrics": {"final_loss": 0.538211, "residual_std": 0.882104}
+      "metrics": {
+        "final_loss": 0.538211,
+        "residual_std": 0.882104
+      }
     },
     {
       "id": "travel_bargaincoach",
@@ -56,9 +79,70 @@
       "version": "0.1.0",
       "model_path": "skills/models/travel/travel_bargaincoach_int8.onnx",
       "stats_path": "skills/stats/travel/travel_bargaincoach_stats.json",
-      "capabilities": ["travel", "commerce", "forecasting"],
+      "capabilities": [
+        "travel",
+        "commerce",
+        "forecasting"
+      ],
       "dataset": "tr_bargaincoach",
-      "metrics": {"final_loss": 0.674331, "residual_std": 0.843721}
+      "metrics": {
+        "final_loss": 0.674331,
+        "residual_std": 0.843721
+      }
+    },
+    {
+      "id": "retail_wtp_radar",
+      "name": "Retail WTP Radar",
+      "description": "Estimates shopper willingness-to-pay under promo and competition signals.",
+      "version": "0.1.0",
+      "model_path": "skills/models/retail/retail_wtp_radar_int8.onnx.pbtxt",
+      "stats_path": "skills/stats/retail/retail_wtp_radar_stats.json",
+      "capabilities": [
+        "retail",
+        "pricing",
+        "regression"
+      ],
+      "metrics": {
+        "final_loss": 303.075806,
+        "residual_std": 17.265421
+      },
+      "dataset": "rt_wtp_radar"
+    },
+    {
+      "id": "retail_capsule_gaps",
+      "name": "Capsule Gap Forecaster",
+      "description": "Forecasts subscription capsule inventory gaps from demand volatility cues.",
+      "version": "0.1.0",
+      "model_path": "skills/models/retail/retail_capsule_gaps_int8.onnx.pbtxt",
+      "stats_path": "skills/stats/retail/retail_capsule_gaps_stats.json",
+      "capabilities": [
+        "retail",
+        "supply",
+        "forecasting"
+      ],
+      "metrics": {
+        "final_loss": 61441.375,
+        "residual_std": 247.741501
+      },
+      "dataset": "rt_capsule_gaps"
+    },
+    {
+      "id": "retail_minute_meal",
+      "name": "Minute Meal Throughput",
+      "description": "Predicts quick-service cycle times from staffing and prep readiness inputs.",
+      "version": "0.1.0",
+      "model_path": "skills/models/retail/retail_minute_meal_int8.onnx.pbtxt",
+      "stats_path": "skills/stats/retail/retail_minute_meal_stats.json",
+      "capabilities": [
+        "retail",
+        "operations",
+        "regression"
+      ],
+      "metrics": {
+        "final_loss": 5.332772,
+        "residual_std": 2.393031
+      },
+      "dataset": "rt_minute_meal"
     }
   ],
   "metadata": {

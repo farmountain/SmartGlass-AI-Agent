@@ -1,0 +1,18 @@
+{
+  "skill_id": "retail_minute_meal",
+  "model_path": "retail_minute_meal_int8.onnx.pbtxt",
+  "exported_at": "2025-11-08T01:08:08.808359+00:00",
+  "y_mean": 3.7568681240081787,
+  "y_std": 2.3350837230682373,
+  "num_targets": 256,
+  "opset_version": 17,
+  "final_loss": 5.3327717781066895,
+  "residual_std": 2.393031358718872,
+  "y_form_examples": [
+    "Minute meal input: 144 orders/hr (steady), well staffed crew of 17, prep efficiency 0.29, ingredient readiness 0.26, packaging latency 9.6 min.",
+    "Minute meal input: 140 orders/hr (steady), lean crew of 10, prep efficiency 0.24, ingredient readiness 0.60, packaging latency 6.7 min.",
+    "Minute meal input: 187 orders/hr (steady), well staffed crew of 13, prep efficiency 0.47, ingredient readiness 0.09, packaging latency 3.3 min.",
+    "Minute meal input: 298 orders/hr (rush), lean crew of 8, prep efficiency 0.67, ingredient readiness 0.25, packaging latency 4.9 min.",
+    "Minute meal input: 197 orders/hr (steady), well staffed crew of 14, prep efficiency 0.29, ingredient readiness 0.97, packaging latency 3.0 min."
+  ]
+}

@@ -3,13 +3,26 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
+import onnx
+from google.protobuf import text_format
 import onnxruntime as ort
 import pytest
 import torch
 
 from sdk_python.skill_template import export_onnx, trainer
 from sdk_python.skills_impl import load_y_form_parser
+
+
+def _create_session(model_path: Path) -> ort.InferenceSession:
+    """Return an inference session for binary or text-formatted ONNX models."""
+
+    if model_path.suffix == ".pbtxt":
+        proto = onnx.ModelProto()
+        text_format.Parse(model_path.read_text(), proto)
+        return ort.InferenceSession(proto.SerializeToString())
+    return ort.InferenceSession(str(model_path))
 
 
 @pytest.mark.parametrize(
@@ -63,7 +76,7 @@ def test_edu_dataset_training_pipeline(tmp_path, dataset):
     assert export_result.model_path.exists()
     assert export_result.stats_path.exists()
 
-    session = ort.InferenceSession(str(export_result.model_path))
+    session = _create_session(export_result.model_path)
     outputs = session.run(
         None,
         {"input": calibration.features.detach().cpu().numpy()},

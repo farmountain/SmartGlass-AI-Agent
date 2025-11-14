@@ -1,0 +1,259 @@
+ir_version: 8
+producer_name: "onnx.quantize"
+producer_version: "0.1.0"
+graph {
+  node {
+    input: "input"
+    output: "input_quantized"
+    output: "input_scale"
+    output: "input_zero_point"
+    name: "input_QuantizeLinear"
+    op_type: "DynamicQuantizeLinear"
+  }
+  node {
+    input: "input_scale"
+    input: "0.weight_scale"
+    output: "/0/Gemm_MatMul_quant_scales_mul:0"
+    name: "/0/Gemm_MatMul_quant_scales_mul"
+    op_type: "Mul"
+  }
+  node {
+    input: "input_quantized"
+    input: "0.weight_quantized"
+    input: "input_zero_point"
+    input: "0.weight_zero_point"
+    output: "/0/Gemm_output_0_MatMul_output_quantized"
+    name: "/0/Gemm_MatMul_quant"
+    op_type: "MatMulInteger"
+  }
+  node {
+    input: "/0/Gemm_output_0_MatMul_output_quantized"
+    output: "/0/Gemm_output_0_MatMul_output_quantized_cast_output"
+    name: "/0/Gemm_output_0_MatMul_output_quantized_cast"
+    op_type: "Cast"
+    attribute {
+      name: "to"
+      i: 1
+      type: INT
+    }
+  }
+  node {
+    input: "/0/Gemm_output_0_MatMul_output_quantized_cast_output"
+    input: "/0/Gemm_MatMul_quant_scales_mul:0"
+    output: "/0/Gemm_output_0_MatMul"
+    name: "/0/Gemm_MatMul_quant_output_scale_mul"
+    op_type: "Mul"
+  }
+  node {
+    input: "/0/Gemm_output_0_MatMul"
+    input: "0.bias"
+    output: "/0/Gemm_output_0"
+    name: "/0/Gemm_Add"
+    op_type: "Add"
+  }
+  node {
+    input: "/0/Gemm_output_0"
+    output: "/1/Relu_output_0"
+    name: "/1/Relu"
+    op_type: "Relu"
+  }
+  node {
+    input: "/1/Relu_output_0"
+    output: "/1/Relu_output_0_quantized"
+    output: "/1/Relu_output_0_scale"
+    output: "/1/Relu_output_0_zero_point"
+    name: "/1/Relu_output_0_QuantizeLinear"
+    op_type: "DynamicQuantizeLinear"
+  }
+  node {
+    input: "/1/Relu_output_0_scale"
+    input: "2.weight_scale"
+    output: "/2/Gemm_MatMul_quant_scales_mul:0"
+    name: "/2/Gemm_MatMul_quant_scales_mul"
+    op_type: "Mul"
+  }
+  node {
+    input: "/1/Relu_output_0_quantized"
+    input: "2.weight_quantized"
+    input: "/1/Relu_output_0_zero_point"
+    input: "2.weight_zero_point"
+    output: "output_MatMul_output_quantized"
+    name: "/2/Gemm_MatMul_quant"
+    op_type: "MatMulInteger"
+  }
+  node {
+    input: "output_MatMul_output_quantized"
+    output: "output_MatMul_output_quantized_cast_output"
+    name: "output_MatMul_output_quantized_cast"
+    op_type: "Cast"
+    attribute {
+      name: "to"
+      i: 1
+      type: INT
+    }
+  }
+  node {
+    input: "output_MatMul_output_quantized_cast_output"
+    input: "/2/Gemm_MatMul_quant_scales_mul:0"
+    output: "output_MatMul"
+    name: "/2/Gemm_MatMul_quant_output_scale_mul"
+    op_type: "Mul"
+  }
+  node {
+    input: "output_MatMul"
+    input: "2.bias"
+    output: "output"
+    name: "/2/Gemm_Add"
+    op_type: "Add"
+  }
+  name: "main_graph"
+  initializer {
+    dims: 32
+    data_type: 1
+    name: "0.bias"
+    raw_data: "\374&\225\274amJ\276g\202\024?\266\376%\276\360J\211\276\270%\361=\242f\246>\342\243h=\023\313\207>\373\364$\275\242\224\233>g\307\305\275m\343\277\276\346\037\032\276jr\311>`\345<\275\3676^=\023/\272>\377q\254\276>c!\276-b\022?-\263\177?L\236;\276\204\276a<\025\237\204?\346\331\301>\034\035\007\274\325\333\250>J\202\037\275\263\212\304>Z\346`?\246?\371>"
+  }
+  initializer {
+    dims: 1
+    data_type: 1
+    name: "2.bias"
+    raw_data: "9s&?"
+  }
+  initializer {
+    data_type: 1
+    float_data: 0.015081128
+    name: "0.weight_scale"
+  }
+  initializer {
+    data_type: 3
+    int32_data: 0
+    name: "0.weight_zero_point"
+  }
+  initializer {
+    dims: 5
+    dims: 32
+    data_type: 3
+    name: "0.weight_quantized"
+    raw_data: "\376\361\"\352\362\372\351\344\007\355\375\373\374\353\344\355\344\374\375\370\022\032\346\375\027\020\363\000\342\n\004\001\007\002K\026\362\034\003\371o\t\032\371\336\365\031\372\364\014\004\024K\177\370\377v_\3405\000U>[\343\006,\344\314\353\364\026/\034\360\341\374\372\373\361\345\r\345\344#L\311\361\033>\327(\027\'\027\t\345\rH\372\331#\356\370#\020\372\377\366\363\034\351\034\034\373\361;P\360\003ZL\362.\034:&>\004\006^\r\322%\375\001+\032!\376\342\342\377\346\372\356\026\3705K\312\002>4\001(\004&B!"
+  }
+  initializer {
+    data_type: 1
+    float_data: 0.0024471995
+    name: "2.weight_scale"
+  }
+  initializer {
+    data_type: 3
+    int32_data: 0
+    name: "2.weight_zero_point"
+  }
+  initializer {
+    dims: 32
+    dims: 1
+    data_type: 3
+    name: "2.weight_quantized"
+    raw_data: "\313=\177\025\037\317\350>9\347\035\032\032(\304\0211\270\354\3439Z=\030FO*\014AO)\033"
+  }
+  input {
+    name: "input"
+    type {
+      tensor_type {
+        elem_type: 1
+        shape {
+          dim {
+            dim_param: "batch"
+          }
+          dim {
+            dim_value: 5
+          }
+        }
+      }
+    }
+  }
+  output {
+    name: "output"
+    type {
+      tensor_type {
+        elem_type: 1
+        shape {
+          dim {
+            dim_param: "batch"
+          }
+          dim {
+            dim_value: 1
+          }
+        }
+      }
+    }
+  }
+  value_info {
+    name: "/0/Gemm_output_0"
+    type {
+      tensor_type {
+        elem_type: 1
+        shape {
+          dim {
+            dim_param: "batch"
+          }
+          dim {
+            dim_value: 32
+          }
+        }
+      }
+    }
+  }
+  value_info {
+    name: "/1/Relu_output_0"
+    type {
+      tensor_type {
+        elem_type: 1
+        shape {
+          dim {
+            dim_param: "batch"
+          }
+          dim {
+            dim_value: 32
+          }
+        }
+      }
+    }
+  }
+  value_info {
+    name: "/0/Gemm_output_0_MatMul"
+    type {
+      tensor_type {
+        elem_type: 1
+        shape {
+          dim {
+            dim_param: "batch"
+          }
+          dim {
+            dim_value: 32
+          }
+        }
+      }
+    }
+  }
+  value_info {
+    name: "output_MatMul"
+    type {
+      tensor_type {
+        elem_type: 1
+        shape {
+          dim {
+            dim_param: "batch"
+          }
+          dim {
+            dim_value: 1
+          }
+        }
+      }
+    }
+  }
+}
+opset_import {
+  version: 17
+}
+metadata_props {
+  key: "onnx.infer"
+  value: "onnxruntime.quant"
+}
