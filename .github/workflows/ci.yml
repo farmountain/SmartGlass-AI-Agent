@@ -45,6 +45,21 @@ jobs:
       - name: Prepare artifacts directory
         run: mkdir -p artifacts
 
+      - name: Run redteam health smoke test
+        id: redteam_health
+        run: |
+          python redteam/eval.py --scenarios redteam/health.yaml --out artifacts/redteam_health_report.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report_path = Path("artifacts/redteam_health_report.json")
+          data = json.loads(report_path.read_text(encoding="utf-8"))
+          summary = data.get("summary", {})
+          if not summary.get("all_passed", False):
+              raise SystemExit("Redteam health smoke test failed: scenarios did not all pass")
+          PY
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
