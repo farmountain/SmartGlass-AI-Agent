@@ -1,14 +1,14 @@
 package rayskillkit.ui
 
-class TTS {
+open class TTS {
     var isInitialized: Boolean = false
         private set
 
-    fun initialize() {
+    open fun initialize() {
         isInitialized = true
     }
 
-    fun speak(text: String): Boolean {
+    open fun speak(text: String): Boolean {
         return isInitialized && text.isNotBlank()
     }
 }
