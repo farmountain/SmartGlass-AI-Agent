@@ -23,7 +23,7 @@ class ShareInActivity : Activity() {
         ShareIntentProcessor(
             context = this,
             router = ShareInGraph.router(applicationContext),
-            tts = ShareInGraph.tts(),
+            tts = ShareInGraph.tts(applicationContext),
             ocrProvider = ShareInGraph.ocrProvider(applicationContext),
             telemetry = ShareInGraph.telemetry(applicationContext)
         )
@@ -100,7 +100,7 @@ internal object ShareInGraph {
         }
     }
 
-    fun tts(): TTS {
+    fun tts(context: Context): TTS {
         val existing = tts
         if (existing != null) {
             return existing
@@ -112,7 +112,10 @@ internal object ShareInGraph {
                 return cached
             }
 
-            val created = TTS().apply { initialize() }
+            val created = TTS { _ ->
+                val telemetry = telemetry(context)
+                TTS.TelemetryRecorder.fromTelemetry(telemetry)
+            }.apply { initialize() }
             tts = created
             return created
         }
