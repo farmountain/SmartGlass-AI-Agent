@@ -1,0 +1,60 @@
+name: Health Skills Red Team Smoke Test
+
+on:
+  push:
+    branches:
+      - main
+      - 'pr/**'
+      - 'copilot/**'
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  redteam-health-smoke:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install PyYAML
+        run: |
+          pip install pyyaml
+
+      - name: Run health red-team evaluator
+        run: |
+          python tools/eval_redteam_health.py \
+            --scenarios redteam/health.yaml \
+            --output redteam/health_report.json
+
+      - name: Upload health report artifact
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: health-redteam-report
+          path: redteam/health_report.json
+          retention-days: 30
+
+      - name: Display report summary
+        if: always()
+        run: |
+          if [ -f redteam/health_report.json ]; then
+            echo "=== Health Red-Team Report Summary ==="
+            python -c "
+import json
+with open('redteam/health_report.json', 'r') as f:
+    report = json.load(f)
+    summary = report['summary']
+    print(f\"Total scenarios: {summary['total_scenarios']}\")
+    print(f\"Passed: {summary['passed']}\")
+    print(f\"Failed: {summary['failed']}\")
+    print(f\"Critical failed: {summary['critical_failed']}\")
+    print(f\"Pass rate: {summary['pass_rate']*100:.1f}%\")
+"
+          fi
