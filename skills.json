@@ -1,0 +1,42 @@
+{
+  "skills": [
+    {
+      "id": "hc_gait_guard",
+      "name": "Gait Guard Health Monitor",
+      "description": "Monitors walking patterns and gait stability for rehabilitation and fall prevention support.",
+      "version": "0.1.0",
+      "model_path": "models/hc_gait_guard.onnx",
+      "stats_path": "skills/stats/health/hc_gait_guard_stats.json",
+      "capabilities": ["health", "gait_analysis", "rehabilitation"],
+      "privacy_flags": ["sensitive_health", "no_sharing"],
+      "sigma_gate": 0.7
+    },
+    {
+      "id": "hc_med_sentinel",
+      "name": "Medication Sentinel",
+      "description": "Tracks medication schedules and provides reminders for medication adherence.",
+      "version": "0.1.0",
+      "model_path": "models/hc_med_sentinel.onnx",
+      "stats_path": "skills/stats/health/hc_med_sentinel_stats.json",
+      "capabilities": ["health", "medication_tracking", "reminders"],
+      "privacy_flags": ["sensitive_health", "medication_data", "no_sharing"],
+      "sigma_gate": 0.75
+    },
+    {
+      "id": "hc_sun_hydro",
+      "name": "Sun & Hydration Monitor",
+      "description": "Monitors hydration levels and sun exposure to support health and wellness.",
+      "version": "0.1.0",
+      "model_path": "models/hc_sun_hydro.onnx",
+      "stats_path": "skills/stats/health/hc_sun_hydro_stats.json",
+      "capabilities": ["health", "hydration_tracking", "wellness"],
+      "privacy_flags": ["sensitive_health", "no_sharing"],
+      "sigma_gate": 0.65
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "generated_at": "2024-11-14T12:00:00Z",
+    "notes": "Health monitoring skills with privacy protections and sigma gate thresholds."
+  }
+}
