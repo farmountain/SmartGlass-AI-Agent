@@ -197,6 +197,69 @@
         "residual_std": 2.393031
       },
       "dataset": "rt_minute_meal"
+    },
+    {
+      "id": "hc_gait_guard",
+      "name": "Gait Guard Stability Monitor",
+      "description": "Scores gait stability risk from cadence, sway, clearance, and sensor health inputs.",
+      "version": "0.1.0",
+      "model_path": "skills/models/health/hc_gait_guard_int8.onnx.pbtxt",
+      "stats_path": "skills/stats/health/hc_gait_guard_stats.json",
+      "capabilities": [
+        "health",
+        "mobility",
+        "risk_scoring"
+      ],
+      "privacy_flags": [
+        "phi_synthetic"
+      ],
+      "metrics": {
+        "final_loss": 15.46346,
+        "residual_std": 3.935582
+      },
+      "dataset": "hc_gait_guard"
+    },
+    {
+      "id": "hc_med_sentinel",
+      "name": "Medication Sentinel Adherence",
+      "description": "Evaluates adherence risk by blending dosing fidelity, biometric drift, and support signals.",
+      "version": "0.1.0",
+      "model_path": "skills/models/health/hc_med_sentinel_int8.onnx.pbtxt",
+      "stats_path": "skills/stats/health/hc_med_sentinel_stats.json",
+      "capabilities": [
+        "health",
+        "adherence",
+        "risk_scoring"
+      ],
+      "privacy_flags": [
+        "phi_synthetic"
+      ],
+      "metrics": {
+        "final_loss": 10.558665,
+        "residual_std": 3.205578
+      },
+      "dataset": "hc_med_sentinel"
+    },
+    {
+      "id": "hc_sun_hydro",
+      "name": "Sun Hydro Exposure Coach",
+      "description": "Advises on UV and hydration stress combining exposure, environment, and mitigation cues.",
+      "version": "0.1.0",
+      "model_path": "skills/models/health/hc_sun_hydro_int8.onnx.pbtxt",
+      "stats_path": "skills/stats/health/hc_sun_hydro_stats.json",
+      "capabilities": [
+        "health",
+        "wellness",
+        "coaching"
+      ],
+      "privacy_flags": [
+        "phi_synthetic"
+      ],
+      "metrics": {
+        "final_loss": 15.952591,
+        "residual_std": 3.818138
+      },
+      "dataset": "hc_sun_hydro"
     }
   ],
   "metadata": {

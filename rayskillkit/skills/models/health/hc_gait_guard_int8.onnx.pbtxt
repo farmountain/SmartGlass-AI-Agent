@@ -1,0 +1,11 @@
+<
+   ir_version: 12,
+   opset_import: ["" : 17],
+   producer_name: "smartglass-ai-agent"
+>
+hc_gait_guard_linear_model (float[?,6] input) => (float[?,1] output) 
+   <float[6,1] weights =  {0.08,15.5,9.25,7.1,4.3,-5.75}, float[1] bias =  {18}, float[?,1] matmul_out>
+{
+   [matmul] matmul_out = MatMul (input, weights)
+   [bias_add] output = Add (matmul_out, bias)
+}

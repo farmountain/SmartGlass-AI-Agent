@@ -1,0 +1,16 @@
+{
+  "skill_id": "hc_gait_guard",
+  "model_path": "hc_gait_guard_int8.onnx.pbtxt",
+  "exported_at": "2024-06-15T00:00:00Z",
+  "y_mean": 58.417,
+  "y_std": 20.343,
+  "num_targets": 512,
+  "opset_version": 17,
+  "final_loss": 15.46346,
+  "residual_std": 3.935582,
+  "y_form_examples": [
+    "Gait Guard input: cadence 80 spm, sway 0.54, foot clearance 2.19 cm, fatigue 0.29, uses assistive aid, sensor confidence 0.66.",
+    "Gait Guard input: cadence 85 spm, sway 1.00, foot clearance 2.11 cm, fatigue 0.62, uses assistive aid, sensor confidence 0.64.",
+    "Gait Guard input: cadence 120 spm, sway 0.31, foot clearance 2.82 cm, fatigue 0.12, does not use assistive aid, sensor confidence 0.90."
+  ]
+}

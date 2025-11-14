@@ -1,0 +1,11 @@
+<
+   ir_version: 12,
+   opset_import: ["" : 17],
+   producer_name: "smartglass-ai-agent"
+>
+hc_sun_hydro_linear_model (float[?,4] input) => (float[?,1] output) 
+   <float[4,1] weights =  {5.5,-3.75,2.4,1.6}, float[1] bias =  {9.5}, float[?,1] matmul_out>
+{
+   [matmul] matmul_out = MatMul (input, weights)
+   [bias_add] output = Add (matmul_out, bias)
+}

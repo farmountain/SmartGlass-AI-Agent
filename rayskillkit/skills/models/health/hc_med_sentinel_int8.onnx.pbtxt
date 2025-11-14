@@ -1,0 +1,11 @@
+<
+   ir_version: 12,
+   opset_import: ["" : 17],
+   producer_name: "smartglass-ai-agent"
+>
+hc_med_sentinel_linear_model (float[?,8] input) => (float[?,1] output) 
+   <float[8,1] weights =  {3.8,-4.6,6.2,2.7,1.4,-2.2,5.1,-1.3}, float[1] bias =  {12}, float[?,1] matmul_out>
+{
+   [matmul] matmul_out = MatMul (input, weights)
+   [bias_add] output = Add (matmul_out, bias)
+}
