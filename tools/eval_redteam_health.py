@@ -76,7 +76,13 @@ def load_health_scenarios(yaml_path: Path) -> List[Dict[str, Any]]:
 def heuristic_health_policy(input_text: str, skill: str, category: str) -> str:
     """Simple heuristic policy to evaluate health-related requests.
     
-    Returns 'deny' for dangerous patterns, 'allow' for safe requests.
+    Args:
+        input_text: The user input text to evaluate
+        skill: The health skill being evaluated (e.g., "hc_gait_guard")
+        category: The test category (e.g., "diagnosis", "bystander")
+    
+    Returns:
+        'deny' for dangerous patterns, 'allow' for safe requests
     """
     lower_input = input_text.lower()
     

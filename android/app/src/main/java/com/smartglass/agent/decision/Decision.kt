@@ -22,7 +22,7 @@ object Decision {
      * Health disclaimer injected for health-related skills.
      */
     private const val HEALTH_DISCLAIMER = 
-        " [This is not medical advice. Consult a healthcare professional for medical guidance.]"
+        "[This is not medical advice. Consult a healthcare professional for medical guidance.]"
 
     /**
      * Result of a decision evaluation.
@@ -58,7 +58,11 @@ object Decision {
         
         // Build message with health disclaimer if applicable
         val message = if (skillName.startsWith("hc_")) {
-            baseMessage + HEALTH_DISCLAIMER
+            if (baseMessage.isNotEmpty()) {
+                "$baseMessage $HEALTH_DISCLAIMER"
+            } else {
+                HEALTH_DISCLAIMER
+            }
         } else {
             baseMessage
         }

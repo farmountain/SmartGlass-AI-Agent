@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Any
 
+from skills.health_utils import export_to_onnx
+
 
 SIGMA_GATE = 0.75
 
@@ -52,13 +54,4 @@ def run_inference(features: Dict[str, Any]) -> SkillResult:
     )
 
 
-def export_to_onnx(model: Any, path: Path) -> None:
-    """Export model to ONNX format (stub).
-    
-    Args:
-        model: Model object to export
-        path: Output path for ONNX file
-    """
-    # Placeholder implementation - writes dummy ONNX bytes
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(b"ONNX_BINARY_PLACEHOLDER")
+__all__ = ["SIGMA_GATE", "SkillResult", "sigma_gate_decide", "run_inference", "export_to_onnx"]
