@@ -36,6 +36,9 @@ android {
 
 dependencies {
     implementation("org.json:json:20240303")
+    implementation("com.google.mlkit:text-recognition:16.0.0")
+    implementation("com.google.android.gms:play-services-tasks:18.2.0")
+
     testImplementation(kotlin("test"))
     testImplementation("junit:junit:4.13.2")
 }
