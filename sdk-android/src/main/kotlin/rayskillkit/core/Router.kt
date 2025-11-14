@@ -19,7 +19,7 @@ class Router(
         return try {
             val features = descriptor.buildFeatures(payload)
             val result = descriptor.runner.runSkill(features)
-            telemetry?.record("router.success.$skillName")
+            telemetry?.recordRouterSuccess(skillName)
             RouteResult.Success(result)
         } catch (error: Exception) {
             handleFailure(skillName, error)
@@ -27,7 +27,7 @@ class Router(
     }
 
     private fun handleFailure(skillName: String, error: Throwable): RouteResult.Failure {
-        telemetry?.record("router.failure.$skillName:${error.message}")
+        telemetry?.recordRouterFailure(skillName, error)
         return RouteResult.Failure(error)
     }
 }
