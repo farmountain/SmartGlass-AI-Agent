@@ -1,5 +1,7 @@
 package rayskillkit.core
 
+import java.nio.file.Files
+import org.json.JSONObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -11,7 +13,7 @@ class RouterTest {
     @Test
     fun routeSkillBuildsFeaturesAndRunsExecutor() {
         val registry = SkillRegistry()
-        val telemetry = Telemetry()
+        val telemetry = Telemetry(storageDir = Files.createTempDirectory("telemetry-router").toFile())
         val router = Router(registry, telemetry)
 
         val expectedFeatures = listOf(1, 2, 3)
@@ -42,7 +44,13 @@ class RouterTest {
 
         assertEquals(Payload("input"), builtPayload)
         assertEquals(expectedFeatures, executedFeatures)
-        assertEquals(listOf("router.success.test-skill"), telemetry.events())
+        val events = telemetry.events()
+        assertEquals(1, events.size)
+        val payload = JSONObject(events.first())
+        assertEquals("router.outcome", payload.getString("event"))
+        val attributes = payload.getJSONObject("attributes")
+        assertEquals("test-skill", attributes.getString("skill"))
+        assertEquals("success", attributes.getString("outcome"))
     }
 
     @Test
@@ -51,7 +59,7 @@ class RouterTest {
         val ortHub = OrtHub(ortWrapper = mockOrt)
         ortHub.init()
 
-        val telemetry = Telemetry()
+        val telemetry = Telemetry(storageDir = Files.createTempDirectory("telemetry-router").toFile())
         val router = Router(ortHub.skillRegistry(), telemetry)
 
         val payload: FeaturePayload = mapOf(
@@ -83,6 +91,13 @@ class RouterTest {
         }
 
         assertTrue(actual.contentEquals(expected), "Router should use MockOrt for JVM tests")
-        assertEquals(listOf("router.success.education_assistant"), telemetry.events())
+
+        val events = telemetry.events()
+        assertEquals(1, events.size)
+        val payload = JSONObject(events.first())
+        assertEquals("router.outcome", payload.getString("event"))
+        val attributes = payload.getJSONObject("attributes")
+        assertEquals("education_assistant", attributes.getString("skill"))
+        assertEquals("success", attributes.getString("outcome"))
     }
 }

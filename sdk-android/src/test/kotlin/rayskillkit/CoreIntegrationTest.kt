@@ -1,5 +1,7 @@
 package rayskillkit
 
+import java.nio.file.Files
+import org.json.JSONObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -23,7 +25,7 @@ class CoreIntegrationTest {
         assertTrue(ortHub.connect("local"))
         assertTrue(ortHub.isConnected("local"))
 
-        val telemetry = Telemetry()
+        val telemetry = Telemetry(storageDir = Files.createTempDirectory("telemetry-integration").toFile())
         val router = Router(ortHub.skillRegistry(), telemetry)
 
         val payload: FeaturePayload = mapOf(
@@ -55,7 +57,13 @@ class CoreIntegrationTest {
         val builtFeatures = registration.descriptor.buildFeatures(payload)
         val expectedOutput = MockOrt().infer("education_assistant", builtFeatures)
         assertTrue(featureVector.contentEquals(expectedOutput))
-        assertEquals(listOf("router.success.education_assistant"), telemetry.events())
+        val events = telemetry.events()
+        assertEquals(1, events.size)
+        val payload = JSONObject(events.first())
+        assertEquals("router.outcome", payload.getString("event"))
+        val attributes = payload.getJSONObject("attributes")
+        assertEquals("education_assistant", attributes.getString("skill"))
+        assertEquals("success", attributes.getString("outcome"))
 
         val localized = SkillPostProcessors.postProcess(
             skillId = "education_assistant",
