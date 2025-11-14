@@ -1,0 +1,18 @@
+{
+  "skill_id": "retail_capsule_gaps",
+  "model_path": "retail_capsule_gaps_int8.onnx.pbtxt",
+  "exported_at": "2025-11-08T01:08:08.716416+00:00",
+  "y_mean": 594.5487670898438,
+  "y_std": 246.5322265625,
+  "num_targets": 256,
+  "opset_version": 17,
+  "final_loss": 61441.375,
+  "residual_std": 247.7415008544922,
+  "y_form_examples": [
+    "Capsule gap input: 1296 subscribers, 4 orders/mo, mix narrow, promotion strong, logistics delay 0.8 days.",
+    "Capsule gap input: 799 subscribers, 10 orders/mo, mix narrow, promotion strong, logistics delay 2.1 days.",
+    "Capsule gap input: 202 subscribers, 4 orders/mo, mix broad, promotion strong, logistics delay 0.4 days.",
+    "Capsule gap input: 209 subscribers, 7 orders/mo, mix narrow, promotion strong, logistics delay 0.2 days.",
+    "Capsule gap input: 1278 subscribers, 1 orders/mo, mix narrow, promotion strong, logistics delay 2.4 days."
+  ]
+}

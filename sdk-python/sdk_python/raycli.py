@@ -7,7 +7,7 @@ import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Sequence
 
 from .edu import default_config_dir, default_output_root, load_configs
 from .skill_template import export_onnx, eval as eval_module, trainer
@@ -17,8 +17,8 @@ LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class TravelSkillSpec:
-    """Configuration describing a travel skill training/export job."""
+class SkillPackSpec:
+    """Configuration describing a packaged skill training/export job."""
 
     skill_id: str
     dataset: str
@@ -29,7 +29,7 @@ class TravelSkillSpec:
 
     @property
     def model_basename(self) -> str:
-        return f"{self.skill_id}_int8.onnx"
+        return f"{self.skill_id}_int8.onnx.pbtxt"
 
     @property
     def stats_basename(self) -> str:
@@ -58,27 +58,52 @@ class TravelSkillSpec:
         return entry
 
 
-TRAVEL_SKILL_SPECS: tuple[TravelSkillSpec, ...] = (
-    TravelSkillSpec(
+TRAVEL_SKILL_SPECS: tuple[SkillPackSpec, ...] = (
+    SkillPackSpec(
         skill_id="travel_fastlane",
         dataset="tr_fastlane",
         display_name="Airport FastLane Wait Estimator",
         description="Predicts FastLane wait times from queue and traveler signals.",
         capabilities=("travel", "operations", "regression"),
     ),
-    TravelSkillSpec(
+    SkillPackSpec(
         skill_id="travel_safebubble",
         dataset="tr_safebubble",
         display_name="Air Travel SafeBubble Risk Assessor",
         description="Estimates exposure risk for flights under varied mitigation setups.",
         capabilities=("travel", "safety", "regression"),
     ),
-    TravelSkillSpec(
+    SkillPackSpec(
         skill_id="travel_bargaincoach",
         dataset="tr_bargaincoach",
         display_name="BargainCoach Fare Forecaster",
         description="Scores airfare savings opportunities using itinerary context.",
         capabilities=("travel", "commerce", "forecasting"),
+    ),
+)
+
+
+RETAIL_SKILL_SPECS: tuple[SkillPackSpec, ...] = (
+    SkillPackSpec(
+        skill_id="retail_wtp_radar",
+        dataset="rt_wtp_radar",
+        display_name="Retail WTP Radar",
+        description="Estimates shopper willingness-to-pay under promo and competition signals.",
+        capabilities=("retail", "pricing", "regression"),
+    ),
+    SkillPackSpec(
+        skill_id="retail_capsule_gaps",
+        dataset="rt_capsule_gaps",
+        display_name="Capsule Gap Forecaster",
+        description="Forecasts subscription capsule inventory gaps from demand volatility cues.",
+        capabilities=("retail", "supply", "forecasting"),
+    ),
+    SkillPackSpec(
+        skill_id="retail_minute_meal",
+        dataset="rt_minute_meal",
+        display_name="Minute Meal Throughput",
+        description="Predicts quick-service cycle times from staffing and prep readiness inputs.",
+        capabilities=("retail", "operations", "regression"),
     ),
 )
 
@@ -149,6 +174,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Destination root for generated skill artifacts.",
     )
     travel_pack_parser.add_argument(
+        "--manifest-path",
+        type=Path,
+        default=_default_manifest_path(),
+        help="Path to the rayskillkit skills manifest to update.",
+    )
+
+    retail_pack_parser = subparsers.add_parser(
+        "train_retail_pack",
+        help="Train and export the retail skill matrix, updating the manifest.",
+    )
+    trainer.add_arguments(retail_pack_parser)
+    retail_pack_parser.add_argument(
+        "--output-root",
+        type=Path,
+        default=default_output_root(),
+        help="Destination root for generated skill artifacts.",
+    )
+    retail_pack_parser.add_argument(
         "--manifest-path",
         type=Path,
         default=_default_manifest_path(),
@@ -276,11 +319,16 @@ def _relative_path(target: Path, base: Path) -> str:
     return relative.as_posix()
 
 
-def _run_train_travel_pack(args: argparse.Namespace) -> int:
+def _train_packaged_skills(
+    args: argparse.Namespace,
+    specs: Sequence[SkillPackSpec],
+    *,
+    category: str,
+) -> int:
     output_root = Path(args.output_root)
     manifest_path = Path(args.manifest_path)
-    models_dir = output_root / "models" / "travel"
-    stats_dir = output_root / "stats" / "travel"
+    models_dir = output_root / "models" / category
+    stats_dir = output_root / "stats" / category
     models_dir.mkdir(parents=True, exist_ok=True)
     stats_dir.mkdir(parents=True, exist_ok=True)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
@@ -288,8 +336,8 @@ def _run_train_travel_pack(args: argparse.Namespace) -> int:
     manifest = _load_manifest(manifest_path)
     base_config = trainer.build_config(args)
 
-    for spec in TRAVEL_SKILL_SPECS:
-        LOGGER.info("Training travel skill: %s", spec.skill_id)
+    for spec in specs:
+        LOGGER.info("Training %s skill: %s", category, spec.skill_id)
         skill_config = base_config.with_dataset(spec.dataset)
         skill_trainer = trainer.SkillTrainer(skill_config)
         fit_result = skill_trainer.fit()
@@ -355,6 +403,14 @@ def _run_train_travel_pack(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_train_travel_pack(args: argparse.Namespace) -> int:
+    return _train_packaged_skills(args, TRAVEL_SKILL_SPECS, category="travel")
+
+
+def _run_train_retail_pack(args: argparse.Namespace) -> int:
+    return _train_packaged_skills(args, RETAIL_SKILL_SPECS, category="retail")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -366,6 +422,7 @@ def main(argv: list[str] | None = None) -> int:
         "eval": eval_module.run,
         "train_pack": _run_train_pack,
         "train_travel_pack": _run_train_travel_pack,
+        "train_retail_pack": _run_train_retail_pack,
     }
 
     LOGGER.debug("Dispatching command: %s", args.command)

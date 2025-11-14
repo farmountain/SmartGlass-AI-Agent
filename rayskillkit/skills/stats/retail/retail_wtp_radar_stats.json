@@ -1,0 +1,18 @@
+{
+  "skill_id": "retail_wtp_radar",
+  "model_path": "retail_wtp_radar_int8.onnx.pbtxt",
+  "exported_at": "2025-11-08T01:08:08.647226+00:00",
+  "y_mean": 61.18281936645508,
+  "y_std": 29.555105209350586,
+  "num_targets": 256,
+  "opset_version": 17,
+  "final_loss": 303.0758056640625,
+  "residual_std": 17.26542091369629,
+  "y_form_examples": [
+    "WTP radar input: anchor price $86, casual shopper, brand affinity 0.98, competitor pressure heavy, promo visible, inventory plentiful.",
+    "WTP radar input: anchor price $106, casual shopper, brand affinity 0.84, competitor pressure light, promo visible, inventory plentiful.",
+    "WTP radar input: anchor price $22, casual shopper, brand affinity 0.66, competitor pressure light, promo hidden, inventory plentiful.",
+    "WTP radar input: anchor price $26, casual shopper, brand affinity 0.35, competitor pressure heavy, promo hidden, inventory plentiful.",
+    "WTP radar input: anchor price $99, casual shopper, brand affinity 0.70, competitor pressure light, promo visible, inventory scarce."
+  ]
+}
