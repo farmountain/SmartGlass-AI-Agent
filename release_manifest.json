@@ -1,0 +1,161 @@
+{
+  "models": [
+    {
+      "path": ".gitkeep",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "audio/.gitkeep",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "audio/skill_003_model.bin",
+      "sha256": "5db68b5784a6f139bb87e5c8c6496d5e79a1e8a9bc992f7f875b2704433856c6",
+      "size": 41
+    },
+    {
+      "path": "navigation/.gitkeep",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "navigation/skill_001_model.bin",
+      "sha256": "425212594caaa7e90b0a0269df9c4d62cc7c723c13b357969c01cbb321c66f9d",
+      "size": 31
+    },
+    {
+      "path": "retail/retail_capsule_gaps_int8.onnx.pbtxt",
+      "sha256": "a117d2e3eb11d6c2c5eae9bbf645495341aa4a0e6822546f49312b63b0a03a3d",
+      "size": 6068
+    },
+    {
+      "path": "retail/retail_minute_meal_int8.onnx.pbtxt",
+      "sha256": "38696d7797ef89b5c69eb6caaadc4d6c4c0d2df38efc40d97fc66f85fb69f869",
+      "size": 6208
+    },
+    {
+      "path": "retail/retail_wtp_radar_int8.onnx.pbtxt",
+      "sha256": "afb0a3991b35091bacf5732b51ff2f9d848800eb9fb18888c5f55b250c0e2523",
+      "size": 6202
+    },
+    {
+      "path": "retail/rt_capsule_gaps_int8.onnx",
+      "sha256": "a117d2e3eb11d6c2c5eae9bbf645495341aa4a0e6822546f49312b63b0a03a3d",
+      "size": 6068
+    },
+    {
+      "path": "retail/rt_minute_meal_int8.onnx",
+      "sha256": "38696d7797ef89b5c69eb6caaadc4d6c4c0d2df38efc40d97fc66f85fb69f869",
+      "size": 6208
+    },
+    {
+      "path": "retail/rt_wtp_radar_int8.onnx",
+      "sha256": "afb0a3991b35091bacf5732b51ff2f9d848800eb9fb18888c5f55b250c0e2523",
+      "size": 6202
+    },
+    {
+      "path": "travel/.gitkeep",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "vision/.gitkeep",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "vision/skill_002_model.bin",
+      "sha256": "ecb1d6f2818aef3f2d043fc9d6f6fb01a52b5902d3b2ecbf8db6bbec60ad7566",
+      "size": 37
+    }
+  ],
+  "stats": [
+    {
+      "path": ".gitkeep",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "audio/.gitkeep",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "audio/skill_003_stats.json",
+      "sha256": "02343eeac510f7849823baec1a96cbb42dd33642899ffd2368701a5f539949de",
+      "size": 145
+    },
+    {
+      "path": "navigation/.gitkeep",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "navigation/skill_001_stats.json",
+      "sha256": "a67eae4ad441fec487c11958e0d6a552cef9bd29319056fdd973ff7789a387d5",
+      "size": 149
+    },
+    {
+      "path": "retail/retail_capsule_gaps_stats.json",
+      "sha256": "e632268cdbaf466654cca0f5e1937e431854ac399c92a2586d360145900a1682",
+      "size": 903
+    },
+    {
+      "path": "retail/retail_minute_meal_stats.json",
+      "sha256": "29b96d9b1e8841a8d5acd0739b97e4f1f97886bcc45f571d55308d5d70b72dfc",
+      "size": 1089
+    },
+    {
+      "path": "retail/retail_wtp_radar_stats.json",
+      "sha256": "6e428e771b5ceddfd584636949be9923652fd7b07d5ea37d3c9c3d585a377ba4",
+      "size": 1053
+    },
+    {
+      "path": "retail/rt_capsule_gaps_stats.json",
+      "sha256": "27173252ed0f1e5ed3595bf58f0ea548e8749e3d60e831e42b0ad539d4bbfb1c",
+      "size": 890
+    },
+    {
+      "path": "retail/rt_minute_meal_stats.json",
+      "sha256": "9a97ff113477fdbdbbdffa291bb5378bac74b3fb3d8176f379dfb66b29f11ce4",
+      "size": 1076
+    },
+    {
+      "path": "retail/rt_wtp_radar_stats.json",
+      "sha256": "44a620ada5ba2664cd40ab33fabb1bc7713bb643eb8507e40d84a664dab5b484",
+      "size": 1040
+    },
+    {
+      "path": "travel/.gitkeep",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "travel/travel_bargaincoach_stats.json",
+      "sha256": "9d66e0f588bccd288e1a688f1e6a4ebb7956babb2484da102d4781ea9e787826",
+      "size": 592
+    },
+    {
+      "path": "travel/travel_fastlane_stats.json",
+      "sha256": "9c1065ad1658b7252a2dac819339d3d90bbb61ae9f64b0bde11c7f99562a611c",
+      "size": 658
+    },
+    {
+      "path": "travel/travel_safebubble_stats.json",
+      "sha256": "87185dc3d683c5b0a876520eab6072ac20eb25a34878951a3b5a7953739abb3a",
+      "size": 592
+    },
+    {
+      "path": "vision/.gitkeep",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "vision/skill_002_stats.json",
+      "sha256": "27371dee55e4f6b86ac11edd49284ca6c1ff57c3b491356259d603aacfef224e",
+      "size": 145
+    }
+  ]
+}

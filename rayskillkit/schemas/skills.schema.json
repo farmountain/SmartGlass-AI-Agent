@@ -24,7 +24,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^(skill_\\d{3}|travel_[a-z0-9_]+)$"
+            "pattern": "^(skill_\\d{3}|travel_[a-z0-9_]+|retail_[a-z0-9_]+|rt_[a-z0-9_]+)$"
           },
           "name": {
             "type": "string",

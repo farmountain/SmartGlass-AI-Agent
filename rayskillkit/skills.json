@@ -143,6 +143,60 @@
         "residual_std": 2.393031
       },
       "dataset": "rt_minute_meal"
+    },
+    {
+      "id": "rt_wtp_radar",
+      "name": "Runtime Retail WTP Radar",
+      "description": "Runtime packaged variant of the willingness-to-pay radar for deployment validation.",
+      "version": "0.1.0",
+      "model_path": "skills/models/retail/rt_wtp_radar_int8.onnx",
+      "stats_path": "skills/stats/retail/rt_wtp_radar_stats.json",
+      "capabilities": [
+        "retail",
+        "pricing",
+        "regression"
+      ],
+      "metrics": {
+        "final_loss": 303.075806,
+        "residual_std": 17.265421
+      },
+      "dataset": "rt_wtp_radar"
+    },
+    {
+      "id": "rt_capsule_gaps",
+      "name": "Runtime Capsule Gap Forecaster",
+      "description": "Runtime packaged variant of the capsule subscription gap forecaster for deployment validation.",
+      "version": "0.1.0",
+      "model_path": "skills/models/retail/rt_capsule_gaps_int8.onnx",
+      "stats_path": "skills/stats/retail/rt_capsule_gaps_stats.json",
+      "capabilities": [
+        "retail",
+        "supply",
+        "forecasting"
+      ],
+      "metrics": {
+        "final_loss": 61441.375,
+        "residual_std": 247.741501
+      },
+      "dataset": "rt_capsule_gaps"
+    },
+    {
+      "id": "rt_minute_meal",
+      "name": "Runtime Minute Meal Throughput",
+      "description": "Runtime packaged variant of the quick-service throughput predictor for deployment validation.",
+      "version": "0.1.0",
+      "model_path": "skills/models/retail/rt_minute_meal_int8.onnx",
+      "stats_path": "skills/stats/retail/rt_minute_meal_stats.json",
+      "capabilities": [
+        "retail",
+        "operations",
+        "regression"
+      ],
+      "metrics": {
+        "final_loss": 5.332772,
+        "residual_std": 2.393031
+      },
+      "dataset": "rt_minute_meal"
     }
   ],
   "metadata": {
