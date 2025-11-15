@@ -45,6 +45,43 @@ jobs:
       - name: Prepare artifacts directory
         run: mkdir -p artifacts
 
+      - name: Generate sample manifest signature
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          from nacl import encoding, signing
+
+          seed = hashlib.sha256(b"SmartGlass sample signing key").digest()
+          signing_key = signing.SigningKey(seed)
+          os.environ["CI_MANIFEST_SIGNING_KEY"] = seed.hex()
+
+          manifest = {
+              "models": [
+                  {"path": "example.bin", "sha256": "00" * 32, "size": 0},
+              ],
+              "stats": [
+                  {"path": "metrics.json", "sha256": "11" * 32, "size": 128},
+              ],
+          }
+
+          manifest_path = Path("artifacts/sample_release_manifest.json")
+          manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+          verify_path = Path("artifacts/sample_release_manifest.pub")
+          verify_path.write_text(
+              signing_key.verify_key.encode(encoder=encoding.HexEncoder).decode("ascii") + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+          python cicd/sign_manifest.py \
+            --in artifacts/sample_release_manifest.json \
+            --out artifacts/sample_release_manifest.sig \
+            --key-env CI_MANIFEST_SIGNING_KEY
+
       - name: Run redteam health smoke test
         id: redteam_health
         run: |
