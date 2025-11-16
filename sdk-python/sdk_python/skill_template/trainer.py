@@ -41,6 +41,7 @@ class FitResult:
 
     final_loss: float
     residual_std: float
+    loss_history: list[float]
 
 
 class SkillTrainer:
@@ -78,14 +79,16 @@ class SkillTrainer:
         )
         loss_fn = nn.MSELoss()
 
+        loss_history: list[float] = []
         for epoch in range(1, self.config.epochs + 1):
             loss = self._run_training_epoch(model, optimiser, loss_fn, train)
+            loss_history.append(float(loss))
             if epoch % max(1, self.config.epochs // 5) == 0 or epoch == self.config.epochs:
                 LOGGER.debug("Epoch %s/%s - loss=%.4f", epoch, self.config.epochs, loss)
 
         residual_std = self._update_sigma(model, train)
         LOGGER.info("Training complete (loss=%.4f, residual_std=%.4f)", loss, residual_std)
-        return FitResult(final_loss=float(loss), residual_std=residual_std)
+        return FitResult(final_loss=float(loss), residual_std=residual_std, loss_history=loss_history)
 
     def predict(self, features: Tensor) -> Tuple[Tensor, Tensor]:
         """Return the mean and predictive sigma for ``features``."""
