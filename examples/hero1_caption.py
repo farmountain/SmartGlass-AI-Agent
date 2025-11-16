@@ -19,7 +19,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Sequence
+from typing import Any, Dict, List, Mapping, Sequence
 import types
 
 import numpy as np
@@ -39,7 +39,7 @@ if "src" not in sys.modules:
 from drivers.factory import Provider, get_provider  # noqa: E402
 from src.audio import ASRStream, EnergyVAD, MockASR  # noqa: E402
 from src.perception import get_default_keyframer  # noqa: E402
-from src.policy.fsm import Event, FSMRouter, State  # noqa: E402
+from src.policy import FSMRouter, can_capture, get_default_policy  # noqa: E402
 from src.skills import MockCaptioner  # noqa: E402
 
 __all__ = [
@@ -182,18 +182,8 @@ def _run_asr(asr_stream: ASRStream) -> Dict[str, object]:
 
 
 def _build_router() -> FSMRouter:
-    states = [
-        State("IDLE"),
-        State("LISTENING"),
-        State("ANALYSING"),
-        State("RESPONDING", irreversible=True),
-    ]
-    events = [
-        Event("activate", source="IDLE", target="LISTENING"),
-        Event("observe", source="LISTENING", target="ANALYSING"),
-        Event("respond", source="ANALYSING", target="RESPONDING"),
-    ]
-    return FSMRouter(states, events, initial_state="IDLE")
+    router, _fusion = get_default_policy()
+    return router
 
 
 def _format_stage(stage: str, ms: float) -> str:
@@ -227,13 +217,32 @@ def _render_overlay(provider: Provider, payload: dict) -> dict | None:
     return overlay.render(payload)
 
 
-def run_hero_pipeline(*, log: bool = True, provider: Provider | None = None) -> Dict[str, object]:
+def run_hero_pipeline(
+    *,
+    log: bool = True,
+    provider: Provider | None = None,
+    capture_context: Mapping[str, Any] | None = None,
+) -> Dict[str, object]:
     """Execute the hero caption pipeline and return structured results."""
 
     provider = provider or get_provider()
 
     latencies: Dict[str, float] = {}
     metadata: Dict[str, object] = {"provider": {"name": type(provider).__name__}}
+
+    permission = can_capture(capture_context)
+    metadata["permission"] = {"decision": permission}
+    if permission != "allow":
+        return {
+            "status": permission,
+            "frames": None,
+            "audio": None,
+            "caption": "",
+            "latencies": latencies,
+            "metadata": metadata,
+            "total_ms": 0.0,
+            "provider": metadata["provider"],
+        }
 
     start = time.perf_counter()
     frames = generate_moving_square_clip()
@@ -274,6 +283,7 @@ def run_hero_pipeline(*, log: bool = True, provider: Provider | None = None) -> 
     start = time.perf_counter()
     router.transition("activate")
     router.transition("observe")
+    router.transition("confirm")
     router.transition("respond", confirm=True)
     latencies["fsm_ms"] = (time.perf_counter() - start) * 1000.0
 
@@ -329,6 +339,7 @@ def run_hero_pipeline(*, log: bool = True, provider: Provider | None = None) -> 
         "metadata": metadata,
         "total_ms": total_ms,
         "provider": metadata["provider"],
+        "status": permission,
     }
 
     if log:
