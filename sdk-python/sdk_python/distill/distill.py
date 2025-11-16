@@ -10,6 +10,7 @@ import torch
 
 from ..skill_template import trainer
 from ..skills_impl import SynthesizedDataset, load_synthesized_dataset
+from .report import DistillationReport
 from .teachers import get_teacher_outputs
 
 LOGGER = logging.getLogger(__name__)
@@ -58,6 +59,15 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=4,
         help="Number of teacher samples to log at each step.",
+    )
+    parser.add_argument(
+        "--report-path",
+        type=str,
+        default="distill_report.json",
+        help=(
+            "Path to the JSON report artifact capturing metrics per skill. Set to an empty "
+            "string to disable reporting."
+        ),
     )
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging output.")
 
@@ -124,6 +134,11 @@ def run(args: argparse.Namespace) -> int:
     if args.checkpoint_path and args.resume:
         _load_checkpoint(student, args.checkpoint_path)
 
+    report = None
+    report_path = getattr(args, "report_path", None)
+    if report_path:
+        report = DistillationReport(Path(report_path))
+
     for step in range(1, args.steps + 1):
         step_seed = student.config.seed + step - 1
         student.config = replace(student.config, seed=step_seed)
@@ -154,6 +169,20 @@ def run(args: argparse.Namespace) -> int:
         )
         if should_save:
             _save_checkpoint(student, args.checkpoint_path)
+
+        if report:
+            report.record_run(
+                skill=args.skill,
+                step=step,
+                config=student.config,
+                fit_result=fit_result,
+                extra_metadata={
+                    "qlora": args.qlora,
+                    "zero_shot_augment": args.zero_shot_augment,
+                    "checkpoint_path": str(args.checkpoint_path) if args.checkpoint_path else None,
+                    "step_seed": step_seed,
+                },
+            )
 
     return 0
 
