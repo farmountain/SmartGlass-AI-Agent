@@ -113,9 +113,18 @@ class MockPermissions(Permissions):
 
     def request(self, capabilities: set[str]) -> dict:  # noqa: D401 - documented in interface
         requested = set(capabilities)
-        self.requests.append({"requested": sorted(requested)})
+        requested_list = sorted(requested)
+        granted_list = sorted(requested & self.granted)
+        denied_list = sorted(requested - self.granted)
 
-        response = {"granted": True, "time_ms": 42}
+        self.requests.append({"requested": requested_list})
+
+        response = {
+            "requested": requested_list,
+            "granted": granted_list,
+            "denied": denied_list,
+            "time_ms": 42,
+        }
         log_metric("permissions.time_to_ready_ms", response["time_ms"], unit="ms")
         return response
 
