@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import argparse
 import logging
-from dataclasses import dataclass, replace
-from typing import Tuple
+from dataclasses import asdict, dataclass, replace
+from typing import Any, Tuple
 
 import torch
 from torch import Tensor, nn
@@ -27,6 +27,7 @@ class SkillTrainerConfig:
     seed: int = 0
     weight_decay: float = 0.0
     noise_floor: float = 1e-3
+    lam_align: float = 0.0
 
     def with_dataset(self, dataset: str) -> "SkillTrainerConfig":
         """Return a new config pointing at *dataset*."""
@@ -61,6 +62,7 @@ class SkillTrainer:
 
         dataset_name = dataset or self.config.dataset
         train = load_dataset(dataset_name, "train", self.config.train_samples, self.config.seed)
+        train = self._apply_teacher_alignment(dataset_name, train)
         LOGGER.info(
             "Training tiny model on dataset '%s' (%s samples, %s features)",
             dataset_name,
@@ -104,6 +106,43 @@ class SkillTrainer:
             raise RuntimeError("Model has not been trained yet.")
         return self._model
 
+    def state_dict(self) -> dict[str, Any]:
+        """Return a checkpoint capturing the trainer configuration and weights."""
+
+        if self._model is None:
+            raise RuntimeError("Model has not been trained yet.")
+        if self._input_dim is None:
+            raise RuntimeError("Model input dimension is unknown.")
+        return {
+            "config": asdict(self.config),
+            "model": self._model.state_dict(),
+            "sigma": self._sigma,
+            "input_dim": self._input_dim,
+        }
+
+    def load_state_dict(self, state: dict[str, Any]) -> None:
+        """Restore trainer state from :meth:`state_dict`."""
+
+        config_data = state.get("config")
+        if isinstance(config_data, dict):
+            self.config = SkillTrainerConfig(**config_data)
+
+        sigma = state.get("sigma")
+        if sigma is not None:
+            self._sigma = float(sigma)
+
+        input_dim = state.get("input_dim")
+        if not isinstance(input_dim, int) or input_dim <= 0:
+            raise ValueError("Checkpoint is missing a valid 'input_dim'.")
+
+        dummy = torch.zeros(1, input_dim)
+        model = self._ensure_model(dummy)
+
+        model_state = state.get("model")
+        if not isinstance(model_state, dict):
+            raise ValueError("Checkpoint is missing the model state.")
+        model.load_state_dict(model_state)
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
@@ -143,6 +182,28 @@ class SkillTrainer:
             self._sigma = float(max(residual_std.item(), self.config.noise_floor))
         return self._sigma
 
+    def _apply_teacher_alignment(
+        self, dataset_name: str, dataset: SynthesizedDataset
+    ) -> SynthesizedDataset:
+        if self.config.lam_align <= 0.0:
+            return dataset
+
+        from ..distill.teachers import get_teacher_outputs
+
+        teacher_targets = get_teacher_outputs(dataset_name, dataset.features)
+        if teacher_targets is None:
+            LOGGER.debug(
+                "No explicit teacher heuristic found for %s; using original targets.",
+                dataset_name,
+            )
+            return dataset
+
+        lam = float(self.config.lam_align)
+        lam = min(max(lam, 0.0), 1.0)
+        teacher_targets = teacher_targets.to(dataset.targets.dtype)
+        blended = torch.lerp(dataset.targets, teacher_targets, lam).detach()
+        return SynthesizedDataset(dataset.features, blended, dataset.noise_std)
+
 
 def load_dataset(
     dataset: str,
@@ -168,15 +229,17 @@ def build_config(args: argparse.Namespace) -> SkillTrainerConfig:
         seed=args.seed,
         weight_decay=args.weight_decay,
         noise_floor=args.noise_floor,
+        lam_align=args.lam_align,
     )
 
 
-def add_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--dataset",
-        default="math_reasoning_v1",
-        help="Name of the synthetic dataset provided by sdk_python.skills_impl.",
-    )
+def add_arguments(parser: argparse.ArgumentParser, *, include_dataset: bool = True) -> None:
+    if include_dataset:
+        parser.add_argument(
+            "--dataset",
+            default="math_reasoning_v1",
+            help="Name of the synthetic dataset provided by sdk_python.skills_impl.",
+        )
     parser.add_argument("--epochs", type=int, default=50, help="Number of training epochs.")
     parser.add_argument(
         "--learning-rate",
@@ -214,6 +277,15 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=1e-3,
         help="Minimum predictive sigma returned by the trainer.",
+    )
+    parser.add_argument(
+        "--lam-align",
+        type=float,
+        default=0.0,
+        help=(
+            "Interpolation weight applied when blending teacher heuristic outputs "
+            "with empirical targets during distillation."
+        ),
     )
 
 
