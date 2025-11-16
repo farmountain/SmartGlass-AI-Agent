@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import argparse
 import logging
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import torch
+from torch import Tensor
 
 from ..skill_template import trainer
 from ..skills_impl import SynthesizedDataset, load_synthesized_dataset
@@ -14,6 +15,27 @@ from .report import DistillationReport
 from .teachers import get_teacher_outputs
 
 LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class DistillationStepResult:
+    """Container describing a single distillation optimisation step."""
+
+    skill: str
+    step: int
+    seed: int
+    preview_dataset: SynthesizedDataset
+    supervision_targets: Tensor
+    fit_result: trainer.FitResult
+
+    @property
+    def supervision_features(self) -> Tensor:
+        return self.preview_dataset.features
+
+    def supervision_pair(self) -> tuple[Tensor, Tensor]:
+        """Return ``(features, targets)`` for the preview supervision batch."""
+
+        return self.supervision_features, self.supervision_targets
 
 
 def _configure_logging(verbose: bool) -> None:
@@ -92,8 +114,15 @@ def _save_checkpoint(student: trainer.SkillTrainer, path: Path) -> None:
     LOGGER.info("Checkpoint saved to %s", path)
 
 
-def _log_teacher_preview(skill: str, step: int, preview_dataset: SynthesizedDataset) -> None:
-    teacher_outputs = get_teacher_outputs(skill, preview_dataset.features)
+def _log_teacher_preview(
+    skill: str,
+    step: int,
+    preview_dataset: SynthesizedDataset,
+    supervision_targets: Tensor | None = None,
+) -> Tensor:
+    teacher_outputs = supervision_targets
+    if teacher_outputs is None:
+        teacher_outputs = get_teacher_outputs(skill, preview_dataset.features)
     if teacher_outputs is None:
         teacher_outputs = preview_dataset.targets
         LOGGER.debug(
@@ -108,6 +137,40 @@ def _log_teacher_preview(skill: str, step: int, preview_dataset: SynthesizedData
         mean,
         std,
         teacher_outputs.shape[0],
+    )
+    return teacher_outputs
+
+
+def run_once(
+    *,
+    student: trainer.SkillTrainer,
+    skill: str,
+    step: int,
+    preview_samples: int,
+) -> DistillationStepResult:
+    """Execute one optimisation step for *skill* using *student*."""
+
+    step_seed = student.config.seed + step - 1
+    student.config = replace(student.config, seed=step_seed)
+
+    preview = load_synthesized_dataset(
+        skill,
+        "train",
+        num_samples=min(preview_samples, student.config.train_samples),
+        seed=step_seed,
+    )
+    supervision = _log_teacher_preview(skill, step, preview)
+    supervision = supervision.to(dtype=preview.targets.dtype).detach().clone()
+
+    fit_result = student.fit(dataset=skill)
+
+    return DistillationStepResult(
+        skill=skill,
+        step=step,
+        seed=step_seed,
+        preview_dataset=preview,
+        supervision_targets=supervision,
+        fit_result=fit_result,
     )
 
 
@@ -140,23 +203,20 @@ def run(args: argparse.Namespace) -> int:
         report = DistillationReport(Path(report_path))
 
     for step in range(1, args.steps + 1):
-        step_seed = student.config.seed + step - 1
-        student.config = replace(student.config, seed=step_seed)
         LOGGER.info(
-            "Distillation step %s/%s on skill %s (seed=%s)",
+            "Distillation step %s/%s on skill %s",
             step,
             args.steps,
             args.skill,
-            step_seed,
         )
-        preview = load_synthesized_dataset(
-            args.skill,
-            "train",
-            num_samples=min(args.preview_samples, student.config.train_samples),
-            seed=step_seed,
+        preview_samples = min(args.preview_samples, student.config.train_samples)
+        step_result = run_once(
+            student=student,
+            skill=args.skill,
+            step=step,
+            preview_samples=preview_samples,
         )
-        _log_teacher_preview(args.skill, step, preview)
-        fit_result = student.fit(dataset=args.skill)
+        fit_result = step_result.fit_result
         LOGGER.info(
             "Step %s complete: loss=%.4f residual_std=%.4f",
             step,
@@ -180,7 +240,7 @@ def run(args: argparse.Namespace) -> int:
                     "qlora": args.qlora,
                     "zero_shot_augment": args.zero_shot_augment,
                     "checkpoint_path": str(args.checkpoint_path) if args.checkpoint_path else None,
-                    "step_seed": step_seed,
+                    "step_seed": step_result.seed,
                 },
             )
 
