@@ -25,7 +25,7 @@
 ## Overlay vs. Phone Parity Rule
 - Overlays rendered in the headset must match the mobile companion view within a single frame of latency.
 - Any new overlay layout must be verified on both devices; if discrepancies are found, the overlay deployment is blocked until parity is restored.
-- Use the parity regression harness (`scripts/check_overlay_parity.py`) before shipping layout changes.
+- Use the parity regression harness in `tests/test_ocr_overlay_parity.py` (run via `pytest tests/test_ocr_overlay_parity.py`) before shipping layout changes.
 
 ## Privacy Stance
 - No images or raw video frames may leave the device or CI environment.
@@ -55,7 +55,7 @@
 ### Information
 - CI dashboards: [Keyframes](https://ci.internal/keyframes-week3), [VQ](https://ci.internal/vq-week3), [OCR Parity](https://ci.internal/ocr-parity-week3).
 - Reference diff thresholds (`diff_tau`) and `min_gap` defaults are stored in the perception factory helpers and are validated by the regression tests listed above.
-- Overlay parity traces live in `scripts/check_overlay_parity.py`; the mock suite replays the same fixtures to catch divergence early.
+- Overlay parity traces live in `tests/test_ocr_overlay_parity.py`; the mock suite replays the same fixtures to catch divergence early.
 
 ### Inferences
 - τ / `min_gap` tuning: Tightening `diff_tau` without relaxing `min_gap` results in under-sampling fast motion; CI catches this via `test_keyframes_rate.py` and `test_keyframes_provider_contract.py`.
