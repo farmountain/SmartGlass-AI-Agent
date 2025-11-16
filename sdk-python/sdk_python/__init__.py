@@ -1,5 +1,5 @@
 """SmartGlass SDK for building Ray-based skills."""
 
-from . import raycli  # re-export CLI module for convenience
+from . import distill, raycli  # re-export CLI modules for convenience
 
-__all__ = ["raycli"]
+__all__ = ["raycli", "distill"]
