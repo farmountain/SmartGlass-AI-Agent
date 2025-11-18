@@ -180,20 +180,99 @@ jobs:
             python bench/latency_bench.py | tee artifacts/latency.csv
           fi
 
-      - name: Run red-team evaluation
+      - name: Run red-team evaluations
         id: redteam
         if: ${{ hashFiles('redteam/eval.py') != '' }}
+        shell: bash
         run: |
-          set -o pipefail
-          if python redteam/eval.py --help >/tmp/redteam_help.txt 2>&1; then
-            if grep -q -- '--output' /tmp/redteam_help.txt; then
-              python redteam/eval.py --output artifacts/redteam_report.json
-            else
-              python redteam/eval.py | tee artifacts/redteam_report.json
-            fi
-          else
-            python redteam/eval.py | tee artifacts/redteam_report.json
+          set -euo pipefail
+          shopt -s nullglob
+          mkdir -p artifacts
+
+          scenario_files=(redteam/*.yaml)
+          if [ ${#scenario_files[@]} -eq 0 ]; then
+            echo "No red-team scenario files found; skipping."
+            exit 0
           fi
+
+          report_paths=()
+          for scenario in "${scenario_files[@]}"; do
+            base_name=$(basename "$scenario" .yaml)
+            out_path="artifacts/redteam_${base_name}_report.json"
+            echo "::group::Evaluating ${scenario}"
+            python redteam/eval.py --scenarios "$scenario" --out "$out_path"
+            echo "Report written to $out_path"
+            echo "::endgroup::"
+            report_paths+=("$out_path")
+          done
+
+          python - <<'PY' "${report_paths[@]}"
+import json
+import sys
+from pathlib import Path
+
+report_paths = sys.argv[1:]
+if not report_paths:
+    raise SystemExit("No report paths were provided to the aggregator.")
+
+overall_total = 0
+overall_passed = 0
+deny_total = 0
+deny_failures = []
+lines = []
+
+for report_path in report_paths:
+    path = Path(report_path)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    summary = data.get("summary", {})
+    total = int(summary.get("total", 0))
+    passed = int(summary.get("passed", 0))
+    overall_total += total
+    overall_passed += passed
+
+    scenarios_file = data.get("scenarios_file", path.name)
+    pass_rate = summary.get("pass_rate")
+    if pass_rate is None and total:
+        pass_rate = passed / total
+
+    if total:
+        if pass_rate is not None:
+            percent = pass_rate * 100
+            lines.append(f"- {scenarios_file}: {passed}/{total} passed ({percent:.1f}% pass rate)")
+        else:
+            lines.append(f"- {scenarios_file}: {passed}/{total} passed")
+    else:
+        lines.append(f"- {scenarios_file}: no scenarios found")
+
+    for result in data.get("results", []):
+        if result.get("expected_decision") == "deny":
+            deny_total += 1
+            if result.get("decision") != "deny":
+                scenario_id = result.get("id") or result.get("scenario_id") or "unknown"
+                deny_failures.append(f"{scenario_id} ({scenarios_file})")
+
+if overall_total == 0:
+    raise SystemExit("Red-team evaluation ran, but no scenarios were executed.")
+
+overall_rate = (overall_passed / overall_total) * 100
+print("Red-team evaluation summary:")
+for line in lines:
+    print(line)
+print(f"Overall: {overall_passed}/{overall_total} scenarios passed ({overall_rate:.1f}% pass rate)")
+
+if deny_total:
+    deny_passed = deny_total - len(deny_failures)
+    print(f"Deny scenarios: {deny_passed}/{deny_total} correctly returned 'deny'")
+
+if deny_failures:
+    print("The following deny scenarios were not denied:")
+    for entry in deny_failures:
+        print(f"  - {entry}")
+    raise SystemExit("One or more deny scenarios failed to return 'deny'.")
+
+if overall_passed != overall_total:
+    raise SystemExit("Not all red-team scenarios passed.")
+PY
 
       - name: Summarize results
         if: ${{ always() }}
