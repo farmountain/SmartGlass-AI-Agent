@@ -34,6 +34,13 @@ class HandshakeState(Enum):
     RECONNECTING = auto()
 
 
+class EngagementState(Enum):
+    """User engagement mode while the wearable is READY."""
+
+    IDLE = auto()
+    ACTIVE = auto()
+
+
 @dataclass(frozen=True)
 class HandshakeBudgets:
     """Latency budgets (in seconds) for the handshake state machine."""
@@ -56,6 +63,7 @@ class HandshakeBudgets:
 
 
 TransitionListener = Callable[[HandshakeState, HandshakeState], None]
+EngagementListener = Callable[[EngagementState], None]
 
 
 class HandshakeFSM:
@@ -73,11 +81,14 @@ class HandshakeFSM:
         timer: TimerDriver,
         budgets: HandshakeBudgets,
         listeners: Optional[Iterable[TransitionListener]] = None,
+        engagement_listeners: Optional[Iterable[EngagementListener]] = None,
     ) -> None:
         self._timer = timer
         self._budgets = budgets
         self._listeners = list(listeners or [])
+        self._engagement_listeners = list(engagement_listeners or [])
         self._state = HandshakeState.UNPAIRED
+        self._engagement_state = EngagementState.IDLE
         self._active_timers: MutableMapping[str, TimerHandle] = {}
 
     @property
@@ -90,6 +101,28 @@ class HandshakeFSM:
         """Subscribe to future state transitions."""
 
         self._listeners.append(listener)
+
+    def subscribe_engagement(self, listener: EngagementListener) -> None:
+        """Subscribe to user engagement transitions."""
+
+        self._engagement_listeners.append(listener)
+        listener(self._engagement_state)
+
+    @property
+    def engagement_state(self) -> EngagementState:
+        """Current user engagement mode."""
+
+        return self._engagement_state
+
+    def mark_user_active(self) -> None:
+        """Record that the user interacted with the wearable."""
+
+        self._set_engagement_state(EngagementState.ACTIVE)
+
+    def mark_user_idle(self) -> None:
+        """Record that the wearable no longer has user engagement."""
+
+        self._set_engagement_state(EngagementState.IDLE)
 
     def reset(self) -> None:
         """Return the FSM to the :attr:`~HandshakeState.UNPAIRED` state."""
@@ -208,6 +241,23 @@ class HandshakeFSM:
         self._state = new_state
         for listener in self._listeners:
             listener(previous, new_state)
+        if new_state is not HandshakeState.READY:
+            self._engagement_state = EngagementState.IDLE
+            return
+        # When READY is reached without explicit engagement the wearable is idle.
+        self._emit_engagement()
+
+    def _set_engagement_state(self, state: EngagementState) -> None:
+        if self._engagement_state is state:
+            return
+        self._engagement_state = state
+        self._emit_engagement()
+
+    def _emit_engagement(self) -> None:
+        if self._state is not HandshakeState.READY:
+            return
+        for listener in self._engagement_listeners:
+            listener(self._engagement_state)
 
 
 def load_handshake_budgets(config_path: Path) -> HandshakeBudgets:
