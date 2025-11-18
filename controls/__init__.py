@@ -1,5 +1,6 @@
 """Gesture control grammar utilities."""
 
+from .duty_cycle import DutyCycleScheduler
 from .grammar import (
     DetectionBudget,
     GestureEvent,
@@ -9,6 +10,7 @@ from .grammar import (
 )
 
 __all__ = [
+    "DutyCycleScheduler",
     "DetectionBudget",
     "GestureEvent",
     "GestureGrammar",
