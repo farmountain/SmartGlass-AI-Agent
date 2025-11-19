@@ -26,6 +26,10 @@ from fsm import HandshakeFSM, load_handshake_budgets
 from fsm.handshake import TimerDriver, TimerHandle
 from rayskillkit import RaySkillKitRuntime
 from src.io.telemetry import MetricTimer, log_metric
+from bench.phone_perf_timeline import (
+    DUTY_CYCLE_TIMELINE,
+    TIMELINE_REQUEST_INTERVAL_S,
+)
 
 
 class PassiveTimerHandle(TimerHandle):
@@ -158,6 +162,34 @@ def _write_csv(result: ScenarioResult, artifacts_dir: Path) -> Path:
     return path
 
 
+def _write_timeline_csv(artifacts_dir: Path) -> Path:
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    path = artifacts_dir / "phone_perf_timeline.csv"
+    fieldnames = [
+        "segment",
+        "start_s",
+        "end_s",
+        "duration_s",
+        "engagement",
+        "request_interval_s",
+    ]
+    with path.open("w", newline="") as fp:
+        writer = csv.DictWriter(fp, fieldnames=fieldnames)
+        writer.writeheader()
+        for idx, slice_ in enumerate(DUTY_CYCLE_TIMELINE):
+            writer.writerow(
+                {
+                    "segment": idx,
+                    "start_s": f"{slice_.start_s:.3f}",
+                    "end_s": f"{slice_.end_s:.3f}",
+                    "duration_s": f"{slice_.duration_s:.3f}",
+                    "engagement": slice_.engagement,
+                    "request_interval_s": f"{TIMELINE_REQUEST_INTERVAL_S:.3f}",
+                }
+            )
+    return path
+
+
 def _log_summary(result: ScenarioResult) -> None:
     payload = {
         "scenario": result.scenario,
@@ -225,6 +257,9 @@ def main() -> None:
         _write_csv(result, artifacts_root)
         _log_summary(result)
         results.append(result)
+
+    timeline_path = _write_timeline_csv(artifacts_root)
+    print(f"Exported deterministic engagement timeline to {timeline_path}")
 
     if len(results) > 1:
         combined = artifacts_root / "phone_perf_summary.csv"
