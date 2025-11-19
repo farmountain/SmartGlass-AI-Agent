@@ -6,6 +6,11 @@ from typing import Callable, Iterable, List
 
 import numpy as np
 
+from bench.phone_perf_timeline import (
+    TIMELINE_DURATION_S,
+    TIMELINE_REQUEST_INTERVAL_S,
+    state_for_time,
+)
 from controls import DutyCycleScheduler
 from fsm import EngagementState, HandshakeFSM, HandshakeState, load_handshake_budgets
 from rayskillkit import RaySkillKitRuntime
@@ -53,6 +58,53 @@ def _build_fsm() -> tuple[HandshakeFSM, FakeTimer, float]:
     timer = FakeTimer()
     fsm = HandshakeFSM(timer=timer, budgets=budgets)
     return fsm, timer, budgets.degrade_p50
+
+
+class _CountingOrt:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def infer(self, model_name: str, features: np.ndarray) -> np.ndarray:
+        self.calls += 1
+        return features
+
+
+def _simulate_timeline(idle_hz: float) -> tuple[int, List[float]]:
+    fsm, timer, _ = _build_fsm()
+    scheduler = DutyCycleScheduler(timer, idle_hz=idle_hz, active_hz=0.0)
+    runtime = RaySkillKitRuntime(handshake=fsm, scheduler=scheduler)
+    ort = _CountingOrt()
+    features = np.ones(8, dtype=np.float32)
+    fsm.pair()
+    fsm.mark_user_idle()
+    current_state = EngagementState.IDLE
+    latencies: List[float] = []
+    pending_start: float | None = None
+
+    request_time = 0.0
+    while request_time < TIMELINE_DURATION_S:
+        label = state_for_time(request_time)
+        target = EngagementState.ACTIVE if label == "active" else EngagementState.IDLE
+        if target is not current_state:
+            if target is EngagementState.ACTIVE:
+                fsm.mark_user_active()
+            else:
+                fsm.mark_user_idle()
+            current_state = target
+
+        timer.advance(request_time - timer.now())
+        fsm.heartbeat()
+        result = runtime.run_inference(ort, "demo", features)
+        if result is None:
+            if pending_start is None:
+                pending_start = timer.now()
+        elif pending_start is not None:
+            latencies.append(timer.now() - pending_start)
+            pending_start = None
+
+        request_time = round(request_time + TIMELINE_REQUEST_INTERVAL_S, 10)
+
+    return ort.calls, latencies
 
 
 def test_ready_state_emits_idle_and_active_callbacks() -> None:
@@ -142,3 +194,13 @@ def test_runtime_gates_camera_and_inference() -> None:
 
     timer.advance(0.5)
     assert runtime.run_inference(ort, "demo", features) is not None
+
+
+def test_duty_cycle_timeline_saves_tokens_and_bounds_latency() -> None:
+    baseline_calls, _ = _simulate_timeline(idle_hz=0.0)
+    duty_calls, duty_latencies = _simulate_timeline(idle_hz=2.0)
+
+    assert duty_calls <= baseline_calls * 0.5
+    assert duty_latencies, "Expected duty-cycle gating to introduce measurable latency"
+    allowed_penalty = 0.5  # 1 / idle_hz
+    assert max(duty_latencies) <= allowed_penalty + 1e-6
