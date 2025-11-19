@@ -83,6 +83,17 @@ export PROVIDER=meta
 
 The `meta` provider currently returns placeholder telemetry, frames, and audio envelopes that mirror the expected Ray-Ban SDK schema.
 
+Deterministic vendor-specific mocks are also available so you can stub integrations for different runtimes:
+
+```bash
+export PROVIDER=vuzix    # 640x480 RGB frames + waveguide overlay metadata
+export PROVIDER=xreal    # 1080p Beam-style captures + Nebula overlay stubs
+export PROVIDER=openxr   # Square eye-buffers with host-delegated overlays
+export PROVIDER=visionos # 1440x1440 persona frames + shared-space overlays
+```
+
+Each of these providers exposes deterministic camera/mic fixtures tuned to the vendor's expected resolutions, vendor-tagged audio/permission responses, and a `has_display()` helper that the SDK uses to reflect true overlay availability.
+
 ---
 
 ## 🧩 RaySkillKit Skill Catalogue
