@@ -1,0 +1,56 @@
+name: Release Packaging
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  package:
+    name: Build pilot drop bundle
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Package pilot drop
+        env:
+          MANIFEST_SIGNING_KEY: ${{ secrets.MANIFEST_SIGNING_KEY }}
+        run: |
+          python cicd/package_release.py \
+            --staging-dir dist/pilot_drop \
+            --bundle-name skills_bundle.zip \
+            --key-env MANIFEST_SIGNING_KEY
+
+      - name: Upload bundle artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pilot-drop-${{ github.ref_name }}
+          path: |
+            dist/pilot_drop/skills_bundle.zip
+            dist/pilot_drop/release_manifest.json
+            dist/pilot_drop/release_manifest.sig
+          if-no-files-found: error
+
+      - name: Create draft GitHub release
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: true
+          files: |
+            dist/pilot_drop/skills_bundle.zip
+            dist/pilot_drop/release_manifest.json
+            dist/pilot_drop/release_manifest.sig
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
