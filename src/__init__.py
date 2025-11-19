@@ -23,7 +23,8 @@ if _is_truthy(os.getenv("CI")):
     # Hard block real audio integrations in continuous integration runs. The
     # mocks provide deterministic behaviour and avoid audio device/network
     # dependencies.
-    os.environ["PROVIDER"] = "mock"
+    if not os.environ.get("PROVIDER"):
+        os.environ["PROVIDER"] = "mock"
     os.environ.pop("USE_WHISPER_STREAMING", None)
 
 

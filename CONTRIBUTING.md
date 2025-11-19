@@ -28,6 +28,12 @@ All pull requests trigger automated checks. Typical jobs include linting, docume
 - Update your changes or configuration through the web editor.
 - Re-run the job using the **Re-run** button after pushing a fix.
 
+### Provider conformance test
+
+The hero caption runtime must emit the same `Action` JSON regardless of which wearable provider stub is selected. Run
+`pytest tests/test_provider_conformance.py` to validate this locally. The test injects deterministic audio/overlay mocks so
+you can run it offline, and CI fans out across all supported `PROVIDER` values to catch regressions automatically.
+
 ## 🧭 Review Expectations
 
 - Changes are reviewed by code owners or designated maintainers (see `CODEOWNERS`).
