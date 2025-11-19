@@ -10,10 +10,20 @@ on:
 
 jobs:
   build:
-    name: Build and Test
+    name: Build and Test (${{ matrix.provider }})
+    strategy:
+      fail-fast: false
+      matrix:
+        provider:
+          - mock
+          - meta
+          - vuzix
+          - xreal
+          - openxr
+          - visionos
     runs-on: ubuntu-latest
     env:
-      PROVIDER: mock
+      PROVIDER: ${{ matrix.provider }}
 
     steps:
       - name: Check out repository
@@ -123,7 +133,7 @@ jobs:
         if: ${{ success() && steps.android_assemble.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
-          name: android-aar
+          name: android-aar-${{ matrix.provider }}
           path: sdk-android/build/outputs/aar/*.aar
           if-no-files-found: error
 
@@ -1011,6 +1021,6 @@ PY
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ci-artifacts
+          name: ci-artifacts-${{ matrix.provider }}
           path: artifacts/
           if-no-files-found: warn
