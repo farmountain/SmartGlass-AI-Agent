@@ -48,6 +48,12 @@ class OrtHub(
 
     fun isConnected(endpoint: String): Boolean = endpoint in connectedEndpoints
 
+    fun setIdleMode(idle: Boolean) {
+        ortWrapper.isIdle = idle
+    }
+
+    fun isIdle(): Boolean = ortWrapper.isIdle
+
     fun session(skillId: String): OrtSession? = sessions[skillId]
 
     fun skillRegistry(): SkillRegistry = registry
