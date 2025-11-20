@@ -1,0 +1,7 @@
+Scenario,Inference/Compute,DAL Traffic,Hot Updates,Control-plane Overhead,Total Monthly Cost,Notes
+On-device,"CEILING(Inputs!B2/Inputs!B8,1)*Inputs!B7",Inputs!B2*Inputs!B4*Inputs!B11,"CEILING(Inputs!B2/Inputs!B8,1)*Inputs!B5*Inputs!B6*Inputs!B9",Inputs!B13,SUM(B2:E2),Edge devices run locally; cost scales with fleet size
+Cloud,Inputs!B2*Inputs!B3*Inputs!B10,Inputs!B2*Inputs!B4*Inputs!B11,Inputs!B5*Inputs!B6*Inputs!B14,Inputs!B12,SUM(B3:E3),Hosted inference; costs track usage and platform overhead
+
+Derived Metrics,Value,Units,Definition
+Device count (on-device),"CEILING(Inputs!B2/Inputs!B8,1)",devices,Fleet required for modeled sessions
+DAL traffic per month,Inputs!B2*Inputs!B4,GB,Session volume multiplied by DAL payload
