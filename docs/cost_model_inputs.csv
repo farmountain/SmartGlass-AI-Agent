@@ -1,0 +1,14 @@
+Parameter,Value,Units/Notes,Description
+Session volume (per month),50000,sessions,Modeled workload size
+Avg inference duration,2.0,minutes per session,Compute time per session
+DAL traffic per session,0.05,GB,Payload sent to/from DAL per session
+Hot-update cadence,4,per month,How often model weights/config ship
+Update package size,0.5,GB,Average payload per update
+Device amortization,120.0,$ per device per month,On-device hardware amortization
+Sessions per device capacity,10000,sessions per month,Throughput a device can serve
+Update distribution cost,0.08,$ per GB,Network cost to push updates to devices
+Cloud inference cost,0.12,$ per minute,GPU/CPU minutes for cloud serving
+DAL egress cost,0.09,$ per GB,Data-layer traffic pricing
+Cloud control-plane overhead,500.0,$ per month,Ops + storage for hosted services
+On-device control-plane overhead,200.0,$ per month,Ops for edge fleet management
+Cloud update distribution cost,0.02,$ per GB,Distribution for shared cloud replicas
