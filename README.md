@@ -46,6 +46,16 @@ cd SmartGlass-AI-Agent
 pip install -r requirements.txt
 ````
 
+### 📊 Render documentation KPIs
+
+Generate a Markdown-formatted table from the latest KPI CSVs under `docs/artifacts`:
+
+```bash
+python scripts/doc_kpi_table.py --artifacts docs/artifacts > /tmp/doc_kpis.md
+```
+
+The CI summary step automatically runs this helper and posts the newest table alongside the other benchmark outputs.
+
 ---
 
 ### 🔨 Use the Agent in Python
