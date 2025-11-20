@@ -333,6 +333,18 @@ PY
             echo "";
             echo "Provider: ${PROVIDER:-unknown}";
             echo "";
+            kpi_output=$(python scripts/doc_kpi_table.py --artifacts docs/artifacts 2>/tmp/doc_kpi_table.log || true)
+            if [ -n "$kpi_output" ]; then
+              echo "### Documentation KPIs";
+              echo "";
+              echo "$kpi_output";
+              echo "";
+            elif [ -s /tmp/doc_kpi_table.log ]; then
+              echo "### Documentation KPIs";
+              echo "";
+              cat /tmp/doc_kpi_table.log;
+              echo "";
+            fi
             echo "### Wearables SDK";
             echo "";
             echo "- Provider: ${PROVIDER:-unknown}";
