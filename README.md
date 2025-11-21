@@ -46,6 +46,16 @@ cd SmartGlass-AI-Agent
 pip install -r requirements.txt
 ````
 
+#### Microphone + TTS prerequisites
+
+The Meta provider streams audio via either **sounddevice** (default) or **PyAudio**, and uses **pyttsx3** for offline text-to-speech. Both capture backends depend on [PortAudio](http://www.portaudio.com/):
+
+- **Linux (Debian/Ubuntu):** `sudo apt-get install portaudio19-dev` then `pip install sounddevice` (or `pip install pyaudio`).
+- **macOS (Homebrew):** `brew install portaudio` then `pip install sounddevice` (or `pip install pyaudio`).
+- **Windows:** install the matching [PortAudio binary](https://www.portaudio.com/download.html) or use `pip install pipwin && pipwin install pyaudio`. If `sounddevice` installation fails, prefer the `pyaudio` fallback.
+
+If you only need playback, `pyttsx3` has no external audio driver requirement, but microphone capture will need at least one of the PortAudio-backed libraries above.
+
 ### 📊 Render documentation KPIs
 
 Generate a Markdown-formatted table from the latest KPI CSVs under `docs/artifacts`:

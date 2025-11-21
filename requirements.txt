@@ -13,6 +13,9 @@ PyNaCl>=1.5.0
 # Audio Processing & Streaming
 pydub>=0.25.1
 librosa>=0.10.0
+sounddevice>=0.4.6      # Primary microphone capture (PortAudio-backed)
+pyaudio>=0.2.14         # Alternate microphone capture (PortAudio-backed)
+pyttsx3>=2.90           # Offline TTS engine for Meta provider
 
 # Vision & Image Processing
 opencv-python>=4.8.0
