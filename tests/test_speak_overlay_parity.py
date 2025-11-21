@@ -1,5 +1,6 @@
 import numpy as np
 
+from src.perception.ocr import MockOCR
 from src.skills.caption import caption_from_provider
 
 
@@ -50,12 +51,14 @@ class _Provider:
 
 def test_caption_overlay_phone_parity():
     frames = _moving_square()
+    mock_ocr = MockOCR()
+    mock_ocr.intensity_threshold = 0
 
     overlay_provider = _Provider(frames, show_overlay=True)
     phone_provider = _Provider(frames, show_overlay=False)
 
-    overlay_payload = caption_from_provider(overlay_provider)
-    phone_payload = caption_from_provider(phone_provider)
+    overlay_payload = caption_from_provider(overlay_provider, ocr_backend=mock_ocr.text_and_boxes)
+    phone_payload = caption_from_provider(phone_provider, ocr_backend=mock_ocr.text_and_boxes)
 
     assert overlay_provider.display.rendered == overlay_payload
     assert overlay_payload == phone_payload

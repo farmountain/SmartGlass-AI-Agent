@@ -1,5 +1,6 @@
 import numpy as np
 
+from src.perception.ocr import MockOCR
 from src.perception.vision_keyframe import VQEncoder, select_keyframes
 from src.skills.caption import MockCaptioner, caption_from_frames, caption_from_provider
 
@@ -62,7 +63,7 @@ def test_caption_from_frames_reports_motion_and_signature():
     assert f"{len(key_indices)} keyframes" in caption
     assert "motion towards right" in caption
     assert f"texture codes {signature}" in caption
-    assert caption.endswith("OCR snippet: EXIT.")
+    assert caption.endswith("Detected text: EXIT.")
 
 
 def test_mock_captioner_matches_helper():
@@ -76,7 +77,9 @@ def test_caption_from_provider_produces_caption_and_audio():
     frames = _moving_square()
     provider = _Provider(frames, show_overlay=False)
 
-    payload = caption_from_provider(provider)
+    mock_ocr = MockOCR()
+    mock_ocr.intensity_threshold = 0
+    payload = caption_from_provider(provider, ocr_backend=mock_ocr.text_and_boxes)
 
     assert payload["type"] == "caption"
     assert payload["text"].strip()
