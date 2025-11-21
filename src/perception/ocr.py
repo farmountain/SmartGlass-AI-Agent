@@ -14,6 +14,7 @@ import numpy as np
 BBox = Tuple[int, int, int, int]
 
 _EASYOCR_READER = None
+_TESSERACT_CLIENT = None
 
 
 def _prepare_image(image: np.ndarray) -> np.ndarray:
@@ -179,8 +180,91 @@ def _easyocr_text_and_boxes(image: np.ndarray) -> Dict[str, Sequence]:
     if _EASYOCR_READER is None:  # pragma: no cover - optional dependency
         _EASYOCR_READER = easyocr.Reader(["en"], gpu=False)
 
+    return _assemble_result(*_easyocr_parse(_EASYOCR_READER, image))
+
+
+def _tesseract_text_and_boxes(image: np.ndarray) -> Dict[str, Sequence]:
+    global _TESSERACT_CLIENT
+    try:
+        import pytesseract  # type: ignore
+        from pytesseract import Output  # type: ignore
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise RuntimeError(
+            "Tesseract backend requested but the 'pytesseract' package is not installed. "
+            "Install it with `pip install pytesseract` and ensure the Tesseract binary "
+            "is available (e.g., `sudo apt-get install tesseract-ocr`)."
+        ) from exc
+
+    if _TESSERACT_CLIENT is None:
+        _TESSERACT_CLIENT = (pytesseract, Output)
+
+    return _assemble_result(*_tesseract_parse(*_TESSERACT_CLIENT, image))
+
+
+def text_and_boxes(image: np.ndarray) -> Dict[str, Sequence]:
+    """Dispatch to the configured OCR engine."""
+
     array = _prepare_image(image)
-    results = _EASYOCR_READER.readtext(array, detail=1)
+
+    use_easyocr = _env_flag("USE_EASYOCR")
+    use_tesseract = _env_flag("USE_TESSERACT")
+    if use_easyocr and use_tesseract:
+        raise RuntimeError("Only one OCR backend may be enabled at a time.")
+
+    preferred = "easyocr" if use_easyocr else "tesseract" if use_tesseract else None
+    backend = get_ocr_backend(preferred)
+
+    return backend(array)
+
+
+class EasyOCR:
+    """Wrapper around the EasyOCR library for extracting text and boxes."""
+
+    def __init__(self, languages: Optional[Sequence[str]] = None, gpu: bool = False):
+        try:
+            import easyocr  # type: ignore
+        except ImportError as exc:  # pragma: no cover - optional dependency
+            raise RuntimeError(
+                "EasyOCR backend requested but the 'easyocr' package is not installed. "
+                "Install it with `pip install easyocr`."
+            ) from exc
+
+        self._reader = easyocr.Reader(list(languages or ["en"]), gpu=gpu)
+
+    def __call__(self, image: np.ndarray) -> Tuple[str, Tuple[Tuple[str, BBox], ...]]:
+        words, boxes, conf = _easyocr_parse(self._reader, image)
+        assembled = _assemble_result(words, boxes, conf)
+        per_word = tuple((entry["text"], entry["box"]) for entry in assembled["by_word"])
+        return assembled["text"], per_word
+
+
+class TesseractOCR:
+    """Wrapper around pytesseract for extracting text and boxes."""
+
+    def __init__(self):
+        try:
+            import pytesseract  # type: ignore
+            from pytesseract import Output  # type: ignore
+        except ImportError as exc:  # pragma: no cover - optional dependency
+            raise RuntimeError(
+                "Tesseract backend requested but the 'pytesseract' package is not installed. "
+                "Install it with `pip install pytesseract` and ensure the Tesseract binary "
+                "is available (e.g., `sudo apt-get install tesseract-ocr`)."
+            ) from exc
+
+        self._pytesseract = pytesseract
+        self._output = Output
+
+    def __call__(self, image: np.ndarray) -> Tuple[str, Tuple[Tuple[str, BBox], ...]]:
+        words, boxes, conf = _tesseract_parse(self._pytesseract, self._output, image)
+        assembled = _assemble_result(words, boxes, conf)
+        per_word = tuple((entry["text"], entry["box"]) for entry in assembled["by_word"])
+        return assembled["text"], per_word
+
+
+def _easyocr_parse(reader, image: np.ndarray) -> Tuple[Sequence[str], Sequence[BBox], Sequence[float]]:
+    array = _prepare_image(image)
+    results = reader.readtext(array, detail=1)
 
     words: List[str] = []
     boxes: List[BBox] = []
@@ -194,20 +278,12 @@ def _easyocr_text_and_boxes(image: np.ndarray) -> Dict[str, Sequence]:
         words.append(text)
         conf.append(float(confidence))
 
-    return _assemble_result(words, boxes, conf)
+    return words, boxes, conf
 
 
-def _tesseract_text_and_boxes(image: np.ndarray) -> Dict[str, Sequence]:
-    try:
-        import pytesseract  # type: ignore
-        from pytesseract import Output  # type: ignore
-    except ImportError as exc:  # pragma: no cover - optional dependency
-        raise RuntimeError(
-            "Tesseract backend requested but the 'pytesseract' package is not installed. "
-            "Install it with `pip install pytesseract` and ensure the Tesseract binary "
-            "is available (e.g., `sudo apt-get install tesseract-ocr`)."
-        ) from exc
-
+def _tesseract_parse(
+    pytesseract, Output, image: np.ndarray
+) -> Tuple[Sequence[str], Sequence[BBox], Sequence[float]]:
     array = _prepare_image(image)
     if array.ndim == 3:
         grayscale = array.mean(axis=2).astype(np.uint8)
@@ -238,23 +314,13 @@ def _tesseract_text_and_boxes(image: np.ndarray) -> Dict[str, Sequence]:
         words.append(stripped)
         conf.append(score)
 
-    return _assemble_result(words, boxes, conf)
+    return words, boxes, conf
 
 
-def text_and_boxes(image: np.ndarray) -> Dict[str, Sequence]:
-    """Dispatch to the configured OCR engine."""
-
-    array = _prepare_image(image)
-
-    use_easyocr = _env_flag("USE_EASYOCR")
-    use_tesseract = _env_flag("USE_TESSERACT")
-    if use_easyocr and use_tesseract:
-        raise RuntimeError("Only one OCR backend may be enabled at a time.")
-
-    preferred = "easyocr" if use_easyocr else "tesseract" if use_tesseract else None
-    backend = get_ocr_backend(preferred)
-
-    return backend(array)
-
-
-__all__ = ["MockOCR", "get_ocr_backend", "text_and_boxes"]
+__all__ = [
+    "EasyOCR",
+    "MockOCR",
+    "TesseractOCR",
+    "get_ocr_backend",
+    "text_and_boxes",
+]
