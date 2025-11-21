@@ -66,7 +66,10 @@ class SpyRedactor(DeterministicRedactor):
         array = np.array(image)
         self.calls.append(array)
         redacted = np.full_like(array, self._redacted_value)
-        return redacted, RedactionSummary(faces_masked=1, plates_masked=1)
+        masked_area = int(array.shape[0] * array.shape[1]) if array.size else 0
+        return redacted, RedactionSummary(
+            faces_masked=1, plates_masked=1, total_masked_area=masked_area
+        )
 
 
 @pytest.fixture(autouse=True)
@@ -87,7 +90,13 @@ def test_cloud_branch_applies_redaction_before_cloud(monkeypatch, caplog):
     assert len(spy.calls) == 1
     # Vision processor must receive the redacted imagery, not the original input.
     assert np.all(agent.vision_processor.last_image == 7)
-    assert result["redaction"] == {"faces_masked": 1, "plates_masked": 1}
+    assert result["redaction"] == {
+        "faces_masked": 1,
+        "plates_masked": 1,
+        "total_masked_area": 16,
+    }
+    assert result["metadata"]["redaction_summary"] == result["redaction"]
+    assert result["metadata"]["cloud_offload"] is True
     assert "Redaction applied before cloud processing" in caplog.text
 
 
@@ -102,4 +111,5 @@ def test_local_branch_bypasses_redaction(monkeypatch, caplog):
     assert spy.calls == []
     assert np.all(agent.vision_processor.last_image == image)
     assert "redaction" not in result
+    assert result["metadata"]["cloud_offload"] is False
     assert "Processing image locally without redaction" in caplog.text
