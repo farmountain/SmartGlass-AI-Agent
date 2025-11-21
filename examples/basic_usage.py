@@ -9,6 +9,7 @@ import sys
 sys.path.append('../src')
 
 from smartglass_agent import SmartGlassAgent
+from llm_snn_backend import SNNLLMBackend
 
 
 def main():
@@ -22,6 +23,8 @@ def main():
         whisper_model="base",      # Use 'tiny' for faster processing, 'base' for better accuracy
         clip_model="openai/clip-vit-base-patch32",
         gpt2_model="gpt2"
+        # llm_backend defaults to ANN via GPT-2. Pass SNNLLMBackend() to experiment
+        # with the placeholder SNN student implementation while keeping the same API.
     )
     
     # Display agent information

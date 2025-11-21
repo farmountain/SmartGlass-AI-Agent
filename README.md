@@ -72,19 +72,29 @@ The CI summary step automatically runs this helper and posts the newest table al
 
 ```python
 from src.smartglass_agent import SmartGlassAgent
+from src import SNNLLMBackend
 
+# Default: ANN language backend powered by the legacy GPT-2 generator
 agent = SmartGlassAgent(
     whisper_model="base",
     clip_model="openai/clip-vit-base-patch32",
-    gpt2_model="gpt2"
+    gpt2_model="gpt2",
 )
 
 result = agent.process_multimodal_query(
     text_query="What am I looking at?",
-    image_input="scene.jpg"
+    image_input="scene.jpg",
 )
 
 print("Response:", result["response"])
+
+# Optional: swap in the experimental SNN student backend
+snn_agent = SmartGlassAgent(
+    whisper_model="base",
+    clip_model="openai/clip-vit-base-patch32",
+    gpt2_model="gpt2",
+    llm_backend=SNNLLMBackend(),
+)
 ```
 
 #### Provider selection
