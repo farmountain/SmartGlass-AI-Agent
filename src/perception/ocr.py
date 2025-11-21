@@ -5,7 +5,9 @@ from __future__ import annotations
 import os
 from collections import deque
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Sequence, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
+
+from importlib.util import find_spec
 
 import numpy as np
 
@@ -117,13 +119,61 @@ def _env_flag(name: str) -> bool:
     return value in {"1", "true", "yes", "on"}
 
 
+def _is_easyocr_available() -> bool:
+    try:
+        return find_spec("easyocr") is not None
+    except Exception:  # pragma: no cover - defensive check
+        return False
+
+
+def _is_tesseract_available() -> bool:
+    try:
+        return find_spec("pytesseract") is not None
+    except Exception:  # pragma: no cover - defensive check
+        return False
+
+
+def get_ocr_backend(preferred: Optional[str] = None) -> Callable[[np.ndarray], Dict[str, Sequence]]:
+    """Select an OCR backend based on availability and preference."""
+
+    normalized = preferred.lower() if preferred else None
+    if normalized not in {None, "easyocr", "tesseract"}:
+        raise ValueError(
+            "Unsupported OCR backend preference. Choose 'easyocr' or 'tesseract'."
+        )
+
+    availability = {
+        "easyocr": _is_easyocr_available(),
+        "tesseract": _is_tesseract_available(),
+    }
+
+    candidates: Tuple[str, ...]
+    if normalized:
+        candidates = (normalized,) + tuple(
+            backend for backend in ("easyocr", "tesseract") if backend != normalized
+        )
+    else:
+        candidates = ("easyocr", "tesseract")
+
+    for backend in candidates:
+        if availability.get(backend):
+            return _easyocr_text_and_boxes if backend == "easyocr" else _tesseract_text_and_boxes
+
+    raise RuntimeError(
+        "No OCR backends are available. Install EasyOCR (`pip install easyocr`) or "
+        "pytesseract with the Tesseract binary (`pip install pytesseract` and "
+        "`sudo apt-get install tesseract-ocr`)."
+    )
+
+
 def _easyocr_text_and_boxes(image: np.ndarray) -> Dict[str, Sequence]:
     global _EASYOCR_READER
     try:
         import easyocr  # type: ignore
     except ImportError as exc:  # pragma: no cover - optional dependency
         raise RuntimeError(
-            "EasyOCR backend requested but the 'easyocr' package is not installed."
+            "EasyOCR backend requested but the 'easyocr' package is not installed. "
+            "Install it with `pip install easyocr`."
         ) from exc
 
     if _EASYOCR_READER is None:  # pragma: no cover - optional dependency
@@ -153,7 +203,9 @@ def _tesseract_text_and_boxes(image: np.ndarray) -> Dict[str, Sequence]:
         from pytesseract import Output  # type: ignore
     except ImportError as exc:  # pragma: no cover - optional dependency
         raise RuntimeError(
-            "Tesseract backend requested but the 'pytesseract' package is not installed."
+            "Tesseract backend requested but the 'pytesseract' package is not installed. "
+            "Install it with `pip install pytesseract` and ensure the Tesseract binary "
+            "is available (e.g., `sudo apt-get install tesseract-ocr`)."
         ) from exc
 
     array = _prepare_image(image)
@@ -199,12 +251,10 @@ def text_and_boxes(image: np.ndarray) -> Dict[str, Sequence]:
     if use_easyocr and use_tesseract:
         raise RuntimeError("Only one OCR backend may be enabled at a time.")
 
-    if use_easyocr:
-        return _easyocr_text_and_boxes(array)
-    if use_tesseract:
-        return _tesseract_text_and_boxes(array)
+    preferred = "easyocr" if use_easyocr else "tesseract" if use_tesseract else None
+    backend = get_ocr_backend(preferred)
 
-    return MockOCR().text_and_boxes(array)
+    return backend(array)
 
 
-__all__ = ["MockOCR", "text_and_boxes"]
+__all__ = ["MockOCR", "get_ocr_backend", "text_and_boxes"]
