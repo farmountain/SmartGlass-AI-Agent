@@ -190,47 +190,84 @@ class DeterministicRedactor:
         self,
         face_mask_size: int = 12,
         plate_mask_size: int = 8,
-        mask_width: Optional[int] = None,
-        mask_height: Optional[int] = None,
+        mask_width: Optional[float] = None,
+        mask_height: Optional[float] = None,
+        face_padding_ratio: float = 0.15,
+        plate_padding_ratio: float = 0.1,
+        enable_face_detection: bool = True,
+        enable_plate_detection: bool = True,
     ) -> None:
         self.face_mask_size = face_mask_size
         self.plate_mask_size = plate_mask_size
         self.mask_width = mask_width
         self.mask_height = mask_height
+        self.face_padding_ratio = face_padding_ratio
+        self.plate_padding_ratio = plate_padding_ratio
+        self.enable_face_detection = enable_face_detection
+        self.enable_plate_detection = enable_plate_detection
+
+    @staticmethod
+    def _resolve_dimension(spec: Optional[float], *, default: int, max_dim: int) -> int:
+        """Resolve an absolute or fractional dimension into pixels."""
+
+        if spec is None:
+            return default
+
+        if isinstance(spec, float) and 0 < spec <= 1:
+            return max(1, int(max_dim * spec))
+
+        resolved = int(spec)
+        return max(1, resolved)
 
     def __call__(self, image: ArrayLike) -> Tuple[ArrayLike, RedactionSummary]:
         """Apply deterministic redaction to the provided image."""
 
         array, restore = _ensure_array(image)
 
+        height, width = array.shape[:2] if array.size else (0, 0)
+
         faces_masked = 0
         plates_masked = 0
         total_area = 0
 
-        face_boxes = _detect_faces(array)
+        face_boxes = _detect_faces(array) if self.enable_face_detection else []
         if face_boxes:
             for box in face_boxes:
-                masked_area = _mask_rectangle(array, box, 0)
+                masked_area = _mask_rectangle(
+                    array, box, 0, padding_ratio=self.face_padding_ratio
+                )
                 if masked_area > 0:
                     faces_masked += 1
                     total_area += masked_area
         else:
-            face_width = self.mask_width or self.face_mask_size
-            face_height = self.mask_height or self.face_mask_size
+            face_width = self._resolve_dimension(
+                self.mask_width, default=self.face_mask_size, max_dim=width
+            )
+            face_height = self._resolve_dimension(
+                self.mask_height, default=self.face_mask_size, max_dim=height
+            )
             faces, area = _mask_block(array, face_height, face_width, 0, anchor="top_left")
             faces_masked += faces
             total_area += area
 
-        plate_boxes = _detect_plates(array)
+        plate_boxes = _detect_plates(array) if self.enable_plate_detection else []
         if plate_boxes:
             for box in plate_boxes:
-                masked_area = _mask_rectangle(array, box, 0, padding_ratio=0.1)
+                masked_area = _mask_rectangle(
+                    array, box, 0, padding_ratio=self.plate_padding_ratio
+                )
                 if masked_area > 0:
                     plates_masked += 1
                     total_area += masked_area
         else:
-            plate_height = self.mask_height or self.plate_mask_size
-            plate_width = (self.mask_width or self.plate_mask_size * 2)
+            plate_height = self._resolve_dimension(
+                self.mask_height, default=self.plate_mask_size, max_dim=height
+            )
+            plate_width = self._resolve_dimension(
+                self.mask_width,
+                default=self.plate_mask_size * 2,
+                max_dim=width,
+            )
             plates, area = _mask_block(
                 array,
                 plate_height,

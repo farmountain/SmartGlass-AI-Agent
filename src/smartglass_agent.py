@@ -61,7 +61,14 @@ class SmartGlassAgent:
         print("SmartGlass AI Agent initialized successfully!")
 
         # Privacy redaction pipeline
-        self.redactor = redactor or DeterministicRedactor()
+        self.redactor = redactor or DeterministicRedactor(
+            mask_width=0.1,
+            mask_height=0.1,
+            face_padding_ratio=0.15,
+            plate_padding_ratio=0.1,
+            enable_face_detection=True,
+            enable_plate_detection=True,
+        )
 
         # Conversation history
         self.conversation_history: List[str] = []
@@ -191,6 +198,7 @@ class SmartGlassAgent:
         # Process image if provided
         visual_context = None
         redaction_summary: Optional[RedactionSummary] = None
+        metadata: Dict[str, Any] = {"cloud_offload": cloud_offload}
         if image_input is not None:
             if cloud_offload:
                 redacted_image, redaction_summary = self.redactor(image_input)
@@ -215,7 +223,11 @@ class SmartGlassAgent:
             "response": response,
         }
         if redaction_summary is not None:
-            result["redaction"] = redaction_summary.as_dict()
+            redaction_details = redaction_summary.as_dict()
+            result["redaction"] = redaction_details
+            metadata["redaction_summary"] = redaction_details
+
+        result["metadata"] = metadata
 
         return result
     
