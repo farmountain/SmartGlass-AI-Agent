@@ -113,3 +113,50 @@ def test_local_branch_bypasses_redaction(monkeypatch, caplog):
     assert "redaction" not in result
     assert result["metadata"]["cloud_offload"] is False
     assert "Processing image locally without redaction" in caplog.text
+
+
+def test_detected_faces_are_masked(monkeypatch):
+    dummy_face_locations = [(1, 4, 4, 1)]
+
+    class DummyFaceRecognition:
+        @staticmethod
+        def face_locations(image):  # pragma: no cover - trivial pass-through
+            return dummy_face_locations
+
+    monkeypatch.setattr("privacy.redact.face_recognition", DummyFaceRecognition)
+
+    image = np.ones((6, 6, 3), dtype=np.uint8) * 127
+    redactor = DeterministicRedactor(
+        face_padding_ratio=0.0,
+        enable_plate_detection=False,
+        plate_mask_size=1,
+        mask_width=1,
+        mask_height=1,
+    )
+
+    redacted, summary = redactor(image)
+
+    assert summary == RedactionSummary(
+        faces_masked=1, plates_masked=1, total_masked_area=10
+    )
+    assert np.all(redacted[1:4, 1:4] == 0)
+    assert np.all(redacted[-1, -1, ...] == 255)
+
+
+def test_fallback_masks_respect_configurable_sizes(monkeypatch):
+    monkeypatch.setattr("privacy.redact.face_recognition", None)
+    monkeypatch.setattr("privacy.redact.mediapipe", None)
+    monkeypatch.setattr("privacy.redact.pytesseract", None)
+
+    image = np.ones((4, 8, 3), dtype=np.uint8) * 200
+    redactor = DeterministicRedactor(mask_width=0.5, mask_height=0.25)
+
+    redacted, summary = redactor(image)
+
+    assert summary == RedactionSummary(
+        faces_masked=1, plates_masked=1, total_masked_area=8
+    )
+    # Face mask (top-left) should be 1 row by 4 columns of zeros.
+    assert np.all(redacted[0, 0:4] == 0)
+    # Plate mask (bottom-right) should be 1 row by 4 columns of 255s.
+    assert np.all(redacted[-1, -4:] == 255)
