@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable, Sequence
+from typing import Any, Callable, Iterable, Sequence
 
 import numpy as np
 
+from src.perception.ocr import get_ocr_backend
 from src.perception.vision_keyframe import VQEncoder, frames_from_camera, select_keyframes
 
 __all__ = ["MockCaptioner", "caption_from_frames", "caption_from_provider"]
@@ -80,6 +81,7 @@ def caption_from_frames(
     frames: Sequence[np.ndarray] | np.ndarray,
     *,
     ocr_text: str | None = None,
+    ocr_backend: Callable[[np.ndarray], dict] | None = None,
     diff_tau: float = 8.0,
     min_gap: int = 3,
     encoder: VQEncoder | None = None,
@@ -98,16 +100,44 @@ def caption_from_frames(
     motion = _describe_motion(keyframes)
     signature = _signature_from_features(features)
 
+    backend: Callable[[np.ndarray], dict] | None = ocr_backend
+    if backend is None:
+        try:
+            backend = get_ocr_backend()
+        except Exception:
+            backend = None
+
+    seen_text: set[str] = set()
+    snippets: list[str] = []
+
+    if ocr_text:
+        stripped = ocr_text.strip()
+        if stripped:
+            seen_text.add(stripped)
+            snippets.append(stripped)
+
+    if backend is not None:
+        for frame in keyframes:
+            try:
+                result = backend(frame)
+                detected = str(result.get("text", "")).strip()
+            except Exception:
+                continue
+            if detected and detected not in seen_text:
+                seen_text.add(detected)
+                snippets.append(detected)
+
     parts = [
         f"{len(key_indices)} keyframes",
         motion,
         f"texture codes {signature}",
     ]
     caption = "; ".join(parts) + "."
-    if ocr_text:
-        ocr = ocr_text.strip()
-        if ocr:
-            caption += f" OCR snippet: {ocr}."
+
+    if snippets:
+        snippet_text = " ".join(snippets)
+        caption += f" Detected text: {snippet_text}."
+
     return caption
 
 
@@ -122,10 +152,17 @@ class MockCaptioner:
     def __post_init__(self) -> None:
         self._encoder = VQEncoder(seed=self.seed)
 
-    def generate(self, frames: Sequence[np.ndarray] | np.ndarray, *, ocr_text: str | None = None) -> str:
+    def generate(
+        self,
+        frames: Sequence[np.ndarray] | np.ndarray,
+        *,
+        ocr_text: str | None = None,
+        ocr_backend: Callable[[np.ndarray], dict] | None = None,
+    ) -> str:
         return caption_from_frames(
             frames,
             ocr_text=ocr_text,
+            ocr_backend=ocr_backend,
             diff_tau=self.diff_tau,
             min_gap=self.min_gap,
             encoder=self._encoder,
@@ -139,14 +176,22 @@ def caption_from_provider(
     *,
     seconds: int = 1,
     captioner: MockCaptioner | None = None,
+    ocr_backend: Callable[[np.ndarray], dict] | None = None,
 ) -> dict:
     """Generate and present a caption using a provider's hardware hooks."""
 
     clip = frames_from_camera(provider, seconds=seconds)
     frames = np.moveaxis(clip, -1, 0)
 
+    backend = ocr_backend
+    if backend is None:
+        try:
+            backend = get_ocr_backend()
+        except Exception:
+            backend = None
+
     engine = captioner or MockCaptioner()
-    text = engine.generate(frames)
+    text = engine.generate(frames, ocr_backend=backend)
 
     speaker = getattr(provider, "audio", None) or getattr(provider, "audio_out", None)
     if speaker is None or not hasattr(speaker, "speak"):
