@@ -11,9 +11,10 @@ from PIL import Image
 
 from privacy.redact import DeterministicRedactor, RedactionSummary
 
-from .whisper_processor import WhisperAudioProcessor
 from .clip_vision import CLIPVisionProcessor
 from .gpt2_generator import GPT2TextGenerator
+from .llm_backend import AnnLLMBackend, LLMBackend
+from .whisper_processor import WhisperAudioProcessor
 
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,10 @@ class SmartGlassAgent:
     - Speech recognition via Whisper
     - Visual understanding via CLIP
     - Natural language responses via GPT-2
+
+    The language model component is injected via the :class:`LLMBackend`
+    protocol, enabling callers to swap in different LLM implementations
+    (on-device, cloud, or mocked) without changing the agent workflow.
     """
     
     def __init__(
@@ -35,7 +40,10 @@ class SmartGlassAgent:
         clip_model: str = "openai/clip-vit-base-patch32",
         gpt2_model: str = "gpt2",
         device: Optional[str] = None,
-        redactor: Optional[Callable[[Union[str, Image.Image, np.ndarray]], Tuple[Any, RedactionSummary]]] = None,
+        redactor: Optional[
+            Callable[[Union[str, Image.Image, np.ndarray]], Tuple[Any, RedactionSummary]]
+        ] = None,
+        llm_backend: Optional[LLMBackend] = None,
     ):
         """
         Initialize SmartGlass AI Agent.
@@ -43,9 +51,13 @@ class SmartGlassAgent:
         Args:
             whisper_model: Whisper model size ('tiny', 'base', 'small', 'medium', 'large')
             clip_model: CLIP model name from HuggingFace
-            gpt2_model: GPT-2 model name ('gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl')
+            gpt2_model: Legacy GPT-2 model name retained for backwards compatibility
             device: Device to run models on ('cuda', 'cpu', or None for auto-detect)
             redactor: Optional callable used to redact imagery before cloud processing.
+            llm_backend: Optional language model backend. By default the ANN backend
+                is wired up using the legacy GPT-2 settings so downstream callers can
+                inject alternative implementations (e.g., cloud or distilled models)
+                without modifying the agent logic.
         """
         print("Initializing SmartGlass AI Agent...")
         print("=" * 60)
@@ -56,6 +68,7 @@ class SmartGlassAgent:
         self.vision_processor = CLIPVisionProcessor(model_name=clip_model, device=device)
         print("-" * 60)
         self.text_generator = GPT2TextGenerator(model_name=gpt2_model, device=device)
+        self.llm_backend = llm_backend or AnnLLMBackend(generator=self.text_generator)
         
         print("=" * 60)
         print("SmartGlass AI Agent initialized successfully!")
@@ -147,14 +160,28 @@ class SmartGlassAgent:
         Args:
             user_query: User's question or command
             visual_context: Description of what the agent sees
-        
+
         Returns:
             Generated response text
+
+        The response is produced by the configured :class:`LLMBackend`, so
+        alternative backends can be injected at construction time to change
+        how prompts are handled (e.g., to call a cloud model instead of the
+        default ANN adapter).
         """
-        response = self.text_generator.generate_smart_response(
-            user_query,
-            context=visual_context,
-            response_type="helpful"
+        prompt_sections = []
+        if visual_context:
+            prompt_sections.append(f"Visual context: {visual_context}")
+        prompt_sections.append(f"User query: {user_query}")
+
+        prompt = "\n".join(prompt_sections)
+        response = self.llm_backend.generate(
+            prompt,
+            max_tokens=256,
+            system_prompt=(
+                "You are a helpful assistant for smart glasses users. Use the provided "
+                "visual context when available to deliver concise, actionable answers."
+            ),
         )
         
         # Update conversation history
@@ -186,6 +213,10 @@ class SmartGlassAgent:
         
         Returns:
             Dictionary with query, context, and response
+
+        The prompt forwarded to the language backend combines the user query
+        with any available visual context so downstream implementations can
+        reason over both modalities consistently.
         """
         # Process audio if provided
         if audio_input is not None:
