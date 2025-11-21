@@ -32,6 +32,7 @@ from .whisper_processor import WhisperAudioProcessor
 from .clip_vision import CLIPVisionProcessor
 from .gpt2_generator import GPT2TextGenerator
 from .llm_backend import AnnLLMBackend, LLMBackend
+from .llm_snn_backend import SNNLLMBackend
 from .smartglass_agent import SmartGlassAgent
 from .audio import get_default_asr, get_default_vad
 from .fusion import ConfidenceFusion
@@ -45,6 +46,7 @@ __all__ = [
     "GPT2TextGenerator",
     "LLMBackend",
     "AnnLLMBackend",
+    "SNNLLMBackend",
     "SmartGlassAgent",
     "get_default_asr",
     "get_default_vad",
