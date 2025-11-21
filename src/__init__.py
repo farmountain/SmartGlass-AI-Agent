@@ -31,6 +31,7 @@ if _is_truthy(os.getenv("CI")):
 from .whisper_processor import WhisperAudioProcessor
 from .clip_vision import CLIPVisionProcessor
 from .gpt2_generator import GPT2TextGenerator
+from .llm_backend import AnnLLMBackend, LLMBackend
 from .smartglass_agent import SmartGlassAgent
 from .audio import get_default_asr, get_default_vad
 from .fusion import ConfidenceFusion
@@ -42,6 +43,8 @@ __all__ = [
     "WhisperAudioProcessor",
     "CLIPVisionProcessor",
     "GPT2TextGenerator",
+    "LLMBackend",
+    "AnnLLMBackend",
     "SmartGlassAgent",
     "get_default_asr",
     "get_default_vad",
