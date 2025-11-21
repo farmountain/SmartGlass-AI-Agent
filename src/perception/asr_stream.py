@@ -1,8 +1,11 @@
 """Streaming automatic-speech-recognition utilities."""
 from __future__ import annotations
 
+import logging
 import os
-from typing import Any, Iterator, Sequence
+from collections import deque
+from dataclasses import dataclass
+from typing import Any, Iterable, Iterator, Sequence
 
 import numpy as np
 
@@ -214,15 +217,153 @@ class ASRStream:
 
 
 class WhisperASRStream(ASRStream):
-    """Placeholder Whisper streaming adapter.
+    """Streaming Whisper adapter that tracks token stability over time."""
 
-    This stub intentionally raises to remind integrators that the real Whisper
-    client needs to be wired in outside of the CI environment. Keeping the
-    interface available allows downstream modules to import the factory without
-    pulling in optional dependencies during tests.
-    """
+    sample_rate = 16_000
 
-    def __init__(self, *args, **kwargs) -> None:  # noqa: D401 - intentionally simple
-        raise NotImplementedError(
-            "Wire your Whisper client here; disabled in CI"
+    @dataclass
+    class _TrackedToken:
+        word: str
+        first_seen: float
+        last_seen: float
+        confirmed: bool = False
+
+    def __init__(
+        self,
+        *,
+        model_name: str = "base",
+        language: str | None = None,
+        device: str | None = None,
+        stability_window: float = 1.5,
+        window_duration: float = 5.0,
+    ) -> None:
+        try:
+            import whisper  # type: ignore[import-not-found]
+        except Exception as exc:  # pragma: no cover - defensive import
+            raise RuntimeError("WhisperASRStream requires the 'whisper' package") from exc
+
+        self.logger = logging.getLogger(__name__)
+        self.model = whisper.load_model(model_name, device=device)
+        self.language = language
+        self.stability_window = float(stability_window)
+        self.window_duration = float(window_duration)
+        self.device = device
+
+        if self.stability_window <= 0:
+            raise ValueError("stability_window must be positive")
+        if self.window_duration <= 0:
+            raise ValueError("window_duration must be positive")
+
+        self._buffer: deque[float] = deque()
+        self._tokens: list[WhisperASRStream._TrackedToken] = []
+        self._current_time = 0.0
+        self._last_final_len = 0
+
+    # ------------------------------------------------------------------
+    def reset(self) -> None:
+        self._buffer.clear()
+        self._tokens.clear()
+        self._current_time = 0.0
+        self._last_final_len = 0
+        self.logger.debug("WhisperASRStream state reset")
+
+    # ------------------------------------------------------------------
+    def _to_mono(self, chunk: object) -> list[float]:
+        if chunk is None:
+            return []
+        if isinstance(chunk, np.ndarray):
+            return chunk.astype(np.float32).flatten().tolist()
+        if isinstance(chunk, (bytes, bytearray)):
+            return []
+        if isinstance(chunk, str):
+            return []
+        try:
+            return [float(sample) for sample in chunk]  # type: ignore[arg-type]
+        except TypeError:
+            return []
+
+    def _append_buffer(self, samples: Iterable[float]) -> None:
+        for sample in samples:
+            self._buffer.append(float(sample))
+            if len(self._buffer) > int(self.sample_rate * self.window_duration):
+                self._buffer.popleft()
+
+    def _transcribe_window(self) -> tuple[list[str], float]:
+        if not self._buffer:
+            return [], self._current_time
+        window = np.array(list(self._buffer), dtype=np.float32)
+        result = self.model.transcribe(
+            window,
+            word_timestamps=True,
+            beam_size=5,
+            language=self.language,
         )
+        words: list[dict[str, object]] = []
+        for segment in result.get("segments", []):
+            words.extend(segment.get("words", []))
+        tokens: list[str] = []
+        end_ts = self._current_time
+        for word_info in words:
+            word = str(word_info.get("word", "")).strip()
+            if not word:
+                continue
+            tokens.append(word)
+            end_ts = float(word_info.get("end", end_ts))
+        return tokens, end_ts
+
+    def _update_stability(self, tokens: list[str], timestamp: float) -> tuple[list[str], bool]:
+        for idx, word in enumerate(tokens):
+            if idx < len(self._tokens) and self._tokens[idx].word == word:
+                self._tokens[idx].last_seen = timestamp
+            else:
+                self._tokens = self._tokens[:idx]
+                self._tokens.append(
+                    WhisperASRStream._TrackedToken(
+                        word=word, first_seen=timestamp, last_seen=timestamp
+                    )
+                )
+        if len(tokens) < len(self._tokens):
+            self._tokens = self._tokens[: len(tokens)]
+
+        for token in self._tokens:
+            if not token.confirmed and (timestamp - token.first_seen) >= self.stability_window:
+                token.confirmed = True
+        confirmed_text = [token.word for token in self._tokens if token.confirmed]
+        is_new_final = len(confirmed_text) > self._last_final_len
+        if is_new_final:
+            self._last_final_len = len(confirmed_text)
+        return confirmed_text, is_new_final
+
+    # ------------------------------------------------------------------
+    def run(self, audio_frames: Iterator[bytes | np.ndarray | Sequence[float]]) -> Iterator[dict]:
+        self.reset()
+        for frame in audio_frames:
+            samples = self._to_mono(frame)
+            if not samples:
+                continue
+            self._append_buffer(samples)
+            self._current_time += len(samples) / self.sample_rate
+            tokens, ts = self._transcribe_window()
+            if not tokens:
+                continue
+            confirmed, has_new_final = self._update_stability(tokens, ts)
+            partial_text = " ".join(tokens)
+            event = {"text": partial_text, "timestamp": ts, "is_final": False}
+            self.logger.debug("Partial transcript: %s", partial_text)
+            yield event
+
+            if confirmed and has_new_final:
+                final_text = " ".join(confirmed)
+                final_event = {"text": final_text, "timestamp": ts, "is_final": True}
+                self.logger.debug("Finalised transcript: %s", final_text)
+                yield final_event
+
+        if self._tokens:
+            final_text = " ".join(token.word for token in self._tokens)
+            final_event = {
+                "text": final_text,
+                "timestamp": self._current_time,
+                "is_final": True,
+            }
+            self.logger.debug("Flushing final transcript: %s", final_text)
+            yield final_event
