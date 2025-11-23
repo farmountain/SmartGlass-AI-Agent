@@ -1,0 +1,136 @@
+"""Integration-style tests for the edge runtime FastAPI server."""
+
+import base64
+import io
+import sys
+import types
+from importlib import import_module, reload
+from pathlib import Path
+
+import numpy as np
+import pytest
+import soundfile as sf
+from fastapi.testclient import TestClient
+from PIL import Image
+
+
+class FakeSmartGlassAgent:
+    """Lightweight stand-in that avoids loading heavy models."""
+
+    def __init__(self, whisper_model: str, clip_model: str):
+        self.whisper_model = whisper_model
+        self.clip_model = clip_model
+        self.audio_commands = []
+        self.multimodal_queries = []
+
+    def process_audio_command(self, audio_array: np.ndarray, language: str | None = None) -> str:
+        self.audio_commands.append((audio_array, language))
+        return "stub-transcript"
+
+    def process_multimodal_query(
+        self,
+        *,
+        audio_input: np.ndarray | None = None,
+        image_input: Image.Image | None = None,
+        text_query: str | None = None,
+        language: str | None = None,
+        cloud_offload: bool = False,
+    ) -> dict:
+        self.multimodal_queries.append(
+            {
+                "audio_input": audio_input,
+                "image_input": image_input,
+                "text_query": text_query,
+                "language": language,
+                "cloud_offload": cloud_offload,
+            }
+        )
+        return {
+            "transcript": text_query or "stub-query",
+            "response": "stub-response",
+            "overlays": [{"type": "text", "content": "overlay"}],
+        }
+
+
+def _encode_silent_wav(duration_seconds: float = 0.1, sample_rate: int = 16000) -> str:
+    samples = int(duration_seconds * sample_rate)
+    audio_array = np.zeros(samples, dtype=np.float32)
+    buffer = io.BytesIO()
+    sf.write(buffer, audio_array, sample_rate, format="WAV")
+    return base64.b64encode(buffer.getvalue()).decode()
+
+
+def _encode_test_image(size: int = 8) -> str:
+    image = Image.new("RGB", (size, size), color=(255, 0, 0))
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return base64.b64encode(buffer.getvalue()).decode()
+
+
+@pytest.fixture(name="edge_app")
+def fixture_edge_app(monkeypatch):
+    # Patch the SmartGlassAgent used by the session manager before importing the server.
+    src_root = Path(__file__).resolve().parent.parent / "src"
+    src_package = types.ModuleType("src")
+    src_package.__path__ = [str(src_root)]
+    monkeypatch.setitem(sys.modules, "src", src_package)
+
+    stubs: dict[str, types.ModuleType] = {}
+    for module_name, attributes in {
+        "src.smartglass_agent": {"SmartGlassAgent": FakeSmartGlassAgent},
+        "src.whisper_processor": {"WhisperAudioProcessor": object},
+        "src.clip_vision": {"CLIPVisionProcessor": object},
+        "src.gpt2_generator": {"GPT2TextGenerator": object},
+        "src.llm_backend": {"AnnLLMBackend": object, "LLMBackend": object},
+        "src.llm_snn_backend": {"SNNLLMBackend": object},
+        "src.audio": {"get_default_asr": lambda: None, "get_default_vad": lambda: None},
+        "src.fusion": {"ConfidenceFusion": object},
+        "src.perception": {
+            "get_default_keyframer": lambda: None,
+            "get_default_ocr": lambda: None,
+            "get_default_vq": lambda: None,
+        },
+        "src.policy": {"get_default_policy": lambda: None},
+    }.items():
+        stub = types.ModuleType(module_name)
+        for attr, value in attributes.items():
+            setattr(stub, attr, value)
+        stubs[module_name] = stub
+        monkeypatch.setitem(sys.modules, module_name, stub)
+
+    session_manager_module = import_module("src.edge_runtime.session_manager")
+    monkeypatch.setattr(session_manager_module, "SmartGlassAgent", FakeSmartGlassAgent)
+
+    server_module = import_module("src.edge_runtime.server")
+    reload(server_module)
+    return server_module.app
+
+
+def test_edge_runtime_server_lifecycle(edge_app):
+    client = TestClient(edge_app)
+
+    create_response = client.post("/sessions")
+    assert create_response.status_code == 200
+    session_id = create_response.json()["session_id"]
+
+    audio_payload = {"audio_base64": _encode_silent_wav(), "language": "en"}
+    audio_response = client.post(f"/sessions/{session_id}/audio", json=audio_payload)
+    assert audio_response.status_code == 200
+    assert audio_response.json()["transcript"] == "stub-transcript"
+
+    frame_payload = {"image_base64": _encode_test_image()}
+    frame_response = client.post(f"/sessions/{session_id}/frame", json=frame_payload)
+    assert frame_response.status_code == 200
+    assert frame_response.json()["status"] == "frame stored"
+
+    query_payload = {"text_query": "What do you see?"}
+    query_response = client.post(f"/sessions/{session_id}/query", json=query_payload)
+    assert query_response.status_code == 200
+    result = query_response.json()
+    assert result["transcript"] == "What do you see?"
+    assert result["response"] == "stub-response"
+    assert isinstance(result["overlays"], list)
+
+    delete_response = client.delete(f"/sessions/{session_id}")
+    assert delete_response.status_code == 200
+    assert delete_response.json()["status"] == "deleted"
