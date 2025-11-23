@@ -68,6 +68,35 @@ The CI summary step automatically runs this helper and posts the newest table al
 
 ---
 
+## 🧑‍🏫➡️🧠 Teacher–Student SNN Pipeline (Concise)
+
+- **Pipeline:** `scripts/train_snn_student.py` distills a transformer teacher into a spiking-friendly student with temperature-scaled KD and gradient accumulation so it can run in constrained Colab-style environments.【F:scripts/train_snn_student.py†L1-L208】
+- **Artifacts:** Training writes `student.pt` and `metadata.json` under `artifacts/snn_student` by default (override with `--output-dir`).【F:scripts/train_snn_student.py†L224-L236】【F:scripts/train_snn_student.py†L242-L275】
+- **Launch training:**
+
+  ```bash
+  python scripts/train_snn_student.py \
+    --teacher-model sshleifer/tiny-gpt2 \
+    --num-steps 50 \
+    --batch-size 4 \
+    --output-dir artifacts/snn_student_demo
+  ```
+
+- **SNN inference demo:** Load the saved student (or fall back to the stubbed path) via the `SNNLLMBackend` demo module and generate a quick response:
+
+  ```bash
+  python - <<'PY'
+  from src.llm_snn_backend import SNNLLMBackend
+
+  backend = SNNLLMBackend(model_path="artifacts/snn_student/student.pt")
+  print(backend.generate("Hello from the glasses", max_tokens=24))
+  PY
+  ```
+
+  The backend will automatically reuse the saved artifact when available and degrade gracefully to a stubbed tokenizer/model when the files are missing, keeping the demo runnable on any machine.【F:src/llm_snn_backend.py†L21-L104】【F:src/llm_snn_backend.py†L143-L181】
+
+---
+
 ### 🔨 Use the Agent in Python
 
 ```python
