@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 import importlib
 import itertools
 import logging
+from typing import Callable
 from typing import Iterator
 
 import numpy as np
@@ -61,11 +62,37 @@ class MetaRayBanCameraIn(CameraIn):
     def _sdk_frames(self) -> Iterator[dict[str, object]] | None:
         if not self._use_sdk or _META_SDK is None:
             return None
-        # TODO: Invoke the Meta Ray-Ban camera streaming API once the SDK
-        # is available. This should yield payloads that include the frame
-        # bytes together with transport and device metadata.
-        LOGGER.info("Meta SDK detected; camera streaming is not yet implemented")
-        return None
+        camera_api = getattr(_META_SDK, "camera", None)
+        stream: Callable[..., Iterator[object]] | None = None
+        if camera_api is not None:
+            stream = getattr(camera_api, "stream_frames", None)
+        if stream is None:
+            LOGGER.warning("Meta SDK detected but camera.stream_frames is unavailable")
+            return None
+
+        sdk_stream = stream(
+            device_id=self._device_id,
+            resolution=(self._height, self._width),
+            transport=self._transport,
+        )
+
+        def _enrich() -> Iterator[dict[str, object]]:
+            for frame_id, frame in enumerate(sdk_stream):
+                payload: dict[str, object]
+                if isinstance(frame, dict):
+                    payload = dict(frame)
+                else:
+                    payload = {"frame": frame}
+
+                payload.setdefault("device_id", self._device_id)
+                payload.setdefault("transport", self._transport)
+                payload.setdefault("frame_id", frame_id)
+                payload.setdefault(
+                    "timestamp_ms", int(datetime.now(timezone.utc).timestamp() * 1000)
+                )
+                yield payload
+
+        return _enrich()
 
     def get_frames(self) -> Iterator[dict[str, object]]:  # type: ignore[override]
         sdk_stream = self._sdk_frames()
@@ -122,10 +149,39 @@ class MetaRayBanMicIn(MicIn):
     def _sdk_frames(self) -> Iterator[dict[str, object]] | None:
         if not self._use_sdk or _META_SDK is None:
             return None
-        # TODO: Connect to the Meta Ray-Ban microphone capture API and
-        # yield PCM envelopes that include device and transport metadata.
-        LOGGER.info("Meta SDK detected; microphone capture is not yet implemented")
-        return None
+        mic_api = getattr(_META_SDK, "microphone", None)
+        stream: Callable[..., Iterator[object]] | None = None
+        if mic_api is not None:
+            stream = getattr(mic_api, "stream_pcm", None)
+        if stream is None:
+            LOGGER.warning("Meta SDK detected but microphone.stream_pcm is unavailable")
+            return None
+
+        sdk_stream = stream(
+            device_id=self._device_id,
+            sample_rate_hz=self._sample_rate_hz,
+            frame_size=self._frame_size,
+            channels=self._channels,
+            transport=self._transport,
+        )
+
+        def _enrich() -> Iterator[dict[str, object]]:
+            for sequence_id, frame in enumerate(sdk_stream):
+                payload: dict[str, object]
+                if isinstance(frame, dict):
+                    payload = dict(frame)
+                else:
+                    payload = {"pcm": frame}
+
+                payload.setdefault("device_id", self._device_id)
+                payload.setdefault("transport", self._transport)
+                payload.setdefault("sequence_id", sequence_id)
+                payload.setdefault(
+                    "timestamp_ms", int(datetime.now(timezone.utc).timestamp() * 1000)
+                )
+                yield payload
+
+        return _enrich()
 
     def get_frames(self) -> Iterator[dict[str, object]]:  # type: ignore[override]
         sdk_stream = self._sdk_frames()
