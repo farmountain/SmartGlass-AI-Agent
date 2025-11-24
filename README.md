@@ -114,30 +114,49 @@ See [PRIVACY.md](PRIVACY.md) for detailed threat-modeling notes and guidance on 
 
 ### 🔨 Use the Agent in Python
 
-```python
-from src.smartglass_agent import SmartGlassAgent
-from src import SNNLLMBackend
+The agent now consumes any backend implementing `src.llm_backend_base.BaseLLMBackend` so you can swap language generators without touching the agent logic.
 
-# Default: ANN language backend powered by the legacy GPT-2 generator
+**GPT-2 (ANN) backend via `BaseLLMBackend`:**
+
+```python
+from src.gpt2_generator import GPT2Backend
+from src.smartglass_agent import SmartGlassAgent
+
+gpt2_backend = GPT2Backend(model_name="gpt2")
+
 agent = SmartGlassAgent(
     whisper_model="base",
     clip_model="openai/clip-vit-base-patch32",
-    gpt2_model="gpt2",
+    llm_backend=gpt2_backend,
 )
 
-result = agent.process_multimodal_query(
-    text_query="What am I looking at?",
-    image_input="scene.jpg",
+print(
+    agent.generate_response(
+        user_query="What am I looking at?",
+        visual_context="A street sign next to a coffee shop",
+    )
 )
+```
 
-print("Response:", result["response"])
+**SNN student backend via the same interface:**
 
-# Optional: swap in the experimental SNN student backend
+```python
+from src.llm_snn_backend import SNNLLMBackend
+from src.smartglass_agent import SmartGlassAgent
+
+snn_backend = SNNLLMBackend(model_path="artifacts/snn_student/student.pt")
+
 snn_agent = SmartGlassAgent(
     whisper_model="base",
     clip_model="openai/clip-vit-base-patch32",
-    gpt2_model="gpt2",
-    llm_backend=SNNLLMBackend(),
+    llm_backend=snn_backend,
+)
+
+print(
+    snn_agent.generate_response(
+        user_query="Summarize what you see",
+        visual_context="Indoor bookshelf with fiction and travel guides",
+    )
 )
 ```
 
