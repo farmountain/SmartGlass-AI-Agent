@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 
 import numpy as np
 import soundfile as sf
-from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 from PIL import Image
 import uvicorn
@@ -43,13 +43,36 @@ runtime_config: EdgeRuntimeConfig = load_config_from_env()
 session_manager = SessionManager(runtime_config)
 
 
-def _verify_api_key_header(x_api_key: str | None = Header(default=None)) -> None:
+def _verify_api_key_header(request: Request) -> None:
     """Guard HTTP endpoints with the configured API key if present."""
 
-    if runtime_config.api_key is None:
+    _verify_auth_token(request)
+
+
+def _verify_auth_token(headers: Dict[str, Optional[str]] | Request | WebSocket) -> None:
+    """Validate the request headers against the configured auth token."""
+
+    expected_token = runtime_config.auth_token or runtime_config.api_key
+    if expected_token is None:
         return
 
-    if x_api_key != runtime_config.api_key:
+    header_name = runtime_config.auth_header_name.lower()
+    provided_value = None
+    if isinstance(headers, (Request, WebSocket)):
+        provided_value = headers.headers.get(header_name)
+    else:
+        for key, value in headers.items():
+            if key.lower() == header_name:
+                provided_value = value
+                break
+
+    if provided_value is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    if provided_value.lower().startswith("bearer "):
+        provided_value = provided_value[7:].strip()
+
+    if provided_value != expected_token:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
@@ -176,7 +199,9 @@ async def websocket_audio(session_id: str, websocket: WebSocket) -> None:
 
     language = websocket.query_params.get("language")
 
-    if runtime_config.api_key and websocket.headers.get("x-api-key") != runtime_config.api_key:
+    try:
+        _verify_auth_token(websocket)
+    except HTTPException:
         await websocket.close(code=4401, reason="Unauthorized")
         return
 
@@ -211,7 +236,9 @@ async def websocket_audio(session_id: str, websocket: WebSocket) -> None:
 async def websocket_frame(session_id: str, websocket: WebSocket) -> None:
     """Ingest frames over WebSocket for multimodal context."""
 
-    if runtime_config.api_key and websocket.headers.get("x-api-key") != runtime_config.api_key:
+    try:
+        _verify_auth_token(websocket)
+    except HTTPException:
         await websocket.close(code=4401, reason="Unauthorized")
         return
 

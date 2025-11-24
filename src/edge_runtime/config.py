@@ -16,6 +16,8 @@ class EdgeRuntimeConfig:
     llm_backend_type: str
     ports: Dict[str, int] = field(default_factory=dict)
     api_key: str | None = None
+    auth_token: str | None = None
+    auth_header_name: str = "X-API-Key"
     audio_buffer_max_seconds: Optional[float] = None
     audio_buffer_max_bytes: Optional[int] = None
     frame_history_size: int = 1
@@ -70,6 +72,8 @@ def load_config_from_env() -> EdgeRuntimeConfig:
     llm_backend_type = os.getenv("LLM_BACKEND_TYPE", "ann")
     ports_env = os.getenv("PORTS")
     api_key = os.getenv("EDGE_RUNTIME_API_KEY")
+    auth_token = os.getenv("EDGE_RUNTIME_AUTH_TOKEN") or api_key
+    auth_header_name = os.getenv("EDGE_RUNTIME_AUTH_HEADER", "X-API-Key")
     audio_buffer_max_seconds = _parse_optional_float(os.getenv("AUDIO_BUFFER_MAX_SECONDS"))
     audio_buffer_max_bytes = _parse_optional_int(os.getenv("AUDIO_BUFFER_MAX_BYTES"))
     frame_history_size = _parse_optional_int(os.getenv("FRAME_HISTORY_SIZE"), default=1) or 1
@@ -84,6 +88,8 @@ def load_config_from_env() -> EdgeRuntimeConfig:
         llm_backend_type=llm_backend_type,
         ports=ports,
         api_key=api_key,
+        auth_token=auth_token,
+        auth_header_name=auth_header_name,
         audio_buffer_max_seconds=audio_buffer_max_seconds,
         audio_buffer_max_bytes=audio_buffer_max_bytes,
         frame_history_size=frame_history_size,
