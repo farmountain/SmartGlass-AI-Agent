@@ -326,11 +326,28 @@ class MetaRayBanDisplayOverlay(DisplayOverlay):
     once the SDK supports developer access.
     """
 
-    def __init__(self, *, device_id: str, transport: str) -> None:
+    def __init__(self, *, device_id: str, transport: str, use_sdk: bool = False) -> None:
         self._device_id = device_id
         self._transport = transport
+        self._use_sdk = use_sdk and _META_SDK_AVAILABLE
         self.history: list[dict[str, object]] = []
         self._render_index = 0
+
+    def _sdk_render(self, card: dict) -> dict[str, object] | None:
+        if not self._use_sdk or _META_SDK is None:
+            return None
+
+        overlay_api = getattr(_META_SDK, "overlay", None) or getattr(_META_SDK, "display", None)
+        render_fn = None
+        if overlay_api is not None:
+            render_fn = getattr(overlay_api, "render", None) or getattr(overlay_api, "show", None)
+        render_fn = render_fn or getattr(_META_SDK, "render_overlay", None) or getattr(_META_SDK, "display_card", None)
+
+        if not callable(render_fn):
+            LOGGER.info("Meta SDK detected; overlay rendering is not yet implemented")
+            return None
+
+        return render_fn(card=card, device_id=self._device_id, transport=self._transport)
 
     def render(self, card: dict) -> dict:
         rendered_at = _BASE_TIME + timedelta(milliseconds=350 * self._render_index)
@@ -342,9 +359,16 @@ class MetaRayBanDisplayOverlay(DisplayOverlay):
             "rendered_at": _isoformat(rendered_at),
             "status": "mock",
         }
+        sdk_raw = self._sdk_render(card)
+        sdk_response = _normalize_payload(sdk_raw) if sdk_raw is not None else None
         self.history.append(payload)
         self._render_index += 1
-        return payload
+        if sdk_response is None:
+            return payload
+
+        merged = {**payload, **sdk_response}
+        merged.setdefault("status", "sdk")
+        return merged
 
 
 class MetaRayBanHaptics(Haptics):
@@ -447,7 +471,9 @@ class MetaRayBanProvider(ProviderBase):
         )
 
     def _create_overlay(self) -> DisplayOverlay | None:
-        return MetaRayBanDisplayOverlay(device_id=self._device_id, transport=self._transport)
+        return MetaRayBanDisplayOverlay(
+            device_id=self._device_id, transport=self._transport, use_sdk=self._use_sdk
+        )
 
     def _create_haptics(self) -> Haptics | None:
         return MetaRayBanHaptics(device_id=self._device_id, transport=self._transport)
