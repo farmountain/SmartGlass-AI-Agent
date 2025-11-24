@@ -64,7 +64,9 @@ class SmartGlassEdgeClient @JvmOverloads constructor(
         language: String? = null,
     ): EdgeResponse {
         val audioBase64 = Base64.getEncoder().encodeToString(bytes)
-        val payload = audioAdapter.toJson(AudioRequest(audioBase64 = audioBase64, language = language))
+        val payload = audioAdapter.toJson(
+            AudioRequest(audioBase64 = audioBase64, sampleRate = sampleRate, language = language),
+        )
         val request = Request.Builder()
             .url("$resolvedBaseUrl/sessions/$sessionId/audio")
             .post(payload.toRequestBody(jsonMediaType))
@@ -104,6 +106,7 @@ class SmartGlassEdgeClient @JvmOverloads constructor(
         textQuery: String? = null,
         audioBytes: ByteArray? = null,
         imageBytes: ByteArray? = null,
+        sampleRate: Int? = null,
         language: String? = null,
         cloudOffload: Boolean = false,
     ): EdgeResponse {
@@ -111,10 +114,17 @@ class SmartGlassEdgeClient @JvmOverloads constructor(
             throw IllegalArgumentException("Provide either textQuery or audioBytes")
         }
 
+        val resolvedSampleRate = if (audioBytes != null) {
+            sampleRate ?: throw IllegalArgumentException("Provide sampleRate when audioBytes is provided")
+        } else {
+            null
+        }
+
         val payload = queryAdapter.toJson(
             QueryRequest(
                 textQuery = textQuery,
                 audioBase64 = audioBytes?.let { Base64.getEncoder().encodeToString(it) },
+                sampleRate = resolvedSampleRate,
                 imageBase64 = imageBytes?.let { Base64.getEncoder().encodeToString(it) },
                 language = language,
                 cloudOffload = cloudOffload,
@@ -190,6 +200,7 @@ private data class CreateSessionResponse(
 
 private data class AudioRequest(
     @Json(name = "audio_base64") val audioBase64: String,
+    @Json(name = "sample_rate") val sampleRate: Int? = null,
     val language: String? = null,
 )
 
@@ -202,6 +213,7 @@ private data class FrameRequest(
 private data class QueryRequest(
     @Json(name = "text_query") val textQuery: String? = null,
     @Json(name = "audio_base64") val audioBase64: String? = null,
+    @Json(name = "sample_rate") val sampleRate: Int? = null,
     @Json(name = "image_base64") val imageBase64: String? = null,
     val language: String? = null,
     @Json(name = "cloud_offload") val cloudOffload: Boolean = false,
