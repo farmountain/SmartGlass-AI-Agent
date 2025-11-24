@@ -93,13 +93,53 @@ def _install_fake_sdk(monkeypatch: pytest.MonkeyPatch) -> types.SimpleNamespace:
             self.calls.append({"card": card, "device_id": device_id, "transport": transport})
             return {"card": card, "device_id": device_id, "transport": transport, "status": "sdk"}
 
+    class FakeHaptics:
+        def __init__(self):
+            self.calls: list[dict[str, object]] = []
+
+        def vibrate(self, *, duration_ms: int, device_id: str, transport: str):
+            payload = {
+                "duration_ms": duration_ms,
+                "device_id": device_id,
+                "transport": transport,
+                "status": "sdk",
+            }
+            self.calls.append(payload)
+            return payload
+
+        def buzz(self, *, duration_ms: int, device_id: str, transport: str):
+            return self.vibrate(duration_ms=duration_ms, device_id=device_id, transport=transport)
+
+    class FakePermissions:
+        def __init__(self):
+            self.calls: list[dict[str, object]] = []
+
+        def request(self, *, capabilities: set[str], device_id: str, transport: str):
+            payload = {
+                "requested": sorted(capabilities),
+                "granted": sorted(capabilities),
+                "denied": [],
+                "device_id": device_id,
+                "transport": transport,
+                "status": "sdk",
+            }
+            self.calls.append(payload)
+            return payload
+
     fake_sdk = types.SimpleNamespace(
-        camera=FakeCamera(), microphone=FakeMicrophone(), audio=FakeAudio(), overlay=FakeOverlay()
+        camera=FakeCamera(),
+        microphone=FakeMicrophone(),
+        audio=FakeAudio(),
+        overlay=FakeOverlay(),
+        haptics=FakeHaptics(),
+        permissions=FakePermissions(),
     )
     fake_sdk.camera_calls = fake_sdk.camera.calls
     fake_sdk.microphone_calls = fake_sdk.microphone.calls
     fake_sdk.audio_calls = fake_sdk.audio.calls
     fake_sdk.overlay_calls = fake_sdk.overlay.calls
+    fake_sdk.haptics_calls = fake_sdk.haptics.calls
+    fake_sdk.permissions_calls = fake_sdk.permissions.calls
 
     monkeypatch.setattr(meta_module, "_META_SDK_AVAILABLE", True)
     monkeypatch.setattr(meta_module, "_META_SDK", fake_sdk)
@@ -195,6 +235,69 @@ def test_overlay_history_retained_without_sdk(monkeypatch: pytest.MonkeyPatch) -
     assert first["status"] == "mock"
     assert second["render_index"] == 1
     assert overlay.history == [first, second]
+
+
+def test_meta_haptics_uses_sdk_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_sdk = _install_fake_sdk(monkeypatch)
+    provider = MetaRayBanProvider(prefer_sdk=True, transport="sdk")
+
+    haptics = provider.get_haptics()
+    assert haptics is not None
+
+    haptics.vibrate(250)
+    haptics.buzz(180)
+
+    assert len(fake_sdk.haptics_calls) == 2
+    assert fake_sdk.haptics_calls[0]["duration_ms"] == 250
+    assert fake_sdk.haptics_calls[1]["duration_ms"] == 180
+    assert all(call["transport"] == "sdk" for call in fake_sdk.haptics_calls)
+    assert all(pattern.get("status") == "sdk" for pattern in haptics.patterns)
+
+
+def test_meta_haptics_falls_back_without_sdk(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(meta_module, "_META_SDK_AVAILABLE", False)
+    monkeypatch.setattr(meta_module, "_META_SDK", None)
+    provider = MetaRayBanProvider(prefer_sdk=True)
+    haptics = provider.get_haptics()
+    assert haptics is not None
+
+    haptics.vibrate(100)
+    haptics.buzz(200)
+
+    assert len(haptics.patterns) == 2
+    assert all(pattern["status"] == "mock" for pattern in haptics.patterns)
+    assert haptics.patterns[0]["duration_ms"] == 100
+    assert haptics.patterns[1]["duration_ms"] == 200
+
+
+def test_meta_permissions_uses_sdk_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_sdk = _install_fake_sdk(monkeypatch)
+    provider = MetaRayBanProvider(prefer_sdk=True, transport="sdk")
+
+    permissions = provider.get_permissions()
+    assert permissions is not None
+
+    response = permissions.request({"camera", "gps"})
+
+    assert fake_sdk.permissions_calls
+    assert response["status"] == "sdk"
+    assert response["requested"] == sorted({"camera", "gps"})
+    assert response["granted"] == sorted({"camera", "gps"})
+    assert response["transport"] == "sdk"
+
+
+def test_meta_permissions_fall_back_without_sdk(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(meta_module, "_META_SDK_AVAILABLE", False)
+    monkeypatch.setattr(meta_module, "_META_SDK", None)
+    provider = MetaRayBanProvider(prefer_sdk=True)
+    permissions = provider.get_permissions()
+    assert permissions is not None
+
+    response = permissions.request({"camera", "gps"})
+
+    assert response["status"] == "mock"
+    assert set(response["granted"]) | set(response["denied"]) == set(response["requested"])
+    assert response["transport"] == "mock"
 
 
 @pytest.mark.parametrize("provider_factory", PROVIDER_FACTORIES)

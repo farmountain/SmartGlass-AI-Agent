@@ -103,6 +103,9 @@ class MockHaptics(Haptics):
     def vibrate(self, ms: int) -> None:
         self.patterns.append(ms)
 
+    def buzz(self, ms: int) -> None:
+        self.vibrate(ms)
+
 
 class MockPermissions(Permissions):
     """Deterministic permission responses based on an allow-list."""

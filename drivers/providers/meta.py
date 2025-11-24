@@ -374,10 +374,30 @@ class MetaRayBanDisplayOverlay(DisplayOverlay):
 class MetaRayBanHaptics(Haptics):
     """Simulate Ray-Ban haptics envelopes and timestamps."""
 
-    def __init__(self, *, device_id: str, transport: str) -> None:
+    def __init__(self, *, device_id: str, transport: str, use_sdk: bool = False, sdk: object | None = None) -> None:
         self._device_id = device_id
         self._transport = transport
+        self._sdk = sdk if sdk is not None else _META_SDK
+        self._use_sdk = use_sdk and self._sdk is not None
         self.patterns: list[dict[str, object]] = []
+
+    def _sdk_haptics(self, action: str, ms: int) -> dict[str, object] | None:
+        if not self._use_sdk or self._sdk is None:
+            return None
+
+        haptics_api = getattr(self._sdk, "haptics", None)
+        handler = None
+        if haptics_api is not None:
+            handler = getattr(haptics_api, action, None)
+            handler = handler or getattr(haptics_api, "vibrate", None) or getattr(haptics_api, "buzz", None)
+        handler = handler or getattr(self._sdk, action, None)
+        handler = handler or getattr(self._sdk, "vibrate", None) or getattr(self._sdk, "buzz", None)
+
+        if not callable(handler):
+            LOGGER.info("Meta SDK detected; haptics control is not yet implemented")
+            return None
+
+        return handler(duration_ms=ms, device_id=self._device_id, transport=self._transport)
 
     def vibrate(self, ms: int) -> None:
         payload = {
@@ -385,20 +405,63 @@ class MetaRayBanHaptics(Haptics):
             "device_id": self._device_id,
             "transport": self._transport,
             "timestamp": _isoformat(_BASE_TIME + timedelta(milliseconds=len(self.patterns) * 200)),
+            "status": "mock",
         }
-        self.patterns.append(payload)
+        sdk_raw = self._sdk_haptics("vibrate", ms)
+        sdk_response = _normalize_payload(sdk_raw) if sdk_raw is not None else None
+        if sdk_response is None:
+            self.patterns.append(payload)
+            return
+
+        merged = {**payload, **sdk_response}
+        merged.setdefault("status", "sdk")
+        self.patterns.append(merged)
 
     def buzz(self, ms: int) -> None:
-        self.vibrate(ms)
+        sdk_raw = self._sdk_haptics("buzz", ms)
+        if sdk_raw is None:
+            self.vibrate(ms)
+            return
+
+        payload = {
+            "duration_ms": ms,
+            "device_id": self._device_id,
+            "transport": self._transport,
+            "timestamp": _isoformat(_BASE_TIME + timedelta(milliseconds=len(self.patterns) * 200)),
+            "status": "sdk",
+        }
+        merged = {**payload, **_normalize_payload(sdk_raw)}
+        merged.setdefault("status", "sdk")
+        self.patterns.append(merged)
 
 
 class MetaRayBanPermissions(Permissions):
     """Deterministic permission responses mirroring Ray-Ban SDK."""
 
-    def __init__(self, *, device_id: str, transport: str) -> None:
+    def __init__(
+        self, *, device_id: str, transport: str, use_sdk: bool = False, sdk: object | None = None
+    ) -> None:
         self._device_id = device_id
         self._transport = transport
+        self._sdk = sdk if sdk is not None else _META_SDK
+        self._use_sdk = use_sdk and self._sdk is not None
         self.requests: list[dict[str, object]] = []
+
+    def _sdk_request(self, capabilities: set[str]) -> dict[str, object] | None:
+        if not self._use_sdk or self._sdk is None:
+            return None
+
+        permissions_api = getattr(self._sdk, "permissions", None) or getattr(self._sdk, "permission", None)
+        request_fn = None
+        if permissions_api is not None:
+            request_fn = getattr(permissions_api, "request", None)
+        request_fn = request_fn or getattr(self._sdk, "request_permissions", None)
+
+        if not callable(request_fn):
+            LOGGER.info("Meta SDK detected; permission negotiation is not yet implemented")
+            return None
+
+        return request_fn(capabilities=capabilities, device_id=self._device_id, transport=self._transport)
 
     def request(self, capabilities: set[str]) -> dict:  # noqa: D401 - documented in interface
         requested = sorted(capabilities)
@@ -411,9 +474,18 @@ class MetaRayBanPermissions(Permissions):
             "device_id": self._device_id,
             "transport": self._transport,
             "time_ms": 12,
+            "status": "mock",
         }
-        self.requests.append(payload)
-        return payload
+        sdk_raw = self._sdk_request(capabilities)
+        sdk_response = _normalize_payload(sdk_raw) if sdk_raw is not None else None
+        if sdk_response is None:
+            self.requests.append(payload)
+            return payload
+
+        merged = {**payload, **sdk_response}
+        merged.setdefault("status", "sdk")
+        self.requests.append(merged)
+        return merged
 
 
 class MetaRayBanProvider(ProviderBase):
@@ -476,10 +548,14 @@ class MetaRayBanProvider(ProviderBase):
         )
 
     def _create_haptics(self) -> Haptics | None:
-        return MetaRayBanHaptics(device_id=self._device_id, transport=self._transport)
+        return MetaRayBanHaptics(
+            device_id=self._device_id, transport=self._transport, use_sdk=self._use_sdk, sdk=_META_SDK
+        )
 
     def _create_permissions(self) -> Permissions | None:
-        return MetaRayBanPermissions(device_id=self._device_id, transport=self._transport)
+        return MetaRayBanPermissions(
+            device_id=self._device_id, transport=self._transport, use_sdk=self._use_sdk, sdk=_META_SDK
+        )
 
 
 __all__ = [
