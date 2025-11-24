@@ -712,7 +712,34 @@ class MetaRayBanRuntime:
         await asyncio.to_thread(audio_out.speak, text)
 
     async def _stop_tts(self) -> None:
-        return None
+        audio_out = self._provider.get_audio_out()
+        if audio_out is None:
+            return
+
+        stop_fn = None
+        for candidate in ("stop", "flush", "stop_playback", "cancel"):
+            maybe = getattr(audio_out, candidate, None)
+            if callable(maybe):
+                stop_fn = maybe
+                break
+
+        if stop_fn is not None:
+            await asyncio.to_thread(stop_fn)
+            return
+
+        sdk_audio = getattr(_META_SDK, "audio", None) if _META_SDK is not None else None
+        for candidate in ("stop", "flush", "stop_playback", "cancel"):
+            stop_fn = None
+            if sdk_audio is not None:
+                stop_fn = getattr(sdk_audio, candidate, None)
+            stop_fn = stop_fn or (getattr(_META_SDK, candidate, None) if _META_SDK is not None else None)
+            if callable(stop_fn):
+                await asyncio.to_thread(
+                    stop_fn,
+                    device_id=getattr(audio_out, "_device_id", None),
+                    transport=getattr(audio_out, "_transport", None),
+                )
+                return
 
     async def _show_overlay(self, state: GlassesState) -> None:
         overlay = self._provider.get_overlay()
