@@ -210,7 +210,7 @@ class SmartGlassAgent:
         text_query: Optional[str] = None,
         language: Optional[str] = None,
         cloud_offload: bool = False,
-    ) -> Dict[str, str]:
+    ) -> Dict[str, Any]:
         """
         Process multimodal query combining audio, vision, and text.
         
@@ -221,7 +221,11 @@ class SmartGlassAgent:
             language: Language for audio transcription
         
         Returns:
-            Dictionary with query, context, and response
+            Dictionary containing:
+                - response: Generated assistant message
+                - actions: List of structured action dictionaries (empty by default)
+                - raw: Nested payload preserving query, visual context, metadata, and
+                  redaction details when available
 
         The prompt forwarded to the language backend combines the user query
         with any available visual context so downstream implementations can
@@ -256,18 +260,29 @@ class SmartGlassAgent:
         
         # Generate response
         response = self.generate_response(query, visual_context)
-        
-        result = {
+
+        raw_payload: Dict[str, Any] = {
             "query": query,
             "visual_context": visual_context or "No visual input",
-            "response": response,
+            "metadata": metadata,
         }
+
         if redaction_summary is not None:
             redaction_details = redaction_summary.as_dict()
-            result["redaction"] = redaction_details
+            raw_payload["redaction"] = redaction_details
             metadata["redaction_summary"] = redaction_details
 
-        result["metadata"] = metadata
+        result: Dict[str, Any] = {
+            "query": raw_payload["query"],
+            "visual_context": raw_payload["visual_context"],
+            "response": response,
+            "metadata": metadata,
+            "actions": [],
+            "raw": raw_payload,
+        }
+
+        if redaction_summary is not None:
+            result["redaction"] = redaction_details
 
         return result
     
