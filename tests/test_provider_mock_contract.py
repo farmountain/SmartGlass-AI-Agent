@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from itertools import islice
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -102,3 +103,57 @@ def test_permissions_request_reports_grants(provider_factory) -> None:
     response = permissions.request({"camera", "gps"})
     assert response["requested"] == sorted(response["requested"])
     assert set(response["granted"]) | set(response["denied"]) == set(response["requested"])
+
+
+def test_meta_provider_prefers_sdk_when_present(monkeypatch: pytest.MonkeyPatch) -> None:
+    camera_payloads = [
+        {
+            "frame": np.zeros((2, 2, 3), dtype=np.uint8),
+            "frame_id": 10,
+            "timestamp_ms": 1234,
+            "format": "rgb888",
+        },
+        {
+            "frame": np.ones((2, 2, 3), dtype=np.uint8),
+            "frame_id": 11,
+            "timestamp_ms": 1235,
+            "format": "rgb888",
+        },
+    ]
+    mic_payloads = [
+        {
+            "pcm": np.full((4, 1), 0.5, dtype=np.float32),
+            "sequence_id": 3,
+            "timestamp_ms": 2000,
+        }
+    ]
+
+    stub_sdk = SimpleNamespace(
+        camera=SimpleNamespace(stream_frames=lambda **_: iter(camera_payloads)),
+        microphone=SimpleNamespace(stream_pcm=lambda **_: iter(mic_payloads)),
+    )
+    import drivers.providers.meta as meta_module
+
+    monkeypatch.setattr(meta_module, "_META_SDK", stub_sdk)
+    monkeypatch.setattr(meta_module, "_META_SDK_AVAILABLE", True)
+
+    provider = MetaRayBanProvider(
+        prefer_sdk=True,
+        device_id="SDK-DEVICE",
+        transport="wifi",
+        camera_resolution=(2, 2),
+        microphone_frame_size=4,
+        microphone_channels=1,
+    )
+
+    frame = next(provider.iter_frames())
+    assert frame["frame_id"] == 10
+    assert frame["device_id"] == "SDK-DEVICE"
+    assert frame["transport"] == "wifi"
+    assert np.array_equal(frame["frame"], camera_payloads[0]["frame"])
+
+    audio_chunk = next(provider.iter_audio_chunks())
+    assert audio_chunk["sequence_id"] == 3
+    assert audio_chunk["device_id"] == "SDK-DEVICE"
+    assert audio_chunk["transport"] == "wifi"
+    assert np.array_equal(np.asarray(audio_chunk["pcm"]), mic_payloads[0]["pcm"])
