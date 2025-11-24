@@ -262,11 +262,40 @@ class MetaRayBanAudioOut(AudioOut):
     TODO: Delegate to the Meta Ray-Ban SDK TTS/earcon API when available.
     """
 
-    def __init__(self, *, device_id: str, transport: str, api_key: str | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        device_id: str,
+        transport: str,
+        api_key: str | None = None,
+        use_sdk: bool = False,
+    ) -> None:
         self._device_id = device_id
         self._transport = transport
         self._api_key = api_key
         self._utterance_index = 0
+        self._use_sdk = use_sdk and _META_SDK_AVAILABLE
+
+    def _sdk_speak(self, text: str) -> dict[str, object] | None:
+        if not self._use_sdk or _META_SDK is None:
+            return None
+
+        audio_api = getattr(_META_SDK, "audio", None)
+        speak_fn = None
+        if audio_api is not None:
+            speak_fn = getattr(audio_api, "speak", None) or getattr(audio_api, "speak_text", None)
+        speak_fn = speak_fn or getattr(_META_SDK, "speak", None)
+
+        if not callable(speak_fn):
+            LOGGER.info("Meta SDK detected; audio output is not yet implemented")
+            return None
+
+        return speak_fn(
+            text=text,
+            device_id=self._device_id,
+            transport=self._transport,
+            api_key=self._api_key,
+        )
 
     def speak(self, text: str) -> dict:
         timestamp = _BASE_TIME + timedelta(milliseconds=480 * self._utterance_index)
@@ -279,8 +308,15 @@ class MetaRayBanAudioOut(AudioOut):
             "api_key": bool(self._api_key),
             "status": "mock",
         }
+        sdk_raw = self._sdk_speak(text)
+        sdk_response = _normalize_payload(sdk_raw) if sdk_raw is not None else None
         self._utterance_index += 1
-        return payload
+        if sdk_response is None:
+            return payload
+
+        merged = {**payload, **sdk_response}
+        merged.setdefault("status", "sdk")
+        return merged
 
 
 class MetaRayBanDisplayOverlay(DisplayOverlay):
@@ -403,7 +439,12 @@ class MetaRayBanProvider(ProviderBase):
         )
 
     def _create_audio_out(self) -> AudioOut | None:
-        return MetaRayBanAudioOut(device_id=self._device_id, transport=self._transport, api_key=self._api_key)
+        return MetaRayBanAudioOut(
+            device_id=self._device_id,
+            transport=self._transport,
+            api_key=self._api_key,
+            use_sdk=self._use_sdk,
+        )
 
     def _create_overlay(self) -> DisplayOverlay | None:
         return MetaRayBanDisplayOverlay(device_id=self._device_id, transport=self._transport)

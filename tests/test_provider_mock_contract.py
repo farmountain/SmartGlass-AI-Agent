@@ -70,12 +70,28 @@ def _install_fake_sdk(monkeypatch: pytest.MonkeyPatch) -> types.SimpleNamespace:
                     "format": "pcm_float32",
                 }
 
-    fake_sdk = types.SimpleNamespace(camera=FakeCamera(), microphone=FakeMicrophone())
+    class FakeAudio:
+        def __init__(self):
+            self.calls: list[dict[str, object]] = []
+
+        def speak(self, *, text: str, device_id: str, transport: str, api_key: str | None):
+            self.calls.append(
+                {"text": text, "device_id": device_id, "transport": transport, "api_key": api_key}
+            )
+            return {
+                "text": text,
+                "device_id": device_id,
+                "transport": transport,
+                "status": "sdk",
+            }
+
+    fake_sdk = types.SimpleNamespace(camera=FakeCamera(), microphone=FakeMicrophone(), audio=FakeAudio())
     fake_sdk.camera_calls = fake_sdk.camera.calls
     fake_sdk.microphone_calls = fake_sdk.microphone.calls
+    fake_sdk.audio_calls = fake_sdk.audio.calls
 
-    monkeypatch.setattr(meta_module.meta, "_META_SDK_AVAILABLE", True)
-    monkeypatch.setattr(meta_module.meta, "_META_SDK", fake_sdk)
+    monkeypatch.setattr(meta_module, "_META_SDK_AVAILABLE", True)
+    monkeypatch.setattr(meta_module, "_META_SDK", fake_sdk)
     return fake_sdk
 
 
@@ -112,6 +128,20 @@ def test_audio_out_metadata_progresses(provider_factory) -> None:
     assert first["text"] == "hello world"
     if "words" in first:
         assert first["words"] == ["hello", "world"]
+
+
+def test_meta_audio_out_mock_fallback_when_sdk_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(meta_module, "_META_SDK_AVAILABLE", False)
+    monkeypatch.setattr(meta_module, "_META_SDK", None)
+    provider = MetaRayBanProvider(prefer_sdk=True)
+    audio_out = provider.get_audio_out()
+    assert audio_out is not None
+    first = audio_out.speak("offline")
+    second = audio_out.speak("offline")
+    assert first["status"] == "mock"
+    assert first["transport"] == "mock"
+    assert first["utterance_index"] == 0
+    assert second["utterance_index"] == 1
 
 
 @pytest.mark.parametrize("provider_factory", PROVIDER_FACTORIES)
@@ -156,6 +186,9 @@ def test_meta_provider_prefers_sdk_when_available(monkeypatch: pytest.MonkeyPatc
 
     frame = next(provider.iter_frames())
     audio_chunk = next(provider.iter_audio_chunks())
+    audio_out = provider.get_audio_out()
+    assert audio_out is not None
+    spoken = audio_out.speak("hi")
 
     assert fake_sdk.camera_calls and fake_sdk.microphone_calls
     assert frame["frame_id"] == 0
@@ -171,3 +204,8 @@ def test_meta_provider_prefers_sdk_when_available(monkeypatch: pytest.MonkeyPatc
     assert audio_chunk["device_id"] == fake_sdk.microphone_calls[0]["device_id"]
     assert audio_chunk["transport"] == "sdk"
     assert "timestamp_ms" in audio_chunk
+    assert fake_sdk.audio_calls
+    assert spoken["status"] == "sdk"
+    assert spoken["text"] == fake_sdk.audio_calls[0]["text"]
+    assert spoken["device_id"] == fake_sdk.audio_calls[0]["device_id"]
+    assert spoken["transport"] == "sdk"
