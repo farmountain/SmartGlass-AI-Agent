@@ -13,6 +13,10 @@ from src.smartglass_agent import SmartGlassAgent
 from .config import EdgeRuntimeConfig
 
 
+class BufferLimitExceeded(Exception):
+    """Raised when an ingest payload exceeds configured buffer limits."""
+
+
 @dataclass
 class SessionState:
     """Container for per-session runtime state."""
@@ -20,7 +24,9 @@ class SessionState:
     agent: SmartGlassAgent
     transcripts: List[str] = field(default_factory=list)
     audio_buffers: List[np.ndarray] = field(default_factory=list)
+    audio_durations: List[Optional[float]] = field(default_factory=list)
     last_frame: Optional[Image.Image] = None
+    frame_history: List[Image.Image] = field(default_factory=list)
     query_history: List[Dict[str, Any]] = field(default_factory=list)
 
 
@@ -57,21 +63,34 @@ class SessionManager:
             del self._sessions[session_id]
 
     def ingest_audio(
-        self, session_id: str, audio_array: np.ndarray, language: Optional[str] = None
+        self,
+        session_id: str,
+        audio_array: np.ndarray,
+        language: Optional[str] = None,
+        sample_rate: Optional[int] = None,
     ) -> str:
         """Transcribe and retain audio input for a session."""
 
         state = self._get_state(session_id)
+
+        duration_seconds = self._calculate_audio_duration(audio_array, sample_rate)
+        self._validate_audio_limits(audio_array, duration_seconds)
+
         transcript = state.agent.process_audio_command(audio_array, language=language)
         state.transcripts.append(transcript)
         state.audio_buffers.append(audio_array)
+        state.audio_durations.append(duration_seconds)
+        self._trim_audio_buffers(state)
         return transcript
 
     def ingest_frame(self, session_id: str, frame: Image.Image) -> None:
         """Store the latest video frame for the session."""
 
         state = self._get_state(session_id)
+        self._validate_frame_limits(frame)
+        state.frame_history.append(frame)
         state.last_frame = frame
+        self._trim_frame_history(state)
 
     def run_query(
         self,
@@ -79,6 +98,7 @@ class SessionManager:
         *,
         text_query: Optional[str] = None,
         audio_input: Optional[np.ndarray] = None,
+        audio_sample_rate: Optional[int] = None,
         image_input: Optional[Image.Image] = None,
         language: Optional[str] = None,
         cloud_offload: bool = False,
@@ -86,7 +106,15 @@ class SessionManager:
         """Execute a multimodal query through the session's agent."""
 
         state = self._get_state(session_id)
+
+        if isinstance(audio_input, np.ndarray):
+            duration_seconds = self._calculate_audio_duration(audio_input, audio_sample_rate)
+            self._validate_audio_limits(audio_input, duration_seconds)
+
         image = image_input if image_input is not None else state.last_frame
+        if image is not None:
+            self._validate_frame_limits(image)
+
         result = state.agent.process_multimodal_query(
             audio_input=audio_input,
             image_input=image,
@@ -108,3 +136,90 @@ class SessionManager:
             "has_frame": state.last_frame is not None,
             "query_count": len(state.query_history),
         }
+
+    @staticmethod
+    def _calculate_audio_duration(
+        audio_array: np.ndarray, sample_rate: Optional[int]
+    ) -> Optional[float]:
+        if sample_rate is None:
+            return None
+        return float(len(audio_array) / sample_rate)
+
+    def _validate_audio_limits(
+        self, audio_array: np.ndarray, duration_seconds: Optional[float]
+    ) -> None:
+        if (
+            self.config.audio_buffer_max_bytes is not None
+            and audio_array.nbytes > self.config.audio_buffer_max_bytes
+        ):
+            raise BufferLimitExceeded(
+                "Audio payload exceeds configured maximum buffer size"
+            )
+
+        if (
+            self.config.audio_buffer_max_seconds is not None
+            and duration_seconds is None
+        ):
+            raise BufferLimitExceeded(
+                "Audio payload duration unknown; cannot enforce maximum buffer duration"
+            )
+
+        if (
+            self.config.audio_buffer_max_seconds is not None
+            and duration_seconds is not None
+            and duration_seconds > self.config.audio_buffer_max_seconds
+        ):
+            raise BufferLimitExceeded(
+                "Audio payload exceeds configured maximum buffer duration"
+            )
+
+    def _trim_audio_buffers(self, state: SessionState) -> None:
+        max_bytes = self.config.audio_buffer_max_bytes
+        max_seconds = self.config.audio_buffer_max_seconds
+
+        if max_bytes is None and max_seconds is None:
+            return
+
+        def total_bytes() -> int:
+            return sum(buffer.nbytes for buffer in state.audio_buffers)
+
+        def total_duration() -> float:
+            return sum(duration or 0.0 for duration in state.audio_durations)
+
+        while state.audio_buffers:
+            over_bytes = max_bytes is not None and total_bytes() > max_bytes
+            over_time = max_seconds is not None and total_duration() > max_seconds
+            if not over_bytes and not over_time:
+                break
+            state.audio_buffers.pop(0)
+            state.audio_durations.pop(0)
+
+    def _validate_frame_limits(self, frame: Image.Image) -> None:
+        if self.config.frame_buffer_max_bytes is None:
+            return
+
+        if self._estimate_frame_bytes(frame) > self.config.frame_buffer_max_bytes:
+            raise BufferLimitExceeded(
+                "Frame payload exceeds configured maximum buffer size"
+            )
+
+    def _trim_frame_history(self, state: SessionState) -> None:
+        max_frames = max(1, self.config.frame_history_size)
+        max_bytes = self.config.frame_buffer_max_bytes
+
+        def total_frame_bytes() -> int:
+            return sum(self._estimate_frame_bytes(frame) for frame in state.frame_history)
+
+        while state.frame_history:
+            over_count = len(state.frame_history) > max_frames
+            over_bytes = max_bytes is not None and total_frame_bytes() > max_bytes
+            if not over_count and not over_bytes:
+                break
+            state.frame_history.pop(0)
+            state.last_frame = state.frame_history[-1] if state.frame_history else None
+
+    @staticmethod
+    def _estimate_frame_bytes(frame: Image.Image) -> int:
+        width, height = frame.size
+        channels = len(frame.getbands())
+        return width * height * channels

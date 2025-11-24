@@ -13,7 +13,7 @@ from PIL import Image
 import uvicorn
 
 from .config import EdgeRuntimeConfig, load_config_from_env
-from .session_manager import SessionManager
+from .session_manager import BufferLimitExceeded, SessionManager
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ app = FastAPI(
 )
 
 
-def _decode_audio_payload(audio_base64: str) -> np.ndarray:
+def _decode_audio_payload(audio_base64: str) -> tuple[np.ndarray, int]:
     try:
         audio_bytes = base64.b64decode(audio_base64)
         return _decode_audio_bytes(audio_bytes)
@@ -68,11 +68,11 @@ def _decode_audio_payload(audio_base64: str) -> np.ndarray:
         raise HTTPException(status_code=400, detail=f"Invalid audio payload: {exc}") from exc
 
 
-def _decode_audio_bytes(audio_bytes: bytes) -> np.ndarray:
-    data, _ = sf.read(io.BytesIO(audio_bytes))
+def _decode_audio_bytes(audio_bytes: bytes) -> tuple[np.ndarray, int]:
+    data, sample_rate = sf.read(io.BytesIO(audio_bytes))
     if len(data.shape) > 1:
         data = data.mean(axis=1)
-    return data.astype(np.float32)
+    return data.astype(np.float32), int(sample_rate)
 
 
 def _decode_image_payload(image_base64: str) -> Image.Image:
@@ -101,10 +101,14 @@ def post_audio(session_id: str, payload: AudioPayload) -> Dict[str, Any]:
     """Submit audio for transcription within the session."""
 
     try:
-        audio_array = _decode_audio_payload(payload.audio_base64)
-        transcript = session_manager.ingest_audio(session_id, audio_array, payload.language)
+        audio_array, sample_rate = _decode_audio_payload(payload.audio_base64)
+        transcript = session_manager.ingest_audio(
+            session_id, audio_array, payload.language, sample_rate
+        )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except BufferLimitExceeded as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
 
     return {"session_id": session_id, "transcript": transcript}
 
@@ -118,6 +122,8 @@ def post_frame(session_id: str, payload: FramePayload) -> Dict[str, Any]:
         session_manager.ingest_frame(session_id, frame)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except BufferLimitExceeded as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
 
     return {"session_id": session_id, "status": "frame stored"}
 
@@ -129,7 +135,9 @@ def post_query(session_id: str, payload: QueryPayload) -> Dict[str, Any]:
     if payload.text_query is None and payload.audio_base64 is None:
         raise HTTPException(status_code=400, detail="Provide either text_query or audio_base64")
 
-    audio_input = _decode_audio_payload(payload.audio_base64) if payload.audio_base64 else None
+    audio_input, audio_sample_rate = (
+        _decode_audio_payload(payload.audio_base64) if payload.audio_base64 else (None, None)
+    )
     image_input = _decode_image_payload(payload.image_base64) if payload.image_base64 else None
 
     try:
@@ -137,12 +145,15 @@ def post_query(session_id: str, payload: QueryPayload) -> Dict[str, Any]:
             session_id,
             text_query=payload.text_query,
             audio_input=audio_input,
+            audio_sample_rate=audio_sample_rate,
             image_input=image_input,
             language=payload.language,
             cloud_offload=payload.cloud_offload,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except BufferLimitExceeded as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
 
     return result
 
@@ -179,9 +190,14 @@ async def websocket_audio(session_id: str, websocket: WebSocket) -> None:
     try:
         while True:
             audio_bytes = await websocket.receive_bytes()
-            audio_array = _decode_audio_bytes(audio_bytes)
-            transcript = session_manager.ingest_audio(session_id, audio_array, language)
+            audio_array, sample_rate = _decode_audio_bytes(audio_bytes)
+            transcript = session_manager.ingest_audio(
+                session_id, audio_array, language, sample_rate
+            )
             await websocket.send_json({"session_id": session_id, "transcript": transcript})
+    except BufferLimitExceeded as exc:
+        await websocket.send_json({"session_id": session_id, "error": str(exc)})
+        await websocket.close(code=1009, reason="Buffer limit exceeded")
     except WebSocketDisconnect:
         logger.info("Audio WebSocket disconnected for session %s", session_id)
     finally:
@@ -212,6 +228,9 @@ async def websocket_frame(session_id: str, websocket: WebSocket) -> None:
             frame = _decode_image_bytes(frame_bytes)
             session_manager.ingest_frame(session_id, frame)
             await websocket.send_json({"session_id": session_id, "status": "frame stored"})
+    except BufferLimitExceeded as exc:
+        await websocket.send_json({"session_id": session_id, "error": str(exc)})
+        await websocket.close(code=1009, reason="Buffer limit exceeded")
     except WebSocketDisconnect:
         logger.info("Frame WebSocket disconnected for session %s", session_id)
     finally:
