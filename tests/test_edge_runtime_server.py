@@ -10,7 +10,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 import soundfile as sf
+from fastapi import WebSocketDisconnect
 from fastapi.testclient import TestClient
+from starlette.testclient import WebSocketTestSession
 from PIL import Image
 
 
@@ -60,11 +62,21 @@ def _encode_silent_wav(duration_seconds: float = 0.1, sample_rate: int = 16000) 
     return base64.b64encode(buffer.getvalue()).decode()
 
 
+def _make_silent_wav_bytes(duration_seconds: float = 0.1, sample_rate: int = 16000) -> bytes:
+    """Convenience helper for creating raw WAV payloads for WebSocket tests."""
+
+    return base64.b64decode(_encode_silent_wav(duration_seconds, sample_rate))
+
+
 def _encode_test_image(size: int = 8) -> str:
     image = Image.new("RGB", (size, size), color=(255, 0, 0))
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
     return base64.b64encode(buffer.getvalue()).decode()
+
+
+def _make_test_image_bytes(size: int = 8) -> bytes:
+    return base64.b64decode(_encode_test_image(size))
 
 
 @pytest.fixture(name="edge_app")
@@ -102,11 +114,13 @@ def fixture_edge_app(monkeypatch, request):
     token: str | None
     header_name: str | None
     extra_env: dict[str, str]
+    override_dependency = False
 
     if isinstance(auth_config, dict):
         token = auth_config.get("token")
         header_name = auth_config.get("header")
         extra_env = auth_config.get("env", {})
+        override_dependency = auth_config.get("override_dependency", False)
     else:
         token = auth_config
         header_name = None
@@ -129,7 +143,14 @@ def fixture_edge_app(monkeypatch, request):
 
     server_module = import_module("src.edge_runtime.server")
     reload(server_module)
-    return server_module.app
+    app = server_module.app
+
+    if override_dependency:
+        def _override_verify(request=None) -> None:  # type: ignore[annotation-unchecked]
+            return server_module._verify_auth_token(request) if request is not None else None
+
+        app.dependency_overrides[server_module._verify_api_key_header] = _override_verify
+    return app
 
 
 def test_edge_runtime_server_lifecycle(edge_app):
@@ -231,7 +252,7 @@ def test_audio_ingest_rejects_when_limits_exceeded(edge_app):
     response = client.post(f"/sessions/{session_id}/audio", json=audio_payload)
 
     assert response.status_code == 413
-    assert "Audio buffer would exceed configured limits" in response.json()["detail"]
+    assert "Audio payload exceeds configured maximum buffer duration" in response.json()["detail"]
 
 
 @pytest.mark.parametrize(
@@ -284,3 +305,130 @@ def test_frame_ingest_rejects_when_limits_exceeded(edge_app):
     assert first.status_code == 200
     assert second.status_code == 413
     assert "Frame buffer would exceed configured limits" in second.json()["detail"]
+
+
+def test_http_routes_reject_unknown_session_ids(edge_app):
+    client = TestClient(edge_app)
+
+    invalid_session = "does-not-exist"
+    audio_payload = {"audio_base64": _encode_silent_wav()}
+    frame_payload = {"image_base64": _encode_test_image()}
+    query_payload = {"text_query": "hello"}
+
+    audio_response = client.post(f"/sessions/{invalid_session}/audio", json=audio_payload)
+    frame_response = client.post(f"/sessions/{invalid_session}/frame", json=frame_payload)
+    query_response = client.post(f"/sessions/{invalid_session}/query", json=query_payload)
+    delete_response = client.delete(f"/sessions/{invalid_session}")
+
+    for response in (audio_response, frame_response, query_response, delete_response):
+        assert response.status_code == 404
+        assert "Unknown session id" in response.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    "edge_app",
+    [
+        {
+            "override_dependency": True,
+        }
+    ],
+    indirect=True,
+)
+def test_websocket_routes_reject_unknown_session_ids(edge_app):
+    client = TestClient(edge_app)
+    missing_session = "missing"
+
+    with pytest.raises(WebSocketDisconnect) as audio_exc:
+        with client.websocket_connect(f"/ws/audio/{missing_session}") as websocket:
+            websocket.receive_json()
+
+    assert audio_exc.value.code == 4404
+
+    with pytest.raises(WebSocketDisconnect) as frame_exc:
+        with client.websocket_connect(f"/ws/frame/{missing_session}") as websocket:
+            websocket.receive_json()
+
+    assert frame_exc.value.code == 4404
+
+
+@pytest.mark.parametrize(
+    "edge_app",
+    [
+        {"token": "secret-key", "override_dependency": True},
+    ],
+    indirect=True,
+)
+def test_websocket_authentication_required(edge_app):
+    client = TestClient(edge_app)
+    session_id = client.post("/sessions", headers={"X-API-Key": "secret-key"}).json()["session_id"]
+
+    with pytest.raises(WebSocketDisconnect) as audio_exc:
+        with client.websocket_connect(f"/ws/audio/{session_id}") as websocket:
+            websocket.receive_json()
+
+    assert audio_exc.value.code == 4401
+
+    with pytest.raises(WebSocketDisconnect) as frame_exc:
+        with client.websocket_connect(f"/ws/frame/{session_id}") as websocket:
+            websocket.receive_json()
+
+    assert frame_exc.value.code == 4401
+
+
+@pytest.mark.parametrize(
+    "edge_app",
+    [
+        {
+            "token": "secret-token",
+            "env": {"AUDIO_BUFFER_MAX_SECONDS": "0.01", "AUDIO_BUFFER_POLICY": "reject"},
+            "override_dependency": True,
+        }
+    ],
+    indirect=True,
+)
+def test_websocket_audio_streaming_and_limits(edge_app):
+    client = TestClient(edge_app)
+    headers = {"X-API-Key": "secret-token"}
+    session_id = client.post("/sessions", headers=headers).json()["session_id"]
+
+    with client.websocket_connect(f"/ws/audio/{session_id}", headers=headers) as websocket:
+        websocket: WebSocketTestSession
+
+        websocket.send_bytes(_make_silent_wav_bytes(duration_seconds=0.005))
+        first = websocket.receive_json()
+        assert first["session_id"] == session_id
+        assert first["transcript"] == "stub-transcript"
+
+        websocket.send_bytes(_make_silent_wav_bytes(duration_seconds=0.05))
+        second = websocket.receive_json()
+        assert second["session_id"] == session_id
+        assert "Audio payload exceeds configured maximum buffer duration" in second["error"]
+
+        with pytest.raises(WebSocketDisconnect) as excinfo:
+            websocket.receive_json()
+
+        assert excinfo.value.code == 1009
+
+
+@pytest.mark.parametrize(
+    "edge_app",
+    [
+        {"token": "secret-token", "override_dependency": True},
+    ],
+    indirect=True,
+)
+def test_websocket_frame_streaming(edge_app):
+    client = TestClient(edge_app)
+    headers = {"X-API-Key": "secret-token"}
+    session_id = client.post("/sessions", headers=headers).json()["session_id"]
+
+    with client.websocket_connect(f"/ws/frame/{session_id}", headers=headers) as websocket:
+        websocket: WebSocketTestSession
+
+        websocket.send_bytes(_make_test_image_bytes(size=4))
+        first = websocket.receive_json()
+        assert first == {"session_id": session_id, "status": "frame stored"}
+
+        websocket.send_bytes(_make_test_image_bytes(size=4))
+        second = websocket.receive_json()
+        assert second == {"session_id": session_id, "status": "frame stored"}
