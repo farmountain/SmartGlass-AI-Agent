@@ -36,45 +36,43 @@ def _extract_audio_frame(chunk: object) -> np.ndarray:
 
 
 def _install_fake_sdk(monkeypatch: pytest.MonkeyPatch) -> types.SimpleNamespace:
-    fake_sdk = types.SimpleNamespace(camera_calls=[], microphone_calls=[])
+    class FakeCamera:
+        def __init__(self):
+            self.calls: list[dict[str, object]] = []
 
-    def camera_frames(*, device_id: str, transport: str, resolution: tuple[int, int]):
-        fake_sdk.camera_calls.append({"device_id": device_id, "transport": transport, "resolution": resolution})
-        for idx in range(2):
-            yield {
-                "frame_id": f"sdk-camera-{idx}",
-                "frame": np.full((*resolution, 3), idx, dtype=np.uint8),
-                "timestamp_ms": 1700000000 + idx,
-                "device_id": device_id,
-                "transport": transport,
-                "format": "rgb888",
-            }
+        def stream_frames(self, *, device_id: str, transport: str, resolution: tuple[int, int]):
+            self.calls.append({"device_id": device_id, "transport": transport, "resolution": resolution})
+            for idx in range(2):
+                yield {
+                    "frame": np.full((*resolution, 3), idx, dtype=np.uint8),
+                    "timestamp_ms": 1700000000 + idx,
+                }
 
-    def microphone_frames(
-        *, device_id: str, transport: str, sample_rate_hz: int, frame_size: int, channels: int
-    ):
-        fake_sdk.microphone_calls.append(
-            {
-                "device_id": device_id,
-                "transport": transport,
-                "sample_rate_hz": sample_rate_hz,
-                "frame_size": frame_size,
-                "channels": channels,
-            }
-        )
-        while True:
-            yield {
-                "pcm": np.zeros((frame_size, channels), dtype=np.float32),
-                "sample_rate_hz": sample_rate_hz,
-                "frame_size": frame_size,
-                "channels": channels,
-                "device_id": device_id,
-                "transport": transport,
-                "format": "pcm_float32",
-            }
+    class FakeMicrophone:
+        def __init__(self):
+            self.calls: list[dict[str, object]] = []
 
-    fake_sdk.camera_frames = camera_frames
-    fake_sdk.microphone_frames = microphone_frames
+        def stream_frames(
+            self, *, device_id: str, transport: str, sample_rate_hz: int, frame_size: int, channels: int
+        ):
+            self.calls.append(
+                {
+                    "device_id": device_id,
+                    "transport": transport,
+                    "sample_rate_hz": sample_rate_hz,
+                    "frame_size": frame_size,
+                    "channels": channels,
+                }
+            )
+            while True:
+                yield {
+                    "pcm": np.zeros((frame_size, channels), dtype=np.float32),
+                    "format": "pcm_float32",
+                }
+
+    fake_sdk = types.SimpleNamespace(camera=FakeCamera(), microphone=FakeMicrophone())
+    fake_sdk.camera_calls = fake_sdk.camera.calls
+    fake_sdk.microphone_calls = fake_sdk.microphone.calls
 
     monkeypatch.setattr(meta_module.meta, "_META_SDK_AVAILABLE", True)
     monkeypatch.setattr(meta_module.meta, "_META_SDK", fake_sdk)
@@ -160,10 +158,11 @@ def test_meta_provider_prefers_sdk_when_available(monkeypatch: pytest.MonkeyPatc
     audio_chunk = next(provider.iter_audio_chunks())
 
     assert fake_sdk.camera_calls and fake_sdk.microphone_calls
-    assert frame["frame_id"].startswith("sdk-camera-")
+    assert frame["frame_id"] == 0
     assert frame["format"] == "rgb888"
     assert frame["device_id"] == fake_sdk.camera_calls[0]["device_id"]
     assert frame["transport"] == "sdk"
+    assert "timestamp_ms" in frame
 
     assert audio_chunk["format"] == "pcm_float32"
     assert audio_chunk["sample_rate_hz"] == fake_sdk.microphone_calls[0]["sample_rate_hz"]
@@ -171,3 +170,4 @@ def test_meta_provider_prefers_sdk_when_available(monkeypatch: pytest.MonkeyPatc
     assert audio_chunk["channels"] == fake_sdk.microphone_calls[0]["channels"]
     assert audio_chunk["device_id"] == fake_sdk.microphone_calls[0]["device_id"]
     assert audio_chunk["transport"] == "sdk"
+    assert "timestamp_ms" in audio_chunk
