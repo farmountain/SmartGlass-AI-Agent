@@ -11,15 +11,19 @@ shapes without needing hardware.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import asyncio
 import importlib
 import itertools
 import logging
-from typing import Iterator, Mapping
+from typing import Awaitable, Callable, Iterator, Mapping, Optional
 
 import numpy as np
 
 from ..interfaces import AudioOut, CameraIn, DisplayOverlay, Haptics, MicIn, Permissions
 from .base import ProviderBase
+from fsm import AsyncDriver, GlassesFSM, GlassesHooks, GlassesState, InteractionBudgets, TimerDriver, TimerHandle
+from src.edge_runtime import load_config_from_env
+from src.edge_runtime.session_manager import SessionManager
 
 LOGGER = logging.getLogger(__name__)
 
@@ -558,6 +562,173 @@ class MetaRayBanProvider(ProviderBase):
         )
 
 
+class _AsyncioTimerHandle(TimerHandle):
+    """Adapter allowing :class:`asyncio.TimerHandle` to satisfy ``TimerHandle``."""
+
+    def __init__(self, handle: asyncio.TimerHandle) -> None:
+        self._handle = handle
+
+    def cancel(self) -> None:  # pragma: no cover - trivial adapter
+        self._handle.cancel()
+
+
+class AsyncioTimerDriver(TimerDriver):
+    """Thin ``TimerDriver`` backed by the current ``asyncio`` loop."""
+
+    def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
+        self._loop = loop
+
+    def call_later(self, delay: float, callback: Callable[[], None]) -> TimerHandle:  # type: ignore[override]
+        handle = self._loop.call_later(delay, callback)
+        return _AsyncioTimerHandle(handle)
+
+
+class AsyncioAsyncDriver(AsyncDriver):
+    """Schedule coroutines without blocking the caller."""
+
+    def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
+        self._loop = loop
+
+    def create_task(self, coro: Awaitable[None]) -> None:  # type: ignore[override]
+        self._loop.create_task(coro)
+
+
+class MetaRayBanRuntime:
+    """Runtime entrypoint wiring the Meta provider to the glasses FSM."""
+
+    def __init__(
+        self,
+        provider: Optional[MetaRayBanProvider] = None,
+        *,
+        loop: Optional[asyncio.AbstractEventLoop] = None,
+        budgets: Optional[InteractionBudgets] = None,
+        session_manager: Optional[SessionManager] = None,
+    ) -> None:
+        self._loop = loop or asyncio.get_event_loop()
+        self._provider = provider or MetaRayBanProvider()
+        self._session_manager = session_manager or SessionManager(load_config_from_env())
+        self._session_id: Optional[str] = None
+        self._audio_task: asyncio.Task[None] | None = None
+        self._stop_audio = asyncio.Event()
+
+        self._hooks = GlassesHooks(
+            start_audio_stream=self._start_audio_stream,
+            stop_audio_stream=self._stop_audio_stream,
+            start_tts=self._start_tts,
+            stop_tts=self._stop_tts,
+            show_overlay=self._show_overlay,
+            hide_overlay=self._hide_overlay,
+        )
+
+        self._fsm = GlassesFSM(
+            timer=AsyncioTimerDriver(self._loop),
+            async_driver=AsyncioAsyncDriver(self._loop),
+            budgets=budgets
+            or InteractionBudgets(listen_timeout=8.0, thinking_timeout=20.0, response_timeout=15.0),
+            hooks=self._hooks,
+        )
+
+    # Public event bridges -------------------------------------------------
+    def handle_wake_word(self) -> None:
+        """Dispatch a wake-word event into the FSM."""
+
+        self._fsm.wake_word_detected()
+
+    def handle_button_tap(self) -> None:
+        """Dispatch a button-tap event into the FSM."""
+
+        self._fsm.button_tapped()
+
+    def handle_response_ready(self, response_text: str) -> None:
+        """Notify the FSM that a response is available."""
+
+        self._fsm.response_ready(response_text)
+
+    def handle_network_error(self) -> None:
+        """Propagate network failures into the FSM."""
+
+        self._fsm.network_error()
+
+    def handle_timeout(self) -> None:
+        """Signal a timeout to the FSM."""
+
+        self._fsm.timeout()
+
+    # FSM hook implementations --------------------------------------------
+    async def _ensure_session(self) -> str:
+        if self._session_id is None:
+            self._session_id = await asyncio.to_thread(self._session_manager.create_session)
+        return self._session_id
+
+    async def _start_audio_stream(self) -> None:
+        if self._audio_task and not self._audio_task.done():
+            return
+
+        await self._ensure_session()
+
+        microphone = self._provider.open_audio_stream()
+        if microphone is None:
+            return
+
+        self._stop_audio.clear()
+
+        async def _stream() -> None:
+            try:
+                for frame in microphone.get_frames():
+                    if self._stop_audio.is_set():
+                        break
+                    payload = frame if isinstance(frame, Mapping) else {"pcm": frame}
+                    pcm = payload.get("pcm")
+                    if pcm is None:
+                        continue
+                    sample_rate = payload.get("sample_rate_hz")
+                    audio_array = np.asarray(pcm).reshape(-1)
+                    await asyncio.to_thread(
+                        self._session_manager.ingest_audio,
+                        self._session_id,
+                        audio_array,
+                        None,
+                        sample_rate,
+                    )
+                    await asyncio.sleep(0)
+            finally:
+                self._stop_audio.clear()
+
+        self._audio_task = self._loop.create_task(_stream())
+
+    async def _stop_audio_stream(self) -> None:
+        if self._audio_task is None:
+            return
+        self._stop_audio.set()
+        try:
+            await self._audio_task
+        finally:
+            self._audio_task = None
+
+    async def _start_tts(self, text: str) -> None:
+        audio_out = self._provider.get_audio_out()
+        if audio_out is None:
+            return
+        await asyncio.to_thread(audio_out.speak, text)
+
+    async def _stop_tts(self) -> None:
+        return None
+
+    async def _show_overlay(self, state: GlassesState) -> None:
+        overlay = self._provider.get_overlay()
+        if overlay is None:
+            return
+        card = {"state": state.name.lower(), "visible": True}
+        await asyncio.to_thread(overlay.render, card)
+
+    async def _hide_overlay(self, state: GlassesState) -> None:
+        overlay = self._provider.get_overlay()
+        if overlay is None:
+            return
+        card = {"state": state.name.lower(), "visible": False}
+        await asyncio.to_thread(overlay.render, card)
+
+
 __all__ = [
     "MetaRayBanAudioOut",
     "MetaRayBanCameraIn",
@@ -566,4 +737,7 @@ __all__ = [
     "MetaRayBanMicIn",
     "MetaRayBanPermissions",
     "MetaRayBanProvider",
+    "AsyncioAsyncDriver",
+    "AsyncioTimerDriver",
+    "MetaRayBanRuntime",
 ]
