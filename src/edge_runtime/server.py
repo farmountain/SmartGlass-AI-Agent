@@ -19,6 +19,7 @@ from uvicorn.config import LOGGING_CONFIG
 
 from .config import EdgeRuntimeConfig, load_config_from_env
 from .session_manager import BufferLimitExceeded, SessionManager
+from src.utils.metrics import get_metrics_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -173,6 +174,14 @@ def readiness() -> Dict[str, str]:
     """Readiness probe for deployment environments."""
 
     return {"status": "ready"}
+
+
+@app.get("/metrics")
+def metrics() -> Dict[str, object]:
+    """Expose aggregate latency and lifecycle metrics."""
+
+    display_available = session_manager.display_available()
+    return get_metrics_snapshot(display_available=display_available)
 
 
 def _decode_audio_payload(audio_base64: str) -> tuple[np.ndarray, int]:

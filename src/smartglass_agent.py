@@ -15,6 +15,7 @@ from .clip_vision import CLIPVisionProcessor
 from .gpt2_generator import GPT2TextGenerator
 from .llm_backend import AnnLLMBackend, LLMBackend
 from .whisper_processor import WhisperAudioProcessor
+from .utils.metrics import record_latency
 
 
 logger = logging.getLogger(__name__)
@@ -102,10 +103,15 @@ class SmartGlassAgent:
         Returns:
             Transcribed text command
         """
-        if isinstance(audio_input, str):
-            result = self.audio_processor.transcribe_audio(audio_path=audio_input, language=language)
-        else:
-            result = self.audio_processor.transcribe_audio(audio_array=audio_input, language=language)
+        with record_latency("ASR"):
+            if isinstance(audio_input, str):
+                result = self.audio_processor.transcribe_audio(
+                    audio_path=audio_input, language=language
+                )
+            else:
+                result = self.audio_processor.transcribe_audio(
+                    audio_array=audio_input, language=language
+                )
         
         return result['text'].strip()
     
@@ -124,11 +130,12 @@ class SmartGlassAgent:
         Returns:
             Dictionary with scene analysis results
         """
-        if custom_queries:
-            result = self.vision_processor.understand_image(image, custom_queries)
-        else:
-            description = self.vision_processor.describe_scene(image)
-            result = {"description": description}
+        with record_latency("Vision"):
+            if custom_queries:
+                result = self.vision_processor.understand_image(image, custom_queries)
+            else:
+                description = self.vision_processor.describe_scene(image)
+                result = {"description": description}
         
         return result
     
@@ -175,14 +182,15 @@ class SmartGlassAgent:
         prompt_sections.append(f"User query: {user_query}")
 
         prompt = "\n".join(prompt_sections)
-        response = self.llm_backend.generate(
-            prompt,
-            max_tokens=256,
-            system_prompt=(
-                "You are a helpful assistant for smart glasses users. Use the provided "
-                "visual context when available to deliver concise, actionable answers."
-            ),
-        )
+        with record_latency("LLM"):
+            response = self.llm_backend.generate(
+                prompt,
+                max_tokens=256,
+                system_prompt=(
+                    "You are a helpful assistant for smart glasses users. Use the provided "
+                    "visual context when available to deliver concise, actionable answers."
+                ),
+            )
         
         # Update conversation history
         self.conversation_history.append(f"User: {user_query}")

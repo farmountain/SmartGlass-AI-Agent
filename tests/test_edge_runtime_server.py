@@ -26,8 +26,11 @@ class FakeSmartGlassAgent:
         self.multimodal_queries = []
 
     def process_audio_command(self, audio_array: np.ndarray, language: str | None = None) -> str:
-        self.audio_commands.append((audio_array, language))
-        return "stub-transcript"
+        from src.utils.metrics import record_latency
+
+        with record_latency("ASR"):
+            self.audio_commands.append((audio_array, language))
+            return "stub-transcript"
 
     def process_multimodal_query(
         self,
@@ -38,6 +41,8 @@ class FakeSmartGlassAgent:
         language: str | None = None,
         cloud_offload: bool = False,
     ) -> dict:
+        from src.utils.metrics import record_latency
+
         self.multimodal_queries.append(
             {
                 "audio_input": audio_input,
@@ -47,11 +52,15 @@ class FakeSmartGlassAgent:
                 "cloud_offload": cloud_offload,
             }
         )
-        return {
-            "transcript": text_query or "stub-query",
-            "response": "stub-response",
-            "overlays": [{"type": "text", "content": "overlay"}],
-        }
+        with record_latency("LLM"):
+            return {
+                "transcript": text_query or "stub-query",
+                "response": "stub-response",
+                "overlays": [{"type": "text", "content": "overlay"}],
+            }
+
+    def has_display(self) -> bool:
+        return True
 
 
 def _encode_silent_wav(duration_seconds: float = 0.1, sample_rate: int = 16000) -> str:
@@ -143,6 +152,8 @@ def fixture_edge_app(monkeypatch, request):
 
     server_module = import_module("src.edge_runtime.server")
     reload(server_module)
+    metrics_module = import_module("src.utils.metrics")
+    metrics_module.metrics.reset()
     app = server_module.app
 
     if override_dependency:
@@ -181,6 +192,24 @@ def test_edge_runtime_server_lifecycle(edge_app):
     delete_response = client.delete(f"/sessions/{session_id}")
     assert delete_response.status_code == 200
     assert delete_response.json()["status"] == "deleted"
+
+
+def test_metrics_endpoint_reports_activity(edge_app):
+    client = TestClient(edge_app)
+
+    session_id = client.post("/sessions").json()["session_id"]
+    audio_payload = {"audio_base64": _encode_silent_wav(), "language": "en"}
+    client.post(f"/sessions/{session_id}/audio", json=audio_payload)
+    client.post(f"/sessions/{session_id}/query", json={"text_query": "ping"})
+
+    response = client.get("/metrics")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["sessions"]["created"] >= 1
+    assert payload["queries"]["total"] >= 1
+    assert payload["latencies"]["ASR"]["count"] >= 1
+    assert payload["latencies"]["LLM"]["count"] >= 1
+    assert payload["display_available"] is True
 
 
 @pytest.mark.parametrize("edge_app", ["secret-key"], indirect=True)
