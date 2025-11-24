@@ -2,13 +2,13 @@
 
 from .base import BaseProvider, ProviderBase
 from .meta import (
-    MetaAudioOut,
-    MetaCameraIn,
-    MetaDisplayOverlay,
-    MetaHaptics,
-    MetaMicIn,
-    MetaPermissions,
-    MetaProvider,
+    MetaRayBanAudioOut,
+    MetaRayBanCameraIn,
+    MetaRayBanDisplayOverlay,
+    MetaRayBanHaptics,
+    MetaRayBanMicIn,
+    MetaRayBanPermissions,
+    MetaRayBanProvider,
 )
 from .mock import (
     MockAudioOut,
@@ -57,13 +57,13 @@ from .xreal_mock import (
 )
 
 __all__ = [
-    "MetaAudioOut",
-    "MetaCameraIn",
-    "MetaDisplayOverlay",
-    "MetaHaptics",
-    "MetaMicIn",
-    "MetaPermissions",
-    "MetaProvider",
+    "MetaRayBanAudioOut",
+    "MetaRayBanCameraIn",
+    "MetaRayBanDisplayOverlay",
+    "MetaRayBanHaptics",
+    "MetaRayBanMicIn",
+    "MetaRayBanPermissions",
+    "MetaRayBanProvider",
     "BaseProvider",
     "ProviderBase",
     "MockAudioOut",

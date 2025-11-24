@@ -6,7 +6,7 @@ import os
 from typing import Callable
 
 from .providers.base import BaseProvider
-from .providers.meta import MetaProvider
+from .providers.meta import MetaRayBanProvider
 from .providers.mock import MockProvider
 from .providers.openxr_mock import OpenXRMockProvider
 from .providers.visionos_mock import VisionOSMockProvider
@@ -23,7 +23,7 @@ def get_provider() -> Provider:
     provider_name = os.getenv("PROVIDER", "mock").lower()
     provider_map: dict[str, Callable[[], Provider]] = {
         "mock": MockProvider,
-        "meta": MetaProvider,
+        "meta": MetaRayBanProvider,
         "vuzix": VuzixMockProvider,
         "xreal": XrealMockProvider,
         "openxr": OpenXRMockProvider,

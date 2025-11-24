@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from drivers.factory import get_provider
-from drivers.providers.meta import MetaProvider
+from drivers.providers.meta import MetaRayBanProvider
 from drivers.providers.mock import MockAudioOut, MockDisplayOverlay
 from examples.hero1_caption import run_hero_pipeline
 
@@ -28,7 +28,7 @@ def _action_json(provider_name: str, monkeypatch: pytest.MonkeyPatch) -> str:
     monkeypatch.setenv("PROVIDER", provider_name)
     provider = get_provider()
 
-    if isinstance(provider, MetaProvider):
+    if isinstance(provider, MetaRayBanProvider):
         provider.audio_out = MockAudioOut()
         provider.overlay = MockDisplayOverlay()
 
