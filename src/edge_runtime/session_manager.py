@@ -9,6 +9,7 @@ import numpy as np
 from PIL import Image
 
 from src.smartglass_agent import SmartGlassAgent
+from src.utils.metrics import metrics, record_latency
 
 from .config import EdgeRuntimeConfig
 
@@ -48,6 +49,7 @@ class SessionManager:
                 clip_model=self.config.vision_model,
             )
             self._sessions[session_id] = SessionState(agent=agent)
+            metrics.increment_sessions()
             return session_id
 
     def _get_state(self, session_id: str) -> SessionState:
@@ -56,11 +58,25 @@ class SessionManager:
         except KeyError as exc:
             raise KeyError(f"Unknown session id: {session_id}") from exc
 
+    def display_available(self) -> bool:
+        """Infer whether the underlying provider exposes a display."""
+
+        with self._lock:
+            agents = [state.agent for state in self._sessions.values()]
+
+        for agent in agents:
+            if self._agent_has_display(agent):
+                return True
+
+        provider_hint = (self.config.provider or "").lower()
+        return any(hint in provider_hint for hint in ("display", "glass", "hud"))
+
     def delete_session(self, session_id: str) -> None:
         with self._lock:
             if session_id not in self._sessions:
                 raise KeyError(f"Unknown session id: {session_id}")
             del self._sessions[session_id]
+            metrics.decrement_sessions()
 
     def ingest_audio(
         self,
@@ -72,7 +88,8 @@ class SessionManager:
         """Transcribe and retain audio input for a session."""
 
         duration_seconds = self._calculate_audio_duration(audio_array, sample_rate)
-        self._validate_audio_limits(audio_array, duration_seconds)
+        with record_latency("VAD"):
+            self._validate_audio_limits(audio_array, duration_seconds)
 
         state = self._get_state(session_id)
         self._ensure_audio_capacity(state, audio_array, duration_seconds)
@@ -106,24 +123,25 @@ class SessionManager:
         cloud_offload: bool = False,
     ) -> Dict[str, Any]:
         """Execute a multimodal query through the session's agent."""
-
+        metrics.increment_queries()
         state = self._get_state(session_id)
 
-        if isinstance(audio_input, np.ndarray):
-            duration_seconds = self._calculate_audio_duration(audio_input, audio_sample_rate)
-            self._validate_audio_limits(audio_input, duration_seconds)
+        with record_latency("Skill"):
+            if isinstance(audio_input, np.ndarray):
+                duration_seconds = self._calculate_audio_duration(audio_input, audio_sample_rate)
+                self._validate_audio_limits(audio_input, duration_seconds)
 
-        image = image_input if image_input is not None else state.last_frame
-        if image is not None:
-            self._validate_frame_limits(image)
+            image = image_input if image_input is not None else state.last_frame
+            if image is not None:
+                self._validate_frame_limits(image)
 
-        result = state.agent.process_multimodal_query(
-            audio_input=audio_input,
-            image_input=image,
-            text_query=text_query,
-            language=language,
-            cloud_offload=cloud_offload,
-        )
+            result = state.agent.process_multimodal_query(
+                audio_input=audio_input,
+                image_input=image,
+                text_query=text_query,
+                language=language,
+                cloud_offload=cloud_offload,
+            )
         state.query_history.append(result)
         if "query" in result:
             state.transcripts.append(result["query"])
@@ -146,6 +164,22 @@ class SessionManager:
         if sample_rate is None:
             return None
         return float(len(audio_array) / sample_rate)
+
+    @staticmethod
+    def _agent_has_display(agent: Any) -> bool:
+        has_display = getattr(agent, "has_display", None)
+        try:
+            if isinstance(has_display, bool):
+                return has_display
+            if callable(has_display) and has_display():
+                return True
+        except Exception:  # pylint: disable=broad-except
+            return False
+
+        for attr in ("display", "overlay"):
+            if getattr(agent, attr, None) is not None:
+                return True
+        return False
 
     def _validate_audio_limits(
         self, audio_array: np.ndarray, duration_seconds: Optional[float]
