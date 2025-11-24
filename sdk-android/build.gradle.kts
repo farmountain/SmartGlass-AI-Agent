@@ -46,6 +46,9 @@ dependencies {
     implementation("com.goterl:lazysodium-android:5.1.0@aar")
     implementation("com.goterl:lazysodium-java:5.1.0")
     implementation("net.java.dev.jna:jna:5.13.0@aar")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.moshi:moshi-kotlin:1.15.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
     testImplementation(kotlin("test"))
     testImplementation("junit:junit:4.13.2")
