@@ -1,9 +1,13 @@
 """FastAPI server exposing SmartGlassAgent sessions for edge runtimes."""
 
 import base64
+import copy
 import io
 import logging
+import logging.config
+from contextvars import ContextVar
 from typing import Any, Dict, Optional
+from uuid import uuid4
 
 import numpy as np
 import soundfile as sf
@@ -11,11 +15,62 @@ from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSock
 from pydantic import BaseModel, Field
 from PIL import Image
 import uvicorn
+from uvicorn.config import LOGGING_CONFIG
 
 from .config import EdgeRuntimeConfig, load_config_from_env
 from .session_manager import BufferLimitExceeded, SessionManager
 
 logger = logging.getLogger(__name__)
+
+request_id_ctx: ContextVar[str] = ContextVar("request_id", default="-")
+session_id_ctx: ContextVar[str] = ContextVar("session_id", default="-")
+
+
+class ContextFilter(logging.Filter):
+    """Attach request/session context to log records."""
+
+    def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        record.request_id = request_id_ctx.get("-")
+        record.session_id = session_id_ctx.get("-")
+        return True
+
+
+def _build_log_config() -> Dict[str, Any]:
+    """Generate a uvicorn log config that includes request and session IDs."""
+
+    log_config = copy.deepcopy(LOGGING_CONFIG)
+    log_config.setdefault("formatters", {})
+    log_config.setdefault("handlers", {})
+    log_config.setdefault("filters", {})
+
+    log_config["formatters"].setdefault("default", {})
+    log_config["formatters"]["default"].update(
+        {
+            "fmt": "%(levelprefix)s %(asctime)s | %(name)s | request_id=%(request_id)s | session_id=%(session_id)s | %(message)s",
+            "use_colors": False,
+        }
+    )
+
+    log_config["formatters"].setdefault("access", {})
+    log_config["formatters"]["access"].update(
+        {
+            "fmt": "%(levelprefix)s %(client_addr)s - \"%(request_line)s\" %(status_code)s request_id=%(request_id)s session_id=%(session_id)s",
+            "use_colors": False,
+        }
+    )
+
+    log_config["filters"]["context"] = {"()": ContextFilter}
+
+    for handler_name in ("default", "access"):
+        log_config["handlers"].setdefault(handler_name, {})
+        log_config["handlers"][handler_name].setdefault("filters", [])
+        if "context" not in log_config["handlers"][handler_name]["filters"]:
+            log_config["handlers"][handler_name]["filters"].append("context")
+
+    return log_config
+
+
+log_config: Dict[str, Any] = _build_log_config()
 
 
 class CreateSessionResponse(BaseModel):
@@ -81,6 +136,43 @@ app = FastAPI(
     version="0.1.0",
     dependencies=[Depends(_verify_api_key_header)],
 )
+
+
+@app.middleware("http")
+async def add_trace_context(request: Request, call_next):
+    """Attach request and session IDs to request context and responses."""
+
+    request_id = request.headers.get("x-request-id") or str(uuid4())
+    session_id = request.path_params.get("session_id", "-")
+
+    request_id_token = request_id_ctx.set(request_id)
+    session_id_token = session_id_ctx.set(session_id)
+
+    try:
+        response = await call_next(request)
+    finally:
+        request_id_ctx.reset(request_id_token)
+        session_id_ctx.reset(session_id_token)
+
+    response.headers["X-Request-ID"] = request_id
+    if session_id != "-":
+        response.headers["X-Session-ID"] = session_id
+
+    return response
+
+
+@app.get("/health")
+def healthcheck() -> Dict[str, str]:
+    """Lightweight liveness endpoint."""
+
+    return {"status": "ok"}
+
+
+@app.get("/ready")
+def readiness() -> Dict[str, str]:
+    """Readiness probe for deployment environments."""
+
+    return {"status": "ready"}
 
 
 def _decode_audio_payload(audio_base64: str) -> tuple[np.ndarray, int]:
@@ -198,6 +290,10 @@ async def websocket_audio(session_id: str, websocket: WebSocket) -> None:
     """Ingest audio over WebSocket and stream transcripts back."""
 
     language = websocket.query_params.get("language")
+    request_id = websocket.headers.get("x-request-id") or str(uuid4())
+
+    request_id_token = request_id_ctx.set(request_id)
+    session_id_token = session_id_ctx.set(session_id)
 
     try:
         _verify_auth_token(websocket)
@@ -230,11 +326,18 @@ async def websocket_audio(session_id: str, websocket: WebSocket) -> None:
             session_manager.delete_session(session_id)
         except KeyError:
             logger.debug("Session %s already cleaned up", session_id)
+        request_id_ctx.reset(request_id_token)
+        session_id_ctx.reset(session_id_token)
 
 
 @app.websocket("/ws/frame/{session_id}")
 async def websocket_frame(session_id: str, websocket: WebSocket) -> None:
     """Ingest frames over WebSocket for multimodal context."""
+
+    request_id = websocket.headers.get("x-request-id") or str(uuid4())
+
+    request_id_token = request_id_ctx.set(request_id)
+    session_id_token = session_id_ctx.set(session_id)
 
     try:
         _verify_auth_token(websocket)
@@ -265,12 +368,14 @@ async def websocket_frame(session_id: str, websocket: WebSocket) -> None:
             session_manager.delete_session(session_id)
         except KeyError:
             logger.debug("Session %s already cleaned up", session_id)
+        request_id_ctx.reset(request_id_token)
+        session_id_ctx.reset(session_id_token)
 
 
 def main() -> None:
     """Entrypoint for ``python -m src.edge_runtime.server``."""
 
-    logging.basicConfig(level=logging.INFO)
+    logging.config.dictConfig(log_config)
     logger.info(
         "Starting SmartGlass Edge Runtime with provider=%s, whisper_model=%s, vision_model=%s",
         runtime_config.provider,
@@ -281,7 +386,7 @@ def main() -> None:
         "src.edge_runtime.server:app",
         host="0.0.0.0",
         port=runtime_config.ports.get("http", 8000),
-        log_level="info",
+        log_config=log_config,
     )
 
 
