@@ -262,6 +262,16 @@ The script renders deterministic clips (static, gradient, motion), records selec
 `artifacts/image_latency.csv`, and evaluates `MockOCR` precision on fabricated panels with results stored in
 `artifacts/ocr_results.csv`. See the [Week 3 Report](docs/WEEK_03.md) for design notes, invariances, and interpretation tips.
 
+## 📊 Runtime metrics
+
+The edge runtime emits per-stage latency histograms for the **VAD**, **ASR**, **Vision**, **LLM**, and **Skill** phases. Each
+stage wraps its critical section in a `record_latency(<stage>)` context manager so the `/metrics` endpoint aggregates counts,
+totals, averages, and min/max timings for individual stages plus an `all` roll-up across them. Alongside latencies, the
+endpoint surfaces lifecycle counters (`sessions.created`, `sessions.active`) and total query volume so operators can track
+load and concurrency without inspecting logs. The response also reports a boolean `display_available` flag inferred from the
+active session agents (via `SmartGlassAgent.has_display`/`display`/`overlay` attributes) and, if no sessions exist, from the
+configured provider hint (`display|glass|hud`) to indicate whether the deployment can render overlays.
+
 ## 🔍 CI Audio Validation
 
 Automated checks exercise both the VAD and ASR stacks entirely with synthetic fixtures so contributors can run the
