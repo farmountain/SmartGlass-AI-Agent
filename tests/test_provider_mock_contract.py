@@ -85,10 +85,21 @@ def _install_fake_sdk(monkeypatch: pytest.MonkeyPatch) -> types.SimpleNamespace:
                 "status": "sdk",
             }
 
-    fake_sdk = types.SimpleNamespace(camera=FakeCamera(), microphone=FakeMicrophone(), audio=FakeAudio())
+    class FakeOverlay:
+        def __init__(self):
+            self.calls: list[dict[str, object]] = []
+
+        def render(self, *, card: dict, device_id: str, transport: str):
+            self.calls.append({"card": card, "device_id": device_id, "transport": transport})
+            return {"card": card, "device_id": device_id, "transport": transport, "status": "sdk"}
+
+    fake_sdk = types.SimpleNamespace(
+        camera=FakeCamera(), microphone=FakeMicrophone(), audio=FakeAudio(), overlay=FakeOverlay()
+    )
     fake_sdk.camera_calls = fake_sdk.camera.calls
     fake_sdk.microphone_calls = fake_sdk.microphone.calls
     fake_sdk.audio_calls = fake_sdk.audio.calls
+    fake_sdk.overlay_calls = fake_sdk.overlay.calls
 
     monkeypatch.setattr(meta_module, "_META_SDK_AVAILABLE", True)
     monkeypatch.setattr(meta_module, "_META_SDK", fake_sdk)
@@ -154,6 +165,36 @@ def test_overlay_render_metadata(provider_factory) -> None:
     assert result["render_index"] == 0
     again = overlay.render({"title": "test"})
     assert again["render_index"] == 1
+
+
+def test_overlay_prefers_sdk_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_sdk = _install_fake_sdk(monkeypatch)
+    provider = MetaRayBanProvider(prefer_sdk=True, transport="sdk")
+    overlay = provider.get_overlay()
+    assert overlay is not None
+
+    response = overlay.render({"title": "sdk"})
+
+    assert fake_sdk.overlay_calls
+    assert fake_sdk.overlay_calls[0]["card"] == {"title": "sdk"}
+    assert fake_sdk.overlay_calls[0]["transport"] == "sdk"
+    assert response["status"] == "sdk"
+    assert response["render_index"] == 0
+
+
+def test_overlay_history_retained_without_sdk(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(meta_module, "_META_SDK_AVAILABLE", False)
+    monkeypatch.setattr(meta_module, "_META_SDK", None)
+    provider = MetaRayBanProvider(prefer_sdk=True)
+    overlay = provider.get_overlay()
+    assert overlay is not None
+
+    first = overlay.render({"title": "offline"})
+    second = overlay.render({"title": "offline"})
+
+    assert first["status"] == "mock"
+    assert second["render_index"] == 1
+    assert overlay.history == [first, second]
 
 
 @pytest.mark.parametrize("provider_factory", PROVIDER_FACTORIES)
