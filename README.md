@@ -134,13 +134,26 @@ The data access layer defaults to the offline `mock` provider so examples and CI
 export PROVIDER=mock  # default, optional
 ```
 
-Switching to the `meta` preview stub keeps the same API surface while the real SDK is under development:
+`PROVIDER=meta` now selects a **Meta Ray-Ban SDK wrapper** that automatically falls back to deterministic mocks whenever the `metarayban` SDK package is not installed. The wrapper accepts three key configuration fields when you construct it directly in Python:
 
-```bash
-export PROVIDER=meta
+- `api_key` – optional API token to pass through to SDK calls that require auth.
+- `device_id` – Ray-Ban device identifier to stamp on camera/mic/audio/haptics payloads (defaults to `RAYBAN-MOCK-DEVICE`).
+- `transport` – SDK transport hint such as `ble` or `wifi` (defaults to `mock`).
+
+Example: 
+
+```python
+from drivers.providers.meta import MetaRayBanProvider
+
+provider = MetaRayBanProvider(
+    api_key="YOUR_META_APP_KEY",
+    device_id="RAYBAN-1234",
+    transport="ble",
+    prefer_sdk=True,  # only flips on if the metarayban SDK is importable
+)
 ```
 
-The `meta` provider (via the `MetaRayBanProvider`) currently returns placeholder telemetry, frames, and audio envelopes that mirror the expected Ray-Ban SDK schema.
+When `prefer_sdk=True` **and** the `metarayban` dependency is importable, the provider will route camera and microphone calls into the real SDK hooks (to be implemented) instead of the deterministic fixtures. CI and default local runs keep using the mock data because `prefer_sdk` defaults to `False` and the SDK is not present in the test environment.
 
 Deterministic vendor-specific mocks are also available so you can stub integrations for different runtimes:
 
@@ -152,6 +165,14 @@ export PROVIDER=visionos # 1440x1440 persona frames + shared-space overlays
 ```
 
 Each of these providers exposes deterministic camera/mic fixtures tuned to the vendor's expected resolutions, vendor-tagged audio/permission responses, and a `has_display()` helper that the SDK uses to reflect true overlay availability.
+
+##### Contributing Meta SDK bindings
+
+The mock-first Meta Ray-Ban wrapper lives in `drivers/providers/meta.py`. To land real SDK calls:
+
+- Replace the `_sdk_frames` stubs inside `MetaRayBanCameraIn` and `MetaRayBanMicIn` with calls into the `metarayban` APIs once the official bindings are available.
+- Keep the deterministic mock generators as the fallback path for CI and local dev (they should still run when `prefer_sdk` is `False` or the SDK is missing).
+- Add regression tests under `tests/test_provider_conformance.py` that exercise both the mock and SDK-backed paths so we can keep provider swaps safe.
 
 ---
 
