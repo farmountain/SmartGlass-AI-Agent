@@ -140,7 +140,7 @@ Switching to the `meta` preview stub keeps the same API surface while the real S
 export PROVIDER=meta
 ```
 
-The `meta` provider currently returns placeholder telemetry, frames, and audio envelopes that mirror the expected Ray-Ban SDK schema.
+The `meta` provider (via the `MetaRayBanProvider`) currently returns placeholder telemetry, frames, and audio envelopes that mirror the expected Ray-Ban SDK schema.
 
 Deterministic vendor-specific mocks are also available so you can stub integrations for different runtimes:
 
