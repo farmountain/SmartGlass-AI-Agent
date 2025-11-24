@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 
 import numpy as np
 import soundfile as sf
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 from PIL import Image
 import uvicorn
@@ -41,7 +41,23 @@ class QueryPayload(BaseModel):
 
 runtime_config: EdgeRuntimeConfig = load_config_from_env()
 session_manager = SessionManager(runtime_config)
-app = FastAPI(title="SmartGlass Edge Runtime", version="0.1.0")
+
+
+def _verify_api_key_header(x_api_key: str | None = Header(default=None)) -> None:
+    """Guard HTTP endpoints with the configured API key if present."""
+
+    if runtime_config.api_key is None:
+        return
+
+    if x_api_key != runtime_config.api_key:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+app = FastAPI(
+    title="SmartGlass Edge Runtime",
+    version="0.1.0",
+    dependencies=[Depends(_verify_api_key_header)],
+)
 
 
 def _decode_audio_payload(audio_base64: str) -> np.ndarray:
@@ -148,6 +164,11 @@ async def websocket_audio(session_id: str, websocket: WebSocket) -> None:
     """Ingest audio over WebSocket and stream transcripts back."""
 
     language = websocket.query_params.get("language")
+
+    if runtime_config.api_key and websocket.headers.get("x-api-key") != runtime_config.api_key:
+        await websocket.close(code=4401, reason="Unauthorized")
+        return
+
     try:
         session_manager.get_summary(session_id)
     except KeyError:
@@ -173,6 +194,10 @@ async def websocket_audio(session_id: str, websocket: WebSocket) -> None:
 @app.websocket("/ws/frame/{session_id}")
 async def websocket_frame(session_id: str, websocket: WebSocket) -> None:
     """Ingest frames over WebSocket for multimodal context."""
+
+    if runtime_config.api_key and websocket.headers.get("x-api-key") != runtime_config.api_key:
+        await websocket.close(code=4401, reason="Unauthorized")
+        return
 
     try:
         session_manager.get_summary(session_id)
