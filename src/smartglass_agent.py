@@ -12,8 +12,8 @@ from PIL import Image
 from privacy.redact import DeterministicRedactor, RedactionSummary
 
 from .clip_vision import CLIPVisionProcessor
-from .gpt2_generator import GPT2TextGenerator
-from .llm_backend import AnnLLMBackend, LLMBackend
+from .gpt2_generator import GPT2Backend
+from .llm_backend_base import BaseLLMBackend
 from .whisper_processor import WhisperAudioProcessor
 from .utils.metrics import record_latency
 
@@ -30,7 +30,8 @@ class SmartGlassAgent:
     - Visual understanding via CLIP
     - Natural language responses via GPT-2
 
-    The language model component is injected via the :class:`LLMBackend`
+    The language model component is injected via the
+    :class:`~src.llm_backend_base.BaseLLMBackend`
     protocol, enabling callers to swap in different LLM implementations
     (on-device, cloud, or mocked) without changing the agent workflow.
     """
@@ -44,7 +45,7 @@ class SmartGlassAgent:
         redactor: Optional[
             Callable[[Union[str, Image.Image, np.ndarray]], Tuple[Any, RedactionSummary]]
         ] = None,
-        llm_backend: Optional[LLMBackend] = None,
+        llm_backend: Optional[BaseLLMBackend] = None,
     ):
         """
         Initialize SmartGlass AI Agent.
@@ -55,10 +56,11 @@ class SmartGlassAgent:
             gpt2_model: Legacy GPT-2 model name retained for backwards compatibility
             device: Device to run models on ('cuda', 'cpu', or None for auto-detect)
             redactor: Optional callable used to redact imagery before cloud processing.
-            llm_backend: Optional language model backend. By default the ANN backend
-                is wired up using the legacy GPT-2 settings so downstream callers can
-                inject alternative implementations (e.g., cloud or distilled models)
-                without modifying the agent logic.
+            llm_backend: Optional language model backend implementing
+                :class:`~src.llm_backend_base.BaseLLMBackend`. When omitted, the
+                legacy :class:`~src.gpt2_generator.GPT2Backend` is instantiated so
+                downstream callers can inject alternative implementations (e.g.,
+                cloud or distilled models) without modifying the agent logic.
         """
         print("Initializing SmartGlass AI Agent...")
         print("=" * 60)
@@ -68,8 +70,7 @@ class SmartGlassAgent:
         print("-" * 60)
         self.vision_processor = CLIPVisionProcessor(model_name=clip_model, device=device)
         print("-" * 60)
-        self.text_generator = GPT2TextGenerator(model_name=gpt2_model, device=device)
-        self.llm_backend = llm_backend or AnnLLMBackend(generator=self.text_generator)
+        self.llm_backend = llm_backend or GPT2Backend(model_name=gpt2_model, device=device)
         
         print("=" * 60)
         print("SmartGlass AI Agent initialized successfully!")
@@ -171,7 +172,7 @@ class SmartGlassAgent:
         Returns:
             Generated response text
 
-        The response is produced by the configured :class:`LLMBackend`, so
+        The response is produced by the configured :class:`BaseLLMBackend`, so
         alternative backends can be injected at construction time to change
         how prompts are handled (e.g., to call a cloud model instead of the
         default ANN adapter).
@@ -298,11 +299,16 @@ class SmartGlassAgent:
         else:
             query = "What am I looking at?"
         
-        # Generate informative response
-        response = self.text_generator.generate_smart_response(
-            query,
-            context=scene_description,
-            response_type="informative"
+        # Generate informative response through the configured backend
+        prompt_sections = [f"Scene: {scene_description}", f"Question: {query}"]
+        prompt = "\n".join(prompt_sections)
+        response = self.llm_backend.generate(
+            prompt,
+            max_tokens=128,
+            system_prompt=(
+                "You are a helpful assistant describing what the user is looking at. Provide "
+                "concise, informative answers based on the given scene description."
+            ),
         )
         
         return response
@@ -320,7 +326,10 @@ class SmartGlassAgent:
         return {
             "audio": self.audio_processor.get_model_info(),
             "vision": self.vision_processor.get_model_info(),
-            "language": self.text_generator.get_model_info()
+            "language": {
+                "backend": self.llm_backend.__class__.__name__,
+                "model": getattr(self.llm_backend, "model_name", "unknown"),
+            },
         }
 
 
