@@ -13,6 +13,7 @@ backend falls back to a stubbed response that carries the deprecation notice.
 
 from __future__ import annotations
 
+import importlib
 import warnings
 from typing import Iterable, List, Optional
 
@@ -47,14 +48,27 @@ class GPT2Backend(BaseLLMBackend):
         self.model_name = model_name
         self.device = device
         self._pipeline = None
+        self._tokenizer = None
+        self._model = None
+
+        transformers = _get_transformers_module()
+        pipeline = getattr(transformers, "pipeline", None) if transformers else None
+        if pipeline is None:
+            return
 
         try:  # pragma: no cover - exercised indirectly in environments with transformers
-            from transformers import pipeline
-
-            self._pipeline = pipeline("text-generation", model=self.model_name, device=self.device)
+            self._pipeline = pipeline(
+                "text-generation",
+                model=self.model_name,
+                device=self.device,
+            )
+            self._tokenizer = getattr(self._pipeline, "tokenizer", None)
+            self._model = getattr(self._pipeline, "model", None)
         except Exception:
             # Soft failure keeps legacy imports working even when transformers is missing
             self._pipeline = None
+            self._tokenizer = None
+            self._model = None
 
     def generate(self, prompt: str, max_tokens: int = 64, **kwargs) -> str:
         if self._pipeline is None:
@@ -67,7 +81,22 @@ class GPT2Backend(BaseLLMBackend):
             return str(result)
 
     def generate_tokens(self, input_ids: List[int], max_tokens: int = 64, **kwargs) -> List[int]:
-        raise NotImplementedError("Token-level generation is not supported for GPT-2 stubs.")
+        if self._model is None or self._tokenizer is None:
+            return []
+
+        torch = _get_torch_module()
+        if torch is None:
+            return []
+
+        try:  # pragma: no cover - defensive
+            tensor = torch.tensor([input_ids], device=getattr(self._model, "device", None))
+            output = self._model.generate(tensor, max_new_tokens=max_tokens, **kwargs)
+            first_sequence = output[0]
+            if hasattr(first_sequence, "tolist"):
+                return first_sequence.tolist()
+            return list(first_sequence)
+        except Exception:
+            return []
 
 
 class GPT2TextGenerator:
@@ -78,6 +107,26 @@ class GPT2TextGenerator:
         self.model_name = model_name
         self.device = device
         self._backend = GPT2Backend(model_name=model_name, device=device)
+
+        transformers = _get_transformers_module()
+        if transformers is not None:
+            tokenizer_cls = getattr(transformers, "AutoTokenizer", None)
+            model_cls = getattr(transformers, "AutoModelForCausalLM", None)
+            if tokenizer_cls and model_cls:
+                try:  # pragma: no cover - optional dependency path
+                    self._tokenizer = tokenizer_cls.from_pretrained(self.model_name)
+                    self._model = model_cls.from_pretrained(self.model_name)
+                    if self.device is not None:
+                        self._model = self._model.to(self.device)
+                except Exception:
+                    self._tokenizer = None
+                    self._model = None
+            else:
+                self._tokenizer = None
+                self._model = None
+        else:
+            self._tokenizer = None
+            self._model = None
 
     def generate_response(
         self,
@@ -90,6 +139,30 @@ class GPT2TextGenerator:
         no_repeat_ngram_size: int = 2,
     ) -> List[str]:
         _warn_deprecated("GPT2TextGenerator.generate_response")
+        if self._backend._pipeline is not None:
+            raw_results = self._backend._pipeline(
+                prompt,
+                max_new_tokens=max_length,
+                temperature=temperature,
+                top_p=top_p,
+                top_k=top_k,
+                no_repeat_ngram_size=no_repeat_ngram_size,
+                num_return_sequences=num_return_sequences,
+            )
+            return [item.get("generated_text", str(item)) for item in raw_results]
+
+        model_outputs = self._generate_via_model(
+            prompt,
+            max_length=max_length,
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+            num_return_sequences=num_return_sequences,
+            no_repeat_ngram_size=no_repeat_ngram_size,
+        )
+        if model_outputs:
+            return model_outputs
+
         text = self._backend.generate(
             prompt,
             max_tokens=max_length,
@@ -100,6 +173,27 @@ class GPT2TextGenerator:
             num_return_sequences=num_return_sequences,
         )
         return [text]
+
+    def generate_text(
+        self,
+        prompt: str,
+        max_length: int = 100,
+        temperature: float = 0.7,
+        top_p: float = 0.9,
+        top_k: int = 50,
+        num_return_sequences: int = 1,
+        no_repeat_ngram_size: int = 2,
+    ) -> str:
+        _warn_deprecated("GPT2TextGenerator.generate_text")
+        return self.generate_response(
+            prompt,
+            max_length=max_length,
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+            num_return_sequences=num_return_sequences,
+            no_repeat_ngram_size=no_repeat_ngram_size,
+        )[0]
 
     def generate_smart_response(
         self,
@@ -125,6 +219,57 @@ class GPT2TextGenerator:
         recent_turns = list(conversation_history)[-max_history:]
         prompt = "\n".join(recent_turns) + "\nContinuation:"
         return self.generate_response(prompt, max_length=128)[0]
+
+    def _generate_via_model(
+        self,
+        prompt: str,
+        *,
+        max_length: int,
+        temperature: float,
+        top_p: float,
+        top_k: int,
+        num_return_sequences: int,
+        no_repeat_ngram_size: int,
+    ) -> List[str]:
+        if self._model is None or self._tokenizer is None:
+            return []
+
+        torch = _get_torch_module()
+        if torch is None:
+            return []
+
+        input_ids = self._tokenizer.encode(prompt, return_tensors="pt")
+        if self.device is not None:
+            input_ids = input_ids.to(self.device)
+
+        output_ids = self._model.generate(
+            input_ids,
+            max_length=max_length,
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+            num_return_sequences=num_return_sequences,
+            no_repeat_ngram_size=no_repeat_ngram_size,
+            do_sample=True,
+        )
+        return [
+            self._tokenizer.decode(sequence, skip_special_tokens=True)
+            for sequence in output_ids
+        ]
+
+
+def _get_transformers_module():
+    spec = importlib.util.find_spec("transformers")
+    if spec is None:
+        return None
+    return importlib.import_module("transformers")
+
+
+def _get_torch_module():
+    spec = importlib.util.find_spec("torch")
+    if spec is None:
+        return None
+    return importlib.import_module("torch")
 
 
 __all__ = ["GPT2Backend", "GPT2TextGenerator"]
