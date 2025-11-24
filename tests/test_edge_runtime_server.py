@@ -98,11 +98,25 @@ def fixture_edge_app(monkeypatch, request):
         stubs[module_name] = stub
         monkeypatch.setitem(sys.modules, module_name, stub)
 
-    api_key = getattr(request, "param", None)
-    if api_key is None:
-        monkeypatch.delenv("EDGE_RUNTIME_API_KEY", raising=False)
+    auth_config = getattr(request, "param", None)
+    token: str | None
+    header_name: str | None
+
+    if isinstance(auth_config, dict):
+        token = auth_config.get("token")
+        header_name = auth_config.get("header")
     else:
-        monkeypatch.setenv("EDGE_RUNTIME_API_KEY", api_key)
+        token = auth_config
+        header_name = None
+
+    if token is None:
+        for env_var in ["EDGE_RUNTIME_API_KEY", "EDGE_RUNTIME_AUTH_TOKEN", "EDGE_RUNTIME_AUTH_HEADER"]:
+            monkeypatch.delenv(env_var, raising=False)
+    else:
+        monkeypatch.setenv("EDGE_RUNTIME_API_KEY", token)
+        monkeypatch.setenv("EDGE_RUNTIME_AUTH_TOKEN", token)
+        if header_name:
+            monkeypatch.setenv("EDGE_RUNTIME_AUTH_HEADER", header_name)
 
     session_manager_module = import_module("src.edge_runtime.session_manager")
     monkeypatch.setattr(session_manager_module, "SmartGlassAgent", FakeSmartGlassAgent)
@@ -153,6 +167,36 @@ def test_edge_runtime_server_requires_api_key(edge_app):
     assert wrong_header_response.status_code == 401
 
     headers = {"X-API-Key": "secret-key"}
+    create_response = client.post("/sessions", headers=headers)
+    assert create_response.status_code == 200
+
+    session_id = create_response.json()["session_id"]
+    delete_response = client.delete(f"/sessions/{session_id}", headers=headers)
+    assert delete_response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    "edge_app",
+    [
+        {
+            "token": "bearer-token",
+            "header": "Authorization",
+        }
+    ],
+    indirect=True,
+)
+def test_edge_runtime_server_supports_custom_auth_header(edge_app):
+    client = TestClient(edge_app)
+
+    missing_header_response = client.post("/sessions")
+    assert missing_header_response.status_code == 401
+
+    wrong_header_response = client.post(
+        "/sessions", headers={"Authorization": "Bearer wrong-token"}
+    )
+    assert wrong_header_response.status_code == 401
+
+    headers = {"Authorization": "Bearer bearer-token"}
     create_response = client.post("/sessions", headers=headers)
     assert create_response.status_code == 200
 
