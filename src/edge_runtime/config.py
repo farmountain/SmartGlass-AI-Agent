@@ -24,6 +24,9 @@ class EdgeRuntimeConfig:
     frame_history_size: int = 1
     frame_buffer_policy: str = "trim"
     frame_buffer_max_bytes: Optional[int] = None
+    store_raw_audio: bool = False
+    store_raw_frames: bool = False
+    store_transcripts: bool = False
 
 
 def _parse_ports_env(ports_env: str | None) -> Dict[str, int]:
@@ -86,6 +89,9 @@ def load_config_from_env() -> EdgeRuntimeConfig:
         os.getenv("FRAME_BUFFER_POLICY"), default="trim"
     )
     frame_buffer_max_bytes = _parse_optional_int(os.getenv("FRAME_BUFFER_MAX_BYTES"))
+    store_raw_audio = _parse_bool(os.getenv("STORE_RAW_AUDIO"), default=False)
+    store_raw_frames = _parse_bool(os.getenv("STORE_RAW_FRAMES"), default=False)
+    store_transcripts = _parse_bool(os.getenv("STORE_TRANSCRIPTS"), default=False)
 
     ports = _parse_ports_env(ports_env)
 
@@ -104,6 +110,9 @@ def load_config_from_env() -> EdgeRuntimeConfig:
         frame_history_size=frame_history_size,
         frame_buffer_policy=frame_buffer_policy,
         frame_buffer_max_bytes=frame_buffer_max_bytes,
+        store_raw_audio=store_raw_audio,
+        store_raw_frames=store_raw_frames,
+        store_transcripts=store_transcripts,
     )
 
 
@@ -136,3 +145,17 @@ def _parse_buffer_policy(raw_value: str | None, *, default: str = "trim") -> str
             f"Invalid buffer policy '{raw_value}'. Choose one of: {', '.join(sorted(allowed))}"
         )
     return policy
+
+
+def _parse_bool(raw_value: str | None, *, default: bool = False) -> bool:
+    if raw_value is None:
+        return default
+
+    normalized = raw_value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(
+        "Invalid boolean value; use one of: true, false, 1, 0, yes, no, on, off"
+    )

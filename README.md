@@ -68,6 +68,21 @@ The CI summary step automatically runs this helper and posts the newest table al
 
 ---
 
+### 🔒 Edge runtime privacy controls
+
+The edge runtime defaults to **not** retaining raw audio, frames, or transcripts in memory to reduce the risk of accidental data
+leakage. Opt-in persistence is available through environment variables when you need debugging traces:
+
+| Environment variable | Default | Effect |
+| --- | --- | --- |
+| `STORE_RAW_AUDIO` | `false` | Keep per-session audio buffers in memory for replay and policy enforcement. |
+| `STORE_RAW_FRAMES` | `false` | Preserve recent video frames so subsequent queries can reuse the latest view. |
+| `STORE_TRANSCRIPTS` | `false` | Retain transcripts generated from audio ingestion and text queries. |
+
+See [PRIVACY.md](PRIVACY.md) for detailed threat-modeling notes and guidance on when to enable each option.
+
+---
+
 ## 🧑‍🏫➡️🧠 Teacher–Student SNN Pipeline (Concise)
 
 - **Pipeline:** `scripts/train_snn_student.py` distills a transformer teacher into a spiking-friendly student with temperature-scaled KD and gradient accumulation so it can run in constrained Colab-style environments.【F:scripts/train_snn_student.py†L1-L208】
