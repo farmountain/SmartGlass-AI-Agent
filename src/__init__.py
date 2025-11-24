@@ -28,6 +28,8 @@ if _is_truthy(os.getenv("CI")):
     os.environ.pop("USE_WHISPER_STREAMING", None)
 
 
+# Public re-exports so downstream code can rely on a stable import path for
+# core backends (e.g. ``from smartglass_agent import LLMBackend``).
 from .whisper_processor import WhisperAudioProcessor
 from .clip_vision import CLIPVisionProcessor
 from .gpt2_generator import GPT2TextGenerator
