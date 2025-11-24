@@ -61,11 +61,15 @@ class MetaRayBanCameraIn(CameraIn):
     def _sdk_frames(self) -> Iterator[dict[str, object]] | None:
         if not self._use_sdk or _META_SDK is None:
             return None
-        # TODO: Invoke the Meta Ray-Ban camera streaming API once the SDK
-        # is available. This should yield payloads that include the frame
-        # bytes together with transport and device metadata.
-        LOGGER.info("Meta SDK detected; camera streaming is not yet implemented")
-        return None
+        sdk_stream = getattr(_META_SDK, "camera_frames", None)
+        if sdk_stream is None:
+            LOGGER.info("Meta SDK detected; camera streaming is not yet implemented")
+            return None
+        return sdk_stream(
+            device_id=self._device_id,
+            transport=self._transport,
+            resolution=(self._height, self._width),
+        )
 
     def get_frames(self) -> Iterator[dict[str, object]]:  # type: ignore[override]
         sdk_stream = self._sdk_frames()
@@ -122,10 +126,17 @@ class MetaRayBanMicIn(MicIn):
     def _sdk_frames(self) -> Iterator[dict[str, object]] | None:
         if not self._use_sdk or _META_SDK is None:
             return None
-        # TODO: Connect to the Meta Ray-Ban microphone capture API and
-        # yield PCM envelopes that include device and transport metadata.
-        LOGGER.info("Meta SDK detected; microphone capture is not yet implemented")
-        return None
+        sdk_stream = getattr(_META_SDK, "microphone_frames", None)
+        if sdk_stream is None:
+            LOGGER.info("Meta SDK detected; microphone capture is not yet implemented")
+            return None
+        return sdk_stream(
+            device_id=self._device_id,
+            transport=self._transport,
+            sample_rate_hz=self._sample_rate_hz,
+            frame_size=self._frame_size,
+            channels=self._channels,
+        )
 
     def get_frames(self) -> Iterator[dict[str, object]]:  # type: ignore[override]
         sdk_stream = self._sdk_frames()
