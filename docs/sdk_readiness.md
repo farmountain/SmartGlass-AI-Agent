@@ -4,8 +4,8 @@ This note summarizes the DAL/provider surface, RaySkillKit bundle coverage, veri
 
 ## DAL providers and mocks
 - **`mock` (default)** – Offline camera/mic fixtures used by CI and examples.
-- **`meta` preview stub** – Placeholder telemetry that mirrors the expected Ray-Ban SDK schema.
-- **Vendor mocks** – Deterministic fixtures for `vuzix` (640x480 RGB + waveguide overlays), `xreal` (1080p Beam-style captures + Nebula overlays), `openxr` (square eye buffers + host delegated overlays), and `visionos` (1440x1440 persona frames + shared-space overlays).【F:README.md†L72-L95】
+- **`meta` SDK wrapper** – Delegates to the Meta Ray-Ban SDK when `metarayban` is importable **and** `prefer_sdk=True`, otherwise emits deterministic mock telemetry that mirrors the expected schema. Configurable fields: `api_key`, `device_id`, and `transport`.【F:README.md†L72-L110】
+- **Vendor mocks** – Deterministic fixtures for `vuzix` (640x480 RGB + waveguide overlays), `xreal` (1080p Beam-style captures + Nebula overlays), `openxr` (square eye buffers + host delegated overlays), and `visionos` (1440x1440 persona frames + shared-space overlays).【F:README.md†L112-L139】
 
 ## RaySkillKit skill bundle coverage
 - Twelve skills are present in the catalogue packaged with the pilot drop: `skill_001`, `skill_002`, `skill_003`, `travel_fastlane`, `travel_safebubble`, `travel_bargaincoach`, `retail_wtp_radar`, `retail_capsule_gaps`, `retail_minute_meal`, `rt_wtp_radar`, `rt_capsule_gaps`, and `rt_minute_meal`.【F:README.md†L99-L114】
