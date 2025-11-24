@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Iterator
 
 import numpy as np
 
 from ..interfaces import CameraIn, MicIn
+from .base import ProviderBase
 from .mock import MockAudioOut, MockDisplayOverlay, MockHaptics, MockPermissions
 
 
@@ -93,16 +93,31 @@ class XrealMockPermissions(MockPermissions):
         return payload
 
 
-@dataclass
-class XrealMockProvider:
+class XrealMockProvider(ProviderBase):
     """Aggregate of XREAL-specific mocks."""
 
-    camera: XrealMockCameraIn = field(default_factory=XrealMockCameraIn)
-    microphone: XrealMockMicIn = field(default_factory=XrealMockMicIn)
-    audio_out: XrealMockAudioOut = field(default_factory=XrealMockAudioOut)
-    overlay: XrealMockDisplayOverlay = field(default_factory=XrealMockDisplayOverlay)
-    haptics: XrealMockHaptics = field(default_factory=XrealMockHaptics)
-    permissions: XrealMockPermissions = field(default_factory=XrealMockPermissions)
+    def __init__(self, *, height: int = 1080, width: int = 1920, **kwargs) -> None:
+        self._height = height
+        self._width = width
+        super().__init__(**kwargs)
+
+    def _create_camera(self) -> CameraIn | None:
+        return XrealMockCameraIn(height=self._height, width=self._width)
+
+    def _create_microphone(self) -> MicIn | None:
+        return XrealMockMicIn()
+
+    def _create_audio_out(self):
+        return XrealMockAudioOut()
+
+    def _create_overlay(self):
+        return XrealMockDisplayOverlay()
+
+    def _create_haptics(self):
+        return XrealMockHaptics()
+
+    def _create_permissions(self):
+        return XrealMockPermissions()
 
     def has_display(self) -> bool:
         return True

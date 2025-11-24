@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import os
-from typing import Callable, Union
+from typing import Callable
 
+from .providers.base import BaseProvider
 from .providers.meta import MetaProvider
 from .providers.mock import MockProvider
 from .providers.openxr_mock import OpenXRMockProvider
@@ -13,14 +14,7 @@ from .providers.vuzix_mock import VuzixMockProvider
 from .providers.xreal_mock import XrealMockProvider
 from src.io.telemetry import log_metric
 
-Provider = Union[
-    MockProvider,
-    MetaProvider,
-    OpenXRMockProvider,
-    VisionOSMockProvider,
-    VuzixMockProvider,
-    XrealMockProvider,
-]
+Provider = BaseProvider
 
 
 def get_provider() -> Provider:
@@ -41,13 +35,13 @@ def get_provider() -> Provider:
     log_metric("sdk.provider", 1, tags={"name": provider_name})
 
     has_display_fn = getattr(provider, "has_display", None)
-    display_available = has_display_fn() if callable(has_display_fn) else bool(getattr(provider, "overlay", None))
+    display_available = has_display_fn() if callable(has_display_fn) else False
 
     capability_tags = {
-        "camera": bool(getattr(provider, "camera", None)),
-        "mic": bool(getattr(provider, "microphone", None)),
+        "camera": provider.open_video_stream() is not None,
+        "mic": provider.open_audio_stream() is not None,
         "display": display_available,
-        "haptics": bool(getattr(provider, "haptics", None)),
+        "haptics": provider.get_haptics() is not None,
     }
     log_metric("sdk.capabilities", 1, tags=capability_tags)
 

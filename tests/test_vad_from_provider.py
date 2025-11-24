@@ -13,7 +13,9 @@ from perception.vad import frames_from_mic  # noqa: E402
 
 def test_frames_from_mic_provide_20ms_windows():
     provider = MockProvider()
-    frames = list(frames_from_mic(provider.microphone, seconds=1.0))
+    mic = provider.open_audio_stream()
+    assert mic is not None
+    frames = list(frames_from_mic(mic, seconds=1.0))
 
     assert len(frames) == 50
 

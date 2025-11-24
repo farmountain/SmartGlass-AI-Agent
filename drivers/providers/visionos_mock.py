@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Iterator
 
 import numpy as np
 
 from ..interfaces import CameraIn, MicIn
+from .base import ProviderBase
 from .mock import MockAudioOut, MockDisplayOverlay, MockHaptics, MockPermissions
 
 
@@ -91,16 +91,30 @@ class VisionOSMockPermissions(MockPermissions):
         return payload
 
 
-@dataclass
-class VisionOSMockProvider:
+class VisionOSMockProvider(ProviderBase):
     """Aggregate of visionOS-specific mocks."""
 
-    camera: VisionOSMockCameraIn = field(default_factory=VisionOSMockCameraIn)
-    microphone: VisionOSMockMicIn = field(default_factory=VisionOSMockMicIn)
-    audio_out: VisionOSMockAudioOut = field(default_factory=VisionOSMockAudioOut)
-    overlay: VisionOSMockDisplayOverlay = field(default_factory=VisionOSMockDisplayOverlay)
-    haptics: VisionOSMockHaptics = field(default_factory=VisionOSMockHaptics)
-    permissions: VisionOSMockPermissions = field(default_factory=VisionOSMockPermissions)
+    def __init__(self, *, camera_size: int = 1440, **kwargs) -> None:
+        self._camera_size = camera_size
+        super().__init__(**kwargs)
+
+    def _create_camera(self) -> CameraIn | None:
+        return VisionOSMockCameraIn(size=self._camera_size)
+
+    def _create_microphone(self) -> MicIn | None:
+        return VisionOSMockMicIn()
+
+    def _create_audio_out(self):
+        return VisionOSMockAudioOut()
+
+    def _create_overlay(self):
+        return VisionOSMockDisplayOverlay()
+
+    def _create_haptics(self):
+        return VisionOSMockHaptics()
+
+    def _create_permissions(self):
+        return VisionOSMockPermissions()
 
     def has_display(self) -> bool:
         return True
