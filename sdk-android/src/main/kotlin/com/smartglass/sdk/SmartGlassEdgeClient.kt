@@ -1,5 +1,9 @@
 package com.smartglass.sdk
 
+import com.squareup.moshi.Json
+import com.squareup.moshi.JsonAdapter
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import java.io.IOException
 import java.util.Base64
 import kotlin.coroutines.cancellation.CancellationException
@@ -10,10 +14,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
-import com.squareup.moshi.Json
-import com.squareup.moshi.JsonAdapter
-import com.squareup.moshi.Moshi
-import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 
 private const val JSON_MEDIA_TYPE = "application/json; charset=utf-8"
 private const val DEFAULT_BASE_URL = "http://127.0.0.1:8765"
@@ -187,15 +187,47 @@ data class EdgeResponse(
     val response: String? = null,
     val query: String? = null,
     @Json(name = "visual_context") val visualContext: String? = null,
-    val overlays: List<Map<String, Any?>>? = null,
-    val metadata: Map<String, Any?>? = null,
-    val redaction: Map<String, Any?>? = null,
+    val overlays: List<Overlay>? = null,
+    val metadata: EdgeMetadata? = null,
+    val redaction: RedactionSummary? = null,
     val status: String? = null,
     val error: String? = null,
 )
 
 private data class CreateSessionResponse(
     @Json(name = "session_id") val sessionId: String,
+)
+
+/** Structured overlay payload rendered by SmartGlass UI layers. */
+data class Overlay(
+    val type: String,
+    val content: String? = null,
+    val text: String? = null,
+    val box: List<Int>? = null,
+    val boxes: List<List<Int>>? = null,
+    val conf: List<Double>? = null,
+    @Json(name = "by_word") val byWord: List<OverlayWord>? = null,
+)
+
+/** Per-word OCR overlay details. */
+data class OverlayWord(
+    val text: String,
+    val box: List<Int> = emptyList(),
+    val conf: Double? = null,
+)
+
+/** Additional context about the edge response for client-side handling. */
+data class EdgeMetadata(
+    @Json(name = "cloud_offload") val cloudOffload: Boolean? = null,
+    @Json(name = "redaction_summary") val redactionSummary: RedactionSummary? = null,
+    @Json(name = "latency_ms") val latencyMs: Double? = null,
+)
+
+/** Summary of deterministic redaction performed on visual inputs. */
+data class RedactionSummary(
+    @Json(name = "faces_masked") val facesMasked: Int = 0,
+    @Json(name = "plates_masked") val platesMasked: Int = 0,
+    @Json(name = "total_masked_area") val totalMaskedArea: Int = 0,
 )
 
 private data class AudioRequest(
