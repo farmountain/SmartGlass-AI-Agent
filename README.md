@@ -160,6 +160,31 @@ print(
 )
 ```
 
+**Inspect multimodal outputs from the agent:**
+
+```python
+from src.smartglass_agent import SmartGlassAgent
+
+agent = SmartGlassAgent(
+    whisper_model="base",
+    clip_model="openai/clip-vit-base-patch32",
+)
+
+result = agent.process_multimodal_query(
+    text_query="Describe the scene and suggest an action",
+    image_input="A person standing next to a bicycle",
+)
+
+# Top-level fields are always present
+print("response:", result.response)  # Model reply text
+print("actions:", result.actions)    # Suggested action list (defaults to [])
+print("raw:", result.raw)            # Provider payloads (defaults to {})
+
+# Actions can be inspected further
+for action in result.actions:
+    print(action.get("type"), action.get("payload"))
+```
+
 #### Provider selection
 
 The data access layer defaults to the offline `mock` provider so examples and CI run without hardware:
