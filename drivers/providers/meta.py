@@ -88,8 +88,16 @@ class MetaRayBanCameraIn(CameraIn):
                 payload.setdefault("transport", self._transport)
                 payload.setdefault("frame_id", frame_id)
                 payload.setdefault(
-                    "timestamp_ms", int(datetime.now(timezone.utc).timestamp() * 1000)
+                    "timestamp_ms",
+                    int(
+                        (
+                            _BASE_TIME
+                            + timedelta(milliseconds=33 * frame_id)
+                        ).timestamp()
+                        * 1000
+                    ),
                 )
+                payload.setdefault("format", "rgb888")
                 yield payload
 
         return _enrich()
@@ -177,8 +185,18 @@ class MetaRayBanMicIn(MicIn):
                 payload.setdefault("transport", self._transport)
                 payload.setdefault("sequence_id", sequence_id)
                 payload.setdefault(
-                    "timestamp_ms", int(datetime.now(timezone.utc).timestamp() * 1000)
+                    "timestamp_ms",
+                    int(
+                        (
+                            _BASE_TIME
+                            + timedelta(milliseconds=25 * sequence_id)
+                        ).timestamp()
+                        * 1000
+                    ),
                 )
+                payload.setdefault("sample_rate_hz", self._sample_rate_hz)
+                payload.setdefault("frame_size", self._frame_size)
+                payload.setdefault("channels", self._channels)
                 yield payload
 
         return _enrich()

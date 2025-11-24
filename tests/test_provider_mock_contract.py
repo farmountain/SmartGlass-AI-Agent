@@ -150,10 +150,16 @@ def test_meta_provider_prefers_sdk_when_present(monkeypatch: pytest.MonkeyPatch)
     assert frame["frame_id"] == 10
     assert frame["device_id"] == "SDK-DEVICE"
     assert frame["transport"] == "wifi"
+    assert frame["timestamp_ms"] == camera_payloads[0]["timestamp_ms"]
+    assert frame["format"] == camera_payloads[0]["format"]
     assert np.array_equal(frame["frame"], camera_payloads[0]["frame"])
 
     audio_chunk = next(provider.iter_audio_chunks())
     assert audio_chunk["sequence_id"] == 3
     assert audio_chunk["device_id"] == "SDK-DEVICE"
     assert audio_chunk["transport"] == "wifi"
+    assert audio_chunk["timestamp_ms"] == mic_payloads[0]["timestamp_ms"]
+    assert audio_chunk["sample_rate_hz"] == 16000
+    assert audio_chunk["frame_size"] == 4
+    assert audio_chunk["channels"] == 1
     assert np.array_equal(np.asarray(audio_chunk["pcm"]), mic_payloads[0]["pcm"])
