@@ -95,10 +95,13 @@ class SessionManager:
         self._ensure_audio_capacity(state, audio_array, duration_seconds)
 
         transcript = state.agent.process_audio_command(audio_array, language=language)
-        state.transcripts.append(transcript)
-        state.audio_buffers.append(audio_array)
-        state.audio_durations.append(duration_seconds)
-        self._finalize_audio_buffers(state)
+        if self.config.store_transcripts:
+            state.transcripts.append(transcript)
+        if self.config.store_raw_audio:
+            self._ensure_audio_capacity(state, audio_array, duration_seconds)
+            state.audio_buffers.append(audio_array)
+            state.audio_durations.append(duration_seconds)
+            self._finalize_audio_buffers(state)
         return transcript
 
     def ingest_frame(self, session_id: str, frame: Image.Image) -> None:
@@ -106,6 +109,8 @@ class SessionManager:
 
         state = self._get_state(session_id)
         self._validate_frame_limits(frame)
+        if not self.config.store_raw_frames:
+            return
         self._ensure_frame_capacity(state, frame)
         state.frame_history.append(frame)
         state.last_frame = frame
@@ -143,7 +148,7 @@ class SessionManager:
                 cloud_offload=cloud_offload,
             )
         state.query_history.append(result)
-        if "query" in result:
+        if self.config.store_transcripts and "query" in result:
             state.transcripts.append(result["query"])
         return result
 
