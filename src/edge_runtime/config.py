@@ -18,9 +18,11 @@ class EdgeRuntimeConfig:
     api_key: str | None = None
     auth_token: str | None = None
     auth_header_name: str = "X-API-Key"
+    audio_buffer_policy: str = "trim"
     audio_buffer_max_seconds: Optional[float] = None
     audio_buffer_max_bytes: Optional[int] = None
     frame_history_size: int = 1
+    frame_buffer_policy: str = "trim"
     frame_buffer_max_bytes: Optional[int] = None
 
 
@@ -74,9 +76,15 @@ def load_config_from_env() -> EdgeRuntimeConfig:
     api_key = os.getenv("EDGE_RUNTIME_API_KEY")
     auth_token = os.getenv("EDGE_RUNTIME_AUTH_TOKEN") or api_key
     auth_header_name = os.getenv("EDGE_RUNTIME_AUTH_HEADER", "X-API-Key")
+    audio_buffer_policy = _parse_buffer_policy(
+        os.getenv("AUDIO_BUFFER_POLICY"), default="trim"
+    )
     audio_buffer_max_seconds = _parse_optional_float(os.getenv("AUDIO_BUFFER_MAX_SECONDS"))
     audio_buffer_max_bytes = _parse_optional_int(os.getenv("AUDIO_BUFFER_MAX_BYTES"))
     frame_history_size = _parse_optional_int(os.getenv("FRAME_HISTORY_SIZE"), default=1) or 1
+    frame_buffer_policy = _parse_buffer_policy(
+        os.getenv("FRAME_BUFFER_POLICY"), default="trim"
+    )
     frame_buffer_max_bytes = _parse_optional_int(os.getenv("FRAME_BUFFER_MAX_BYTES"))
 
     ports = _parse_ports_env(ports_env)
@@ -90,9 +98,11 @@ def load_config_from_env() -> EdgeRuntimeConfig:
         api_key=api_key,
         auth_token=auth_token,
         auth_header_name=auth_header_name,
+        audio_buffer_policy=audio_buffer_policy,
         audio_buffer_max_seconds=audio_buffer_max_seconds,
         audio_buffer_max_bytes=audio_buffer_max_bytes,
         frame_history_size=frame_history_size,
+        frame_buffer_policy=frame_buffer_policy,
         frame_buffer_max_bytes=frame_buffer_max_bytes,
     )
 
@@ -113,3 +123,16 @@ def _parse_optional_float(raw_value: str | None) -> Optional[float]:
         return float(raw_value)
     except ValueError as exc:
         raise ValueError(f"Invalid float value: {raw_value}") from exc
+
+
+def _parse_buffer_policy(raw_value: str | None, *, default: str = "trim") -> str:
+    allowed = {"trim", "reject"}
+    if raw_value is None:
+        return default
+
+    policy = raw_value.lower().strip()
+    if policy not in allowed:
+        raise ValueError(
+            f"Invalid buffer policy '{raw_value}'. Choose one of: {', '.join(sorted(allowed))}"
+        )
+    return policy

@@ -71,16 +71,17 @@ class SessionManager:
     ) -> str:
         """Transcribe and retain audio input for a session."""
 
-        state = self._get_state(session_id)
-
         duration_seconds = self._calculate_audio_duration(audio_array, sample_rate)
         self._validate_audio_limits(audio_array, duration_seconds)
+
+        state = self._get_state(session_id)
+        self._ensure_audio_capacity(state, audio_array, duration_seconds)
 
         transcript = state.agent.process_audio_command(audio_array, language=language)
         state.transcripts.append(transcript)
         state.audio_buffers.append(audio_array)
         state.audio_durations.append(duration_seconds)
-        self._trim_audio_buffers(state)
+        self._finalize_audio_buffers(state)
         return transcript
 
     def ingest_frame(self, session_id: str, frame: Image.Image) -> None:
@@ -88,6 +89,7 @@ class SessionManager:
 
         state = self._get_state(session_id)
         self._validate_frame_limits(frame)
+        self._ensure_frame_capacity(state, frame)
         state.frame_history.append(frame)
         state.last_frame = frame
         self._trim_frame_history(state)
@@ -194,6 +196,50 @@ class SessionManager:
             state.audio_buffers.pop(0)
             state.audio_durations.pop(0)
 
+    def _finalize_audio_buffers(self, state: SessionState) -> None:
+        if self.config.audio_buffer_policy == "trim":
+            self._trim_audio_buffers(state)
+
+    def _ensure_audio_capacity(
+        self,
+        state: SessionState,
+        pending_buffer: np.ndarray,
+        pending_duration: Optional[float],
+    ) -> None:
+        max_bytes = self.config.audio_buffer_max_bytes
+        max_seconds = self.config.audio_buffer_max_seconds
+
+        if max_bytes is None and max_seconds is None:
+            return
+
+        policy = self.config.audio_buffer_policy
+
+        def total_bytes() -> int:
+            return sum(buffer.nbytes for buffer in state.audio_buffers) + pending_buffer.nbytes
+
+        def total_duration() -> float:
+            return sum(duration or 0.0 for duration in state.audio_durations) + (
+                pending_duration or 0.0
+            )
+
+        if policy == "trim":
+            while state.audio_buffers:
+                over_bytes = max_bytes is not None and total_bytes() > max_bytes
+                over_time = max_seconds is not None and total_duration() > max_seconds
+                if not over_bytes and not over_time:
+                    break
+                state.audio_buffers.pop(0)
+                state.audio_durations.pop(0)
+        elif policy == "reject":
+            over_bytes = max_bytes is not None and total_bytes() > max_bytes
+            over_time = max_seconds is not None and total_duration() > max_seconds
+            if over_bytes or over_time:
+                raise BufferLimitExceeded(
+                    "Audio buffer would exceed configured limits; adjust AUDIO_BUFFER_* settings or set AUDIO_BUFFER_POLICY=trim"
+                )
+        else:
+            raise ValueError(f"Unsupported audio buffer policy: {policy}")
+
     def _validate_frame_limits(self, frame: Image.Image) -> None:
         if self.config.frame_buffer_max_bytes is None:
             return
@@ -217,6 +263,28 @@ class SessionManager:
                 break
             state.frame_history.pop(0)
             state.last_frame = state.frame_history[-1] if state.frame_history else None
+
+    def _ensure_frame_capacity(self, state: SessionState, frame: Image.Image) -> None:
+        max_bytes = self.config.frame_buffer_max_bytes
+        max_frames = max(1, self.config.frame_history_size)
+        policy = self.config.frame_buffer_policy
+
+        if policy == "trim":
+            return
+
+        frame_bytes = self._estimate_frame_bytes(frame)
+        total_bytes = sum(self._estimate_frame_bytes(existing) for existing in state.frame_history)
+        over_count = len(state.frame_history) + 1 > max_frames
+        over_bytes = max_bytes is not None and (total_bytes + frame_bytes) > max_bytes
+
+        if policy == "reject":
+            if over_count or over_bytes:
+                raise BufferLimitExceeded(
+                    "Frame buffer would exceed configured limits; reduce frame frequency or set FRAME_BUFFER_POLICY=trim"
+                )
+            return
+
+        raise ValueError(f"Unsupported frame buffer policy: {policy}")
 
     @staticmethod
     def _estimate_frame_bytes(frame: Image.Image) -> int:
