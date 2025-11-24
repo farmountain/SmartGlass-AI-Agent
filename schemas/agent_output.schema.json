@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/agent_output.schema.json",
+  "title": "Agent Output Envelope",
+  "description": "Standard response envelope for agent replies that includes the human-facing response, any tool actions, and the raw metadata payload.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["response", "actions", "raw"],
+  "properties": {
+    "response": {
+      "type": "string",
+      "description": "The human-readable response text returned by the agent.",
+      "minLength": 1
+    },
+    "actions": {
+      "type": "array",
+      "description": "Ordered list of tool or workflow actions taken by the agent.",
+      "items": {
+        "type": "object",
+        "description": "A single action entry recording what the agent invoked.",
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Identifier for the action or tool invoked (e.g., 'search', 'summarize').",
+            "minLength": 1
+          },
+          "payload": {
+            "type": "object",
+            "description": "Input parameters supplied to the action.",
+            "additionalProperties": true
+          },
+          "result": {
+            "type": ["object", "string", "number", "boolean", "array", "null"],
+            "description": "Normalized result returned from the action, when available."
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO-8601 timestamp of when the action completed."
+          }
+        },
+        "additionalProperties": true
+      },
+      "default": [],
+      "examples": [
+        [
+          {
+            "type": "retrieve_documents",
+            "payload": {"query": "latest policies"},
+            "result": ["policy_v3.pdf", "policy_summary.txt"]
+          },
+          {
+            "type": "summarize",
+            "payload": {"source": "policy_summary.txt"},
+            "result": "Key changes: ..."
+          }
+        ]
+      ]
+    },
+    "raw": {
+      "type": "object",
+      "description": "Unstructured metadata and passthrough fields from the model or runtime.",
+      "additionalProperties": true,
+      "examples": [
+        {
+          "latencies_ms": {"capture": 120, "perceive": 340, "extract": 210, "respond": 95},
+          "model": "gpt-4o-mini",
+          "route": "translate_sign",
+          "telemetry_id": "abc123",
+          "confidence": 0.82
+        }
+      ]
+    }
+  },
+  "examples": [
+    {
+      "response": "The door sign says the meeting room is reserved until 3 PM.",
+      "actions": [
+        {
+          "type": "ocr_extract",
+          "payload": {"image_id": "frame_0421"},
+          "result": {"text": "Reserved until 3 PM", "confidence": 0.91}
+        },
+        {
+          "type": "translate",
+          "payload": {"text": "Reservado hasta las 15:00", "target_language": "en"},
+          "result": "Reserved until 3 PM"
+        }
+      ],
+      "raw": {
+        "latencies_ms": {"capture": 85, "perceive": 260, "extract": 140, "respond": 70},
+        "model": "gpt-4o-mini",
+        "route": "translate_sign",
+        "token_usage": {"prompt": 725, "completion": 82},
+        "glossary_hits": ["meeting"],
+        "hazard_level": null
+      }
+    }
+  ]
+}
