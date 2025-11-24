@@ -77,15 +77,15 @@ def _make_silent_wav_bytes(duration_seconds: float = 0.1, sample_rate: int = 160
     return base64.b64decode(_encode_silent_wav(duration_seconds, sample_rate))
 
 
-def _encode_test_image(size: int = 8) -> str:
-    image = Image.new("RGB", (size, size), color=(255, 0, 0))
+def _encode_test_image(size: int = 8, color: tuple[int, int, int] = (255, 0, 0)) -> str:
+    image = Image.new("RGB", (size, size), color=color)
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
     return base64.b64encode(buffer.getvalue()).decode()
 
 
-def _make_test_image_bytes(size: int = 8) -> bytes:
-    return base64.b64decode(_encode_test_image(size))
+def _make_test_image_bytes(size: int = 8, color: tuple[int, int, int] = (255, 0, 0)) -> bytes:
+    return base64.b64decode(_encode_test_image(size, color=color))
 
 
 @pytest.fixture(name="edge_app")
