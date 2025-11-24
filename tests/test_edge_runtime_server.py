@@ -101,13 +101,16 @@ def fixture_edge_app(monkeypatch, request):
     auth_config = getattr(request, "param", None)
     token: str | None
     header_name: str | None
+    extra_env: dict[str, str]
 
     if isinstance(auth_config, dict):
         token = auth_config.get("token")
         header_name = auth_config.get("header")
+        extra_env = auth_config.get("env", {})
     else:
         token = auth_config
         header_name = None
+        extra_env = {}
 
     if token is None:
         for env_var in ["EDGE_RUNTIME_API_KEY", "EDGE_RUNTIME_AUTH_TOKEN", "EDGE_RUNTIME_AUTH_HEADER"]:
@@ -117,6 +120,9 @@ def fixture_edge_app(monkeypatch, request):
         monkeypatch.setenv("EDGE_RUNTIME_AUTH_TOKEN", token)
         if header_name:
             monkeypatch.setenv("EDGE_RUNTIME_AUTH_HEADER", header_name)
+
+    for key, value in extra_env.items():
+        monkeypatch.setenv(key, value)
 
     session_manager_module = import_module("src.edge_runtime.session_manager")
     monkeypatch.setattr(session_manager_module, "SmartGlassAgent", FakeSmartGlassAgent)
@@ -203,3 +209,78 @@ def test_edge_runtime_server_supports_custom_auth_header(edge_app):
     session_id = create_response.json()["session_id"]
     delete_response = client.delete(f"/sessions/{session_id}", headers=headers)
     assert delete_response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    "edge_app",
+    [
+        {
+            "env": {
+                "AUDIO_BUFFER_MAX_SECONDS": "0.05",
+                "AUDIO_BUFFER_POLICY": "reject",
+            }
+        }
+    ],
+    indirect=True,
+)
+def test_audio_ingest_rejects_when_limits_exceeded(edge_app):
+    client = TestClient(edge_app)
+
+    session_id = client.post("/sessions").json()["session_id"]
+    audio_payload = {"audio_base64": _encode_silent_wav(duration_seconds=0.1)}
+    response = client.post(f"/sessions/{session_id}/audio", json=audio_payload)
+
+    assert response.status_code == 413
+    assert "Audio buffer would exceed configured limits" in response.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    "edge_app",
+    [
+        {
+            "env": {
+                "AUDIO_BUFFER_MAX_SECONDS": "0.15",
+                "AUDIO_BUFFER_POLICY": "trim",
+            }
+        }
+    ],
+    indirect=True,
+)
+def test_audio_ingest_trims_when_limits_exceeded(edge_app):
+    client = TestClient(edge_app)
+
+    session_id = client.post("/sessions").json()["session_id"]
+    audio_payload = {"audio_base64": _encode_silent_wav(duration_seconds=0.1)}
+
+    first = client.post(f"/sessions/{session_id}/audio", json=audio_payload)
+    second = client.post(f"/sessions/{session_id}/audio", json=audio_payload)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+
+
+@pytest.mark.parametrize(
+    "edge_app",
+    [
+        {
+            "env": {
+                "FRAME_BUFFER_POLICY": "reject",
+                "FRAME_BUFFER_MAX_BYTES": "300",
+                "FRAME_HISTORY_SIZE": "2",
+            }
+        }
+    ],
+    indirect=True,
+)
+def test_frame_ingest_rejects_when_limits_exceeded(edge_app):
+    client = TestClient(edge_app)
+
+    session_id = client.post("/sessions").json()["session_id"]
+    frame_payload = {"image_base64": _encode_test_image(size=8)}
+
+    first = client.post(f"/sessions/{session_id}/frame", json=frame_payload)
+    second = client.post(f"/sessions/{session_id}/frame", json=frame_payload)
+
+    assert first.status_code == 200
+    assert second.status_code == 413
+    assert "Frame buffer would exceed configured limits" in second.json()["detail"]
