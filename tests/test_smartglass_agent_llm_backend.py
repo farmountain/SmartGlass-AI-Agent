@@ -116,6 +116,12 @@ def test_process_multimodal_query_uses_injected_backend(smartglass_agent_cls):
     assert result["response"] == "generated-text"
     assert result["query"] == "Hello world"
     assert result["visual_context"] == "No visual input"
+    assert result["actions"] == []
+    assert result["raw"] == {
+        "query": "Hello world",
+        "visual_context": "No visual input",
+        "metadata": {"cloud_offload": False},
+    }
 
 
 def test_default_ann_backend_and_legacy_params(monkeypatch):
@@ -181,3 +187,5 @@ def test_default_ann_backend_and_legacy_params(monkeypatch):
     assert result["visual_context"] == "visual description"
     assert result["response"].startswith("ann-backend-output:")
     assert "User query: spoken query" in result["response"]
+    assert result["actions"] == []
+    assert result["raw"]["metadata"] == {"cloud_offload": False, "redaction_summary": {"faces_masked": 0, "plates_masked": 0}}
