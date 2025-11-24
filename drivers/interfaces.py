@@ -41,6 +41,9 @@ class Haptics(Protocol):
     def vibrate(self, ms: int) -> None:
         """Vibrate for ``ms`` milliseconds."""
 
+    def buzz(self, ms: int) -> None:
+        """Buzz for ``ms`` milliseconds."""
+
 
 class Permissions(Protocol):
     """Coordinate user permissions for privileged capabilities."""
