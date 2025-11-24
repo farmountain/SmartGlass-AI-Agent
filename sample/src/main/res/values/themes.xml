@@ -1,0 +1,10 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.SmartGlassSample" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/purple_500</item>
+        <item name="colorPrimaryVariant">@color/purple_700</item>
+        <item name="colorOnPrimary">@android:color/white</item>
+        <item name="colorSecondary">@color/teal_200</item>
+        <item name="android:statusBarColor" tools:targetApi="l">@color/purple_700</item>
+        <item name="android:navigationBarColor" tools:targetApi="o">@color/purple_500</item>
+    </style>
+</resources>
