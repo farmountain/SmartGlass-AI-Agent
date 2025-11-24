@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 import importlib
 import itertools
 import logging
-from typing import Iterator
+from typing import Iterator, Mapping
 
 import numpy as np
 
@@ -34,6 +34,16 @@ else:
 
 def _isoformat(dt: datetime) -> str:
     return dt.isoformat().replace("+00:00", "Z")
+
+
+def _normalize_payload(payload: object) -> dict[str, object]:
+    if isinstance(payload, Mapping):
+        return dict(payload)
+    if hasattr(payload, "model_dump"):
+        return dict(payload.model_dump())  # type: ignore[call-arg]
+    if hasattr(payload, "__dict__"):
+        return dict(vars(payload))
+    return {"frame": payload}
 
 
 class MetaRayBanCameraIn(CameraIn):
@@ -58,18 +68,55 @@ class MetaRayBanCameraIn(CameraIn):
         self._height, self._width = resolution
         self._use_sdk = use_sdk and _META_SDK_AVAILABLE
 
+    def _wrap_camera_stream(self, stream: Iterator[object]) -> Iterator[dict[str, object]]:
+        for frame_id, payload in enumerate(stream):
+            enriched = _normalize_payload(payload)
+            enriched.setdefault("frame_id", frame_id)
+            enriched.setdefault(
+                "timestamp_ms",
+                int((_BASE_TIME + timedelta(milliseconds=33 * frame_id)).timestamp() * 1000),
+            )
+            enriched.setdefault("format", "rgb888")
+            enriched.setdefault("device_id", self._device_id)
+            enriched.setdefault("transport", self._transport)
+            yield enriched
+
     def _sdk_frames(self) -> Iterator[dict[str, object]] | None:
         if not self._use_sdk or _META_SDK is None:
             return None
-        sdk_stream = getattr(_META_SDK, "camera_frames", None)
-        if sdk_stream is None:
+
+        stream_iter: Iterator[object] | None = None
+        camera_api = getattr(_META_SDK, "camera", None)
+        if camera_api is not None:
+            stream_factory = getattr(camera_api, "stream_frames", None)
+            if callable(stream_factory):
+                stream_iter = stream_factory(
+                    device_id=self._device_id,
+                    transport=self._transport,
+                    resolution=(self._height, self._width),
+                )
+            elif callable(getattr(camera_api, "stream", None)):
+                stream_obj = camera_api.stream(
+                    device_id=self._device_id, transport=self._transport, resolution=(self._height, self._width)
+                )
+                frames_callable = getattr(stream_obj, "frames", None)
+                if callable(frames_callable):
+                    stream_iter = frames_callable()
+
+        if stream_iter is None:
+            legacy_factory = getattr(_META_SDK, "camera_frames", None)
+            if callable(legacy_factory):
+                stream_iter = legacy_factory(
+                    device_id=self._device_id,
+                    transport=self._transport,
+                    resolution=(self._height, self._width),
+                )
+
+        if stream_iter is None:
             LOGGER.info("Meta SDK detected; camera streaming is not yet implemented")
             return None
-        return sdk_stream(
-            device_id=self._device_id,
-            transport=self._transport,
-            resolution=(self._height, self._width),
-        )
+
+        return self._wrap_camera_stream(stream_iter)
 
     def get_frames(self) -> Iterator[dict[str, object]]:  # type: ignore[override]
         sdk_stream = self._sdk_frames()
@@ -123,20 +170,66 @@ class MetaRayBanMicIn(MicIn):
         self._channels = channels
         self._use_sdk = use_sdk and _META_SDK_AVAILABLE
 
+    def _wrap_microphone_stream(self, stream: Iterator[object]) -> Iterator[dict[str, object]]:
+        for sequence_id, payload in enumerate(stream):
+            enriched = _normalize_payload(payload)
+            enriched.setdefault("sequence_id", sequence_id)
+            enriched.setdefault(
+                "timestamp_ms",
+                int((_BASE_TIME + timedelta(milliseconds=25 * sequence_id)).timestamp() * 1000),
+            )
+            enriched.setdefault("sample_rate_hz", self._sample_rate_hz)
+            enriched.setdefault("frame_size", self._frame_size)
+            enriched.setdefault("channels", self._channels)
+            enriched.setdefault("format", "pcm_float32")
+            enriched.setdefault("device_id", self._device_id)
+            enriched.setdefault("transport", self._transport)
+            yield enriched
+
     def _sdk_frames(self) -> Iterator[dict[str, object]] | None:
         if not self._use_sdk or _META_SDK is None:
             return None
-        sdk_stream = getattr(_META_SDK, "microphone_frames", None)
-        if sdk_stream is None:
+
+        stream_iter: Iterator[object] | None = None
+        microphone_api = getattr(_META_SDK, "microphone", None)
+        if microphone_api is not None:
+            stream_factory = getattr(microphone_api, "stream_frames", None)
+            if callable(stream_factory):
+                stream_iter = stream_factory(
+                    device_id=self._device_id,
+                    transport=self._transport,
+                    sample_rate_hz=self._sample_rate_hz,
+                    frame_size=self._frame_size,
+                    channels=self._channels,
+                )
+            elif callable(getattr(microphone_api, "stream", None)):
+                stream_obj = microphone_api.stream(
+                    device_id=self._device_id,
+                    transport=self._transport,
+                    sample_rate_hz=self._sample_rate_hz,
+                    frame_size=self._frame_size,
+                    channels=self._channels,
+                )
+                frames_callable = getattr(stream_obj, "frames", None)
+                if callable(frames_callable):
+                    stream_iter = frames_callable()
+
+        if stream_iter is None:
+            legacy_factory = getattr(_META_SDK, "microphone_frames", None)
+            if callable(legacy_factory):
+                stream_iter = legacy_factory(
+                    device_id=self._device_id,
+                    transport=self._transport,
+                    sample_rate_hz=self._sample_rate_hz,
+                    frame_size=self._frame_size,
+                    channels=self._channels,
+                )
+
+        if stream_iter is None:
             LOGGER.info("Meta SDK detected; microphone capture is not yet implemented")
             return None
-        return sdk_stream(
-            device_id=self._device_id,
-            transport=self._transport,
-            sample_rate_hz=self._sample_rate_hz,
-            frame_size=self._frame_size,
-            channels=self._channels,
-        )
+
+        return self._wrap_microphone_stream(stream_iter)
 
     def get_frames(self) -> Iterator[dict[str, object]]:  # type: ignore[override]
         sdk_stream = self._sdk_frames()
