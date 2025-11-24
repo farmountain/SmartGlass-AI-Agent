@@ -5,15 +5,11 @@ from __future__ import annotations
 from typing import Optional, Protocol
 
 from .gpt2_generator import GPT2TextGenerator
+from .llm_backend_base import BaseLLMBackend
 
 
-class LLMBackend(Protocol):
-    """Protocol describing basic text generation behaviour."""
-
-    def generate(
-        self, prompt: str, *, max_tokens: int = 128, system_prompt: Optional[str] = None
-    ) -> str:
-        """Generate a response for the given prompt."""
+class LLMBackend(BaseLLMBackend, Protocol):
+    """Backwards-compatible alias for the shared backend protocol."""
 
 
 class AnnLLMBackend:
@@ -32,4 +28,4 @@ class AnnLLMBackend:
         return str(responses)
 
 
-__all__ = ["LLMBackend", "AnnLLMBackend"]
+__all__ = ["BaseLLMBackend", "LLMBackend", "AnnLLMBackend"]
