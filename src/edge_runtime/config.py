@@ -15,6 +15,7 @@ class EdgeRuntimeConfig:
     vision_model: str
     llm_backend_type: str
     ports: Dict[str, int] = field(default_factory=dict)
+    api_key: str | None = None
 
 
 def _parse_ports_env(ports_env: str | None) -> Dict[str, int]:
@@ -64,6 +65,7 @@ def load_config_from_env() -> EdgeRuntimeConfig:
     vision_model = os.getenv("VISION_MODEL", "openai/clip-vit-base-patch32")
     llm_backend_type = os.getenv("LLM_BACKEND_TYPE", "ann")
     ports_env = os.getenv("PORTS")
+    api_key = os.getenv("EDGE_RUNTIME_API_KEY")
 
     ports = _parse_ports_env(ports_env)
 
@@ -73,4 +75,5 @@ def load_config_from_env() -> EdgeRuntimeConfig:
         vision_model=vision_model,
         llm_backend_type=llm_backend_type,
         ports=ports,
+        api_key=api_key,
     )
