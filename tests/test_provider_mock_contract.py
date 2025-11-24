@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from itertools import islice
+import types
 
 import numpy as np
 import pytest
 
 from drivers.providers.mock import MockProvider
 from drivers.providers.meta import MetaRayBanProvider
+import drivers.providers.meta as meta_module
 
 
 PROVIDER_FACTORIES = (
@@ -31,6 +33,52 @@ def _extract_audio_frame(chunk: object) -> np.ndarray:
     if isinstance(chunk, dict) and "pcm" in chunk:
         return np.asarray(chunk["pcm"], dtype=np.float32).squeeze()
     return np.asarray(chunk, dtype=np.float32)
+
+
+def _install_fake_sdk(monkeypatch: pytest.MonkeyPatch) -> types.SimpleNamespace:
+    fake_sdk = types.SimpleNamespace(camera_calls=[], microphone_calls=[])
+
+    def camera_frames(*, device_id: str, transport: str, resolution: tuple[int, int]):
+        fake_sdk.camera_calls.append({"device_id": device_id, "transport": transport, "resolution": resolution})
+        for idx in range(2):
+            yield {
+                "frame_id": f"sdk-camera-{idx}",
+                "frame": np.full((*resolution, 3), idx, dtype=np.uint8),
+                "timestamp_ms": 1700000000 + idx,
+                "device_id": device_id,
+                "transport": transport,
+                "format": "rgb888",
+            }
+
+    def microphone_frames(
+        *, device_id: str, transport: str, sample_rate_hz: int, frame_size: int, channels: int
+    ):
+        fake_sdk.microphone_calls.append(
+            {
+                "device_id": device_id,
+                "transport": transport,
+                "sample_rate_hz": sample_rate_hz,
+                "frame_size": frame_size,
+                "channels": channels,
+            }
+        )
+        while True:
+            yield {
+                "pcm": np.zeros((frame_size, channels), dtype=np.float32),
+                "sample_rate_hz": sample_rate_hz,
+                "frame_size": frame_size,
+                "channels": channels,
+                "device_id": device_id,
+                "transport": transport,
+                "format": "pcm_float32",
+            }
+
+    fake_sdk.camera_frames = camera_frames
+    fake_sdk.microphone_frames = microphone_frames
+
+    monkeypatch.setattr(meta_module.meta, "_META_SDK_AVAILABLE", True)
+    monkeypatch.setattr(meta_module.meta, "_META_SDK", fake_sdk)
+    return fake_sdk
 
 
 @pytest.mark.parametrize("provider_factory", PROVIDER_FACTORIES)
@@ -102,3 +150,24 @@ def test_permissions_request_reports_grants(provider_factory) -> None:
     response = permissions.request({"camera", "gps"})
     assert response["requested"] == sorted(response["requested"])
     assert set(response["granted"]) | set(response["denied"]) == set(response["requested"])
+
+
+def test_meta_provider_prefers_sdk_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_sdk = _install_fake_sdk(monkeypatch)
+    provider = MetaRayBanProvider(prefer_sdk=True, transport="sdk")
+
+    frame = next(provider.iter_frames())
+    audio_chunk = next(provider.iter_audio_chunks())
+
+    assert fake_sdk.camera_calls and fake_sdk.microphone_calls
+    assert frame["frame_id"].startswith("sdk-camera-")
+    assert frame["format"] == "rgb888"
+    assert frame["device_id"] == fake_sdk.camera_calls[0]["device_id"]
+    assert frame["transport"] == "sdk"
+
+    assert audio_chunk["format"] == "pcm_float32"
+    assert audio_chunk["sample_rate_hz"] == fake_sdk.microphone_calls[0]["sample_rate_hz"]
+    assert audio_chunk["frame_size"] == fake_sdk.microphone_calls[0]["frame_size"]
+    assert audio_chunk["channels"] == fake_sdk.microphone_calls[0]["channels"]
+    assert audio_chunk["device_id"] == fake_sdk.microphone_calls[0]["device_id"]
+    assert audio_chunk["transport"] == "sdk"
