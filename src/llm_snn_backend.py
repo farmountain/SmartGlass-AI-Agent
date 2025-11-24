@@ -21,17 +21,18 @@ class SNNLLMBackend(BaseLLMBackend):
     def __init__(
         self,
         *,
-        model_path: str | Path = "artifacts/model.pt",
-        config_path: str | Path | None = None,
-        tokenizer_name: str | None = "gpt2",
+        model_path: str | Path = "artifacts/snn_student/student.pt",
+        metadata_path: str | Path | None = "artifacts/snn_student/metadata.json",
+        tokenizer_name: str | None = None,
         device: str | None = None,
     ) -> None:
         self.model_path = Path(model_path)
-        self.config_path = Path(config_path) if config_path else self.model_path.with_suffix(".json")
+        self.metadata_path = Path(metadata_path) if metadata_path else None
         self.tokenizer_name = tokenizer_name
         self.device = device
 
-        self.config: Dict[str, object] = self._load_config()
+        self.metadata: Dict[str, object] = self._load_metadata()
+        self.config: Dict[str, object] = self._extract_config(self.metadata)
         self._torch = self._import_torch()
         self.device = self.device or (
             "cuda" if self._torch and getattr(self._torch.cuda, "is_available", lambda: False)() else "cpu"
@@ -42,17 +43,27 @@ class SNNLLMBackend(BaseLLMBackend):
         self._reverse_vocab: List[str] = []
         self.model = self._load_model()
 
-    def _load_config(self) -> Dict[str, object]:
-        if not self.config_path.exists():
-            logging.info("SNN config %s not found; falling back to defaults", self.config_path)
+    def _load_metadata(self) -> Dict[str, object]:
+        if self.metadata_path is None:
+            return {}
+
+        if not self.metadata_path.exists():
+            logging.info("SNN metadata %s not found; falling back to defaults", self.metadata_path)
             return {}
 
         try:
-            with self.config_path.open("r", encoding="utf-8") as handle:
+            with self.metadata_path.open("r", encoding="utf-8") as handle:
                 return json.load(handle)
         except Exception as exc:  # pragma: no cover - defensive fallback
-            logging.warning("Failed to parse SNN config %s: %s", self.config_path, exc)
+            logging.warning("Failed to parse SNN metadata %s: %s", self.metadata_path, exc)
             return {}
+
+    def _extract_config(self, metadata: Dict[str, object]) -> Dict[str, object]:
+        config = metadata.get("config", {}) if isinstance(metadata, dict) else {}
+        if isinstance(config, dict):
+            return config
+        logging.warning("SNN metadata config field is not a mapping; ignoring")
+        return {}
 
     def _import_torch(self):
         try:
@@ -141,7 +152,7 @@ class SNNLLMBackend(BaseLLMBackend):
         return outputs
 
     def generate(
-        self, prompt: str, *, max_tokens: int = 128, system_prompt: Optional[str] = None
+        self, prompt: str, max_tokens: int = 64, system_prompt: Optional[str] = None, **_: object
     ) -> str:
         """Generate a response via an SNN student."""
 
