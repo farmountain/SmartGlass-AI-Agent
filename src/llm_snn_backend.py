@@ -7,10 +7,10 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from .llm_backend import LLMBackend
+from .llm_backend_base import BaseLLMBackend
 
 
-class SNNLLMBackend(LLMBackend):
+class SNNLLMBackend(BaseLLMBackend):
     """
     Backend reserved for spiking neural network (SNN) student models.
 
