@@ -171,9 +171,13 @@ class ASRStream:
     def run_with_provider(self, provider: Any, *, seconds: float = 1.0) -> Iterator[dict]:
         """Stream microphone audio from ``provider`` through the stability gate."""
 
-        mic = getattr(provider, "mic", None) or getattr(provider, "microphone", None)
+        mic = None
+        if hasattr(provider, "open_audio_stream"):
+            mic = provider.open_audio_stream()
         if mic is None:
-            raise AttributeError("provider does not expose a 'mic' or 'microphone' attribute")
+            mic = getattr(provider, "mic", None) or getattr(provider, "microphone", None)
+        if mic is None:
+            raise AttributeError("provider does not expose a microphone-compatible interface")
 
         provider_name = type(provider).__name__ if provider is not None else "unknown"
         log_metric("asr.provider", 1.0, tags={"provider": provider_name})

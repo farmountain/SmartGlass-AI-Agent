@@ -9,7 +9,6 @@ side effects when the environment supports them.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import logging
 import time
@@ -18,6 +17,7 @@ from typing import Iterator
 import numpy as np
 
 from ..interfaces import AudioOut, CameraIn, DisplayOverlay, Haptics, MicIn, Permissions
+from .base import ProviderBase
 
 try:  # Optional dependency used for camera and overlay rendering
     import cv2
@@ -281,16 +281,51 @@ class MetaPermissions(Permissions):
         return response
 
 
-@dataclass
-class MetaProvider:
+class MetaProvider(ProviderBase):
     """Aggregate of production driver placeholders."""
 
-    camera: MetaCameraIn = field(default_factory=MetaCameraIn)
-    microphone: MetaMicIn = field(default_factory=MetaMicIn)
-    audio_out: MetaAudioOut = field(default_factory=MetaAudioOut)
-    overlay: MetaDisplayOverlay = field(default_factory=MetaDisplayOverlay)
-    haptics: MetaHaptics = field(default_factory=MetaHaptics)
-    permissions: MetaPermissions = field(default_factory=MetaPermissions)
+    def __init__(
+        self,
+        *,
+        camera_device_index: int = 0,
+        camera_fps: float = 30.0,
+        microphone_sample_rate_hz: int = 16000,
+        microphone_frame_size: int = 1024,
+        microphone_channels: int = 1,
+        overlay_font_scale: float = 0.6,
+        overlay_thickness: int = 2,
+        **kwargs,
+    ) -> None:
+        self._camera_device_index = camera_device_index
+        self._camera_fps = camera_fps
+        self._microphone_sample_rate_hz = microphone_sample_rate_hz
+        self._microphone_frame_size = microphone_frame_size
+        self._microphone_channels = microphone_channels
+        self._overlay_font_scale = overlay_font_scale
+        self._overlay_thickness = overlay_thickness
+        super().__init__(**kwargs)
+
+    def _create_camera(self) -> CameraIn | None:
+        return MetaCameraIn(device_index=self._camera_device_index, fps=self._camera_fps)
+
+    def _create_microphone(self) -> MicIn | None:
+        return MetaMicIn(
+            sample_rate_hz=self._microphone_sample_rate_hz,
+            frame_size=self._microphone_frame_size,
+            channels=self._microphone_channels,
+        )
+
+    def _create_audio_out(self) -> AudioOut | None:
+        return MetaAudioOut()
+
+    def _create_overlay(self) -> DisplayOverlay | None:
+        return MetaDisplayOverlay(font_scale=self._overlay_font_scale, thickness=self._overlay_thickness)
+
+    def _create_haptics(self) -> Haptics | None:
+        return MetaHaptics()
+
+    def _create_permissions(self) -> Permissions | None:
+        return MetaPermissions()
 
 
 __all__ = [

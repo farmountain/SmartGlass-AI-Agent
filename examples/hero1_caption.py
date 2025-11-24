@@ -191,27 +191,21 @@ def _format_stage(stage: str, ms: float) -> str:
 
 
 def _resolve_audio_out(provider: Provider) -> object:
-    for attr in ("audio_out", "audio"):
-        target = getattr(provider, attr, None)
-        if target is not None and hasattr(target, "speak"):
-            return target
-    raise AttributeError("provider does not expose an audio_out/audio.speak implementation")
-
-
-def _provider_has_display(provider: Provider) -> bool:
-    probe = getattr(provider, "has_display", None)
-    if callable(probe):
-        try:
-            return bool(probe())
-        except Exception:  # pragma: no cover - defensive against provider quirks
-            return bool(getattr(provider, "overlay", None))
-    return bool(getattr(provider, "overlay", None))
+    audio_out = getattr(provider, "get_audio_out", None)
+    target = audio_out() if callable(audio_out) else None
+    if target is None:
+        raise AttributeError("provider does not expose an audio_out/audio.speak implementation")
+    return target
 
 
 def _render_overlay(provider: Provider, payload: dict) -> dict | None:
-    if not _provider_has_display(provider):
+    try:
+        if not provider.has_display():
+            return None
+    except Exception:  # pragma: no cover - defensive against provider quirks
         return None
-    overlay = getattr(provider, "overlay", None) or getattr(provider, "display", None)
+
+    overlay = provider.get_overlay()
     if overlay is None or not hasattr(overlay, "render"):
         return None
     return overlay.render(payload)

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Iterator
 
 import numpy as np
 
 from ..interfaces import CameraIn, MicIn
+from .base import ProviderBase
 from .mock import MockAudioOut, MockDisplayOverlay, MockHaptics, MockPermissions
 
 
@@ -90,16 +90,31 @@ class VuzixMockPermissions(MockPermissions):
         return payload
 
 
-@dataclass
-class VuzixMockProvider:
+class VuzixMockProvider(ProviderBase):
     """Aggregate of Vuzix-flavoured mocks."""
 
-    camera: VuzixMockCameraIn = field(default_factory=VuzixMockCameraIn)
-    microphone: VuzixMockMicIn = field(default_factory=VuzixMockMicIn)
-    audio_out: VuzixMockAudioOut = field(default_factory=VuzixMockAudioOut)
-    overlay: VuzixMockDisplayOverlay = field(default_factory=VuzixMockDisplayOverlay)
-    haptics: VuzixMockHaptics = field(default_factory=VuzixMockHaptics)
-    permissions: VuzixMockPermissions = field(default_factory=VuzixMockPermissions)
+    def __init__(self, *, height: int = 480, width: int = 640, **kwargs) -> None:
+        self._height = height
+        self._width = width
+        super().__init__(**kwargs)
+
+    def _create_camera(self) -> CameraIn | None:
+        return VuzixMockCameraIn(height=self._height, width=self._width)
+
+    def _create_microphone(self) -> MicIn | None:
+        return VuzixMockMicIn()
+
+    def _create_audio_out(self):
+        return VuzixMockAudioOut()
+
+    def _create_overlay(self):
+        return VuzixMockDisplayOverlay()
+
+    def _create_haptics(self):
+        return VuzixMockHaptics()
+
+    def _create_permissions(self):
+        return VuzixMockPermissions()
 
     def has_display(self) -> bool:
         return True

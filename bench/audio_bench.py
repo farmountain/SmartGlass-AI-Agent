@@ -237,7 +237,7 @@ def run_audio_bench(
     provider_name = _resolve_provider_name(provider)
 
     signals: List[SignalSpec] = []
-    microphone = getattr(provider, "microphone", None)
+    microphone = provider.open_audio_stream()
     if microphone is not None:
         try:
             signals.append(_mic_signal(microphone=microphone, sample_rate=sample_rate))

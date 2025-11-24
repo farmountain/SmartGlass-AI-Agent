@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Iterator, List, Sequence, Set
 
 import numpy as np
 
 from ..interfaces import AudioOut, CameraIn, DisplayOverlay, Haptics, MicIn, Permissions
+from .base import ProviderBase
 from src.io.telemetry import log_metric
 
 
@@ -129,16 +129,41 @@ class MockPermissions(Permissions):
         return response
 
 
-@dataclass
-class MockProvider:
+class MockProvider(ProviderBase):
     """Aggregate of deterministic mock drivers."""
 
-    camera: MockCameraIn = field(default_factory=MockCameraIn)
-    microphone: MockMicIn = field(default_factory=MockMicIn)
-    audio_out: MockAudioOut = field(default_factory=MockAudioOut)
-    overlay: MockDisplayOverlay = field(default_factory=MockDisplayOverlay)
-    haptics: MockHaptics = field(default_factory=MockHaptics)
-    permissions: MockPermissions = field(default_factory=MockPermissions)
+    def __init__(
+        self,
+        *,
+        camera_size: int = 4,
+        microphone_sample_rate_hz: int = 16000,
+        microphone_frame_size: int = 400,
+        **kwargs,
+    ) -> None:
+        self._camera_size = camera_size
+        self._microphone_sample_rate_hz = microphone_sample_rate_hz
+        self._microphone_frame_size = microphone_frame_size
+        super().__init__(**kwargs)
+
+    def _create_camera(self) -> CameraIn | None:
+        return MockCameraIn(size=self._camera_size)
+
+    def _create_microphone(self) -> MicIn | None:
+        return MockMicIn(
+            sample_rate_hz=self._microphone_sample_rate_hz, frame_size=self._microphone_frame_size
+        )
+
+    def _create_audio_out(self) -> AudioOut | None:
+        return MockAudioOut()
+
+    def _create_overlay(self) -> DisplayOverlay | None:
+        return MockDisplayOverlay()
+
+    def _create_haptics(self) -> Haptics | None:
+        return MockHaptics()
+
+    def _create_permissions(self) -> Permissions | None:
+        return MockPermissions()
 
 
 __all__ = [

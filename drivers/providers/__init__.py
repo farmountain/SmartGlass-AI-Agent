@@ -1,5 +1,6 @@
 """Provider implementations for driver interfaces."""
 
+from .base import BaseProvider, ProviderBase
 from .meta import (
     MetaAudioOut,
     MetaCameraIn,
@@ -63,6 +64,8 @@ __all__ = [
     "MetaMicIn",
     "MetaPermissions",
     "MetaProvider",
+    "BaseProvider",
+    "ProviderBase",
     "MockAudioOut",
     "MockCameraIn",
     "MockDisplayOverlay",

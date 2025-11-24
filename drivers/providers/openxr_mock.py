@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Iterator
 
 import numpy as np
 
 from ..interfaces import CameraIn, MicIn
+from .base import ProviderBase
 from .mock import MockAudioOut, MockDisplayOverlay, MockHaptics, MockPermissions
 
 
@@ -90,16 +90,30 @@ class OpenXRMockPermissions(MockPermissions):
         return payload
 
 
-@dataclass
-class OpenXRMockProvider:
+class OpenXRMockProvider(ProviderBase):
     """Aggregate of OpenXR-optimised mocks."""
 
-    camera: OpenXRMockCameraIn = field(default_factory=OpenXRMockCameraIn)
-    microphone: OpenXRMockMicIn = field(default_factory=OpenXRMockMicIn)
-    audio_out: OpenXRMockAudioOut = field(default_factory=OpenXRMockAudioOut)
-    overlay: OpenXRMockDisplayOverlay = field(default_factory=OpenXRMockDisplayOverlay)
-    haptics: OpenXRMockHaptics = field(default_factory=OpenXRMockHaptics)
-    permissions: OpenXRMockPermissions = field(default_factory=OpenXRMockPermissions)
+    def __init__(self, *, eye_buffer_size: int = 1024, **kwargs) -> None:
+        self._eye_buffer_size = eye_buffer_size
+        super().__init__(**kwargs)
+
+    def _create_camera(self) -> CameraIn | None:
+        return OpenXRMockCameraIn(size=self._eye_buffer_size)
+
+    def _create_microphone(self) -> MicIn | None:
+        return OpenXRMockMicIn()
+
+    def _create_audio_out(self):
+        return OpenXRMockAudioOut()
+
+    def _create_overlay(self):
+        return OpenXRMockDisplayOverlay()
+
+    def _create_haptics(self):
+        return OpenXRMockHaptics()
+
+    def _create_permissions(self):
+        return OpenXRMockPermissions()
 
     def has_display(self) -> bool:
         return False
