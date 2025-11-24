@@ -79,6 +79,30 @@ class SampleActivity : AppCompatActivity() {
             response.sessionId?.let { append(" | session=" + it) }
             response.transcript?.let { append(" | transcript=" + it) }
             response.response?.let { append(" | response=" + it) }
+            response.overlays?.takeIf { it.isNotEmpty() }?.let { overlays ->
+                val overlayDetails = overlays.joinToString(prefix = "[", postfix = "]") { overlay ->
+                    buildString {
+                        append(overlay.type)
+                        overlay.content?.let { append(":$it") }
+                        overlay.text?.let { append(":$it") }
+                        overlay.boxes?.takeIf { boxes -> boxes.isNotEmpty() }?.let { boxes ->
+                            append(" (${boxes.size} boxes)")
+                        }
+                    }
+                }
+                append(" | overlays=" + overlayDetails)
+            }
+            response.metadata?.let { metadata ->
+                val metadataFields = buildList {
+                    metadata.cloudOffload?.let { add("cloudOffload=$it") }
+                    metadata.latencyMs?.let { add("latencyMs=$it") }
+                    metadata.redactionSummary?.let { summary -> add("redaction=$summary") }
+                }
+                if (metadataFields.isNotEmpty()) {
+                    append(" | metadata=" + metadataFields.joinToString())
+                }
+            }
+            response.redaction?.let { append(" | redaction=$it") }
             response.status?.let { append(" | status=" + it) }
             response.error?.let { append(" | error=" + it) }
         }
