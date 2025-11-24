@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 
 import numpy as np
 import soundfile as sf
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 from PIL import Image
 import uvicorn
@@ -47,20 +47,28 @@ app = FastAPI(title="SmartGlass Edge Runtime", version="0.1.0")
 def _decode_audio_payload(audio_base64: str) -> np.ndarray:
     try:
         audio_bytes = base64.b64decode(audio_base64)
-        data, _ = sf.read(io.BytesIO(audio_bytes))
-        if len(data.shape) > 1:
-            data = data.mean(axis=1)
-        return data.astype(np.float32)
+        return _decode_audio_bytes(audio_bytes)
     except Exception as exc:  # pylint: disable=broad-except
         raise HTTPException(status_code=400, detail=f"Invalid audio payload: {exc}") from exc
+
+
+def _decode_audio_bytes(audio_bytes: bytes) -> np.ndarray:
+    data, _ = sf.read(io.BytesIO(audio_bytes))
+    if len(data.shape) > 1:
+        data = data.mean(axis=1)
+    return data.astype(np.float32)
 
 
 def _decode_image_payload(image_base64: str) -> Image.Image:
     try:
         image_bytes = base64.b64decode(image_base64)
-        return Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        return _decode_image_bytes(image_bytes)
     except Exception as exc:  # pylint: disable=broad-except
         raise HTTPException(status_code=400, detail=f"Invalid image payload: {exc}") from exc
+
+
+def _decode_image_bytes(image_bytes: bytes) -> Image.Image:
+    return Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
 
 @app.post("/sessions", response_model=CreateSessionResponse)
@@ -133,6 +141,59 @@ def delete_session(session_id: str) -> Dict[str, str]:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     return {"status": "deleted", "session_id": session_id}
+
+
+@app.websocket("/ws/audio/{session_id}")
+async def websocket_audio(session_id: str, websocket: WebSocket) -> None:
+    """Ingest audio over WebSocket and stream transcripts back."""
+
+    language = websocket.query_params.get("language")
+    try:
+        session_manager.get_summary(session_id)
+    except KeyError:
+        await websocket.close(code=4404, reason="Unknown session id")
+        return
+
+    await websocket.accept()
+    try:
+        while True:
+            audio_bytes = await websocket.receive_bytes()
+            audio_array = _decode_audio_bytes(audio_bytes)
+            transcript = session_manager.ingest_audio(session_id, audio_array, language)
+            await websocket.send_json({"session_id": session_id, "transcript": transcript})
+    except WebSocketDisconnect:
+        logger.info("Audio WebSocket disconnected for session %s", session_id)
+    finally:
+        try:
+            session_manager.delete_session(session_id)
+        except KeyError:
+            logger.debug("Session %s already cleaned up", session_id)
+
+
+@app.websocket("/ws/frame/{session_id}")
+async def websocket_frame(session_id: str, websocket: WebSocket) -> None:
+    """Ingest frames over WebSocket for multimodal context."""
+
+    try:
+        session_manager.get_summary(session_id)
+    except KeyError:
+        await websocket.close(code=4404, reason="Unknown session id")
+        return
+
+    await websocket.accept()
+    try:
+        while True:
+            frame_bytes = await websocket.receive_bytes()
+            frame = _decode_image_bytes(frame_bytes)
+            session_manager.ingest_frame(session_id, frame)
+            await websocket.send_json({"session_id": session_id, "status": "frame stored"})
+    except WebSocketDisconnect:
+        logger.info("Frame WebSocket disconnected for session %s", session_id)
+    finally:
+        try:
+            session_manager.delete_session(session_id)
+        except KeyError:
+            logger.debug("Session %s already cleaned up", session_id)
 
 
 def main() -> None:
