@@ -23,6 +23,7 @@ from torch.nn import functional as F
 @dataclass
 class TrainConfig:
     teacher_model: str
+    dataset: str
     dataset_path: Optional[str]
     output_dir: str
     lr: float
@@ -64,8 +65,8 @@ def load_teacher_model(model_name: str, device: str):
 # ------------------------ Dataset helpers ------------------------
 
 
-def load_prompts(dataset_path: Optional[str]) -> List[str]:
-    """Load prompts from a text file or fall back to synthetic samples."""
+def load_prompts(dataset: str, dataset_path: Optional[str]) -> List[str]:
+    """Load prompts from a dataset name, file path, or fall back to synthetic samples."""
 
     if dataset_path:
         path = Path(dataset_path)
@@ -73,14 +74,35 @@ def load_prompts(dataset_path: Optional[str]) -> List[str]:
             raise FileNotFoundError(f"Dataset path {dataset_path} does not exist")
         return [line.strip() for line in path.read_text().splitlines() if line.strip()]
 
-    # Lightweight synthetic prompts to avoid external dependencies.
-    return [
-        "Describe a sunrise over the mountains.",
-        "List three safety tips for biking in the city.",
-        "Write a short haiku about technology.",
-        "Explain knowledge distillation in simple terms.",
-        "Suggest a healthy lunch recipe with avocado.",
-    ]
+    if dataset.lower() == "synthetic":
+        return [
+            "Describe a sunrise over the mountains.",
+            "List three safety tips for biking in the city.",
+            "Write a short haiku about technology.",
+            "Explain knowledge distillation in simple terms.",
+            "Suggest a healthy lunch recipe with avocado.",
+        ]
+
+    try:
+        from datasets import load_dataset  # type: ignore
+    except ModuleNotFoundError as exc:  # pragma: no cover - runtime guard
+        raise ModuleNotFoundError(
+            "The 'datasets' package is required for loading the requested dataset. "
+            "Install it with `pip install datasets` or use `--dataset synthetic` or `--dataset-path`."
+        ) from exc
+
+    dataset_id = dataset
+    dataset_kwargs = {}
+    if dataset.lower() in {"wikitext-2", "wikitext-2-raw"}:
+        dataset_id = "wikitext"
+        dataset_kwargs["name"] = "wikitext-2-raw-v1"
+
+    prompts_ds = load_dataset(dataset_id, split="train", **dataset_kwargs)
+    text_column = "text" if "text" in prompts_ds.column_names else prompts_ds.column_names[0]
+    prompts = [str(sample).strip() for sample in prompts_ds[text_column] if str(sample).strip()]
+    if not prompts:
+        raise ValueError(f"No prompts found in dataset '{dataset}'.")
+    return prompts
 
 
 # ------------------------ Student model ------------------------
@@ -187,7 +209,7 @@ def train(config: TrainConfig):
     student = SpikingStudentLM(vocab_size=vocab_size).to(device)
     optimizer = torch.optim.AdamW(student.parameters(), lr=config.lr)
 
-    prompts = load_prompts(config.dataset_path)
+    prompts = load_prompts(config.dataset, config.dataset_path)
     if not prompts:
         raise ValueError("No prompts available for training")
 
@@ -241,19 +263,51 @@ def train(config: TrainConfig):
 
 def parse_args() -> TrainConfig:
     parser = argparse.ArgumentParser(description="Train a spiking student via KD")
-    parser.add_argument("--teacher-model", type=str, default="sshleifer/tiny-gpt2", help="Hugging Face model id or local path")
-    parser.add_argument("--dataset-path", type=str, default=None, help="Optional path to prompts text file")
-    parser.add_argument("--output-dir", type=str, default="artifacts/snn_student", help="Directory for artifacts")
-    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
+    parser.add_argument(
+        "--teacher-model",
+        type=str,
+        required=True,
+        help="Required Hugging Face model id or local path for the teacher (e.g., sshleifer/tiny-gpt2)",
+    )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default="wikitext-2",
+        help="Dataset name for prompts (e.g., wikitext-2, synthetic, or any `datasets`-compatible id)",
+    )
+    parser.add_argument("--dataset-path", type=str, default=None, help="Optional path to a prompts text file")
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="artifacts/snn_student",
+        help="Directory for artifacts (default: artifacts/snn_student)",
+    )
+    parser.add_argument(
+        "--lr",
+        type=float,
+        default=1e-4,
+        help="Student learning rate (AdamW)",
+    )
     parser.add_argument("--batch-size", type=int, default=2, help="Batch size (Colab-friendly)")
     parser.add_argument("--grad-accum-steps", type=int, default=4, help="Gradient accumulation steps")
     parser.add_argument("--num-steps", type=int, default=20, help="Number of optimization steps")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Training device")
-    parser.add_argument("--max-length", type=int, default=64, help="Maximum tokenized length")
-    parser.add_argument("--temperature", type=float, default=1.0, help="Distillation temperature")
+    parser.add_argument(
+        "--max-length",
+        type=int,
+        default=64,
+        help="Maximum tokenized length for prompts",
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=1.0,
+        help="Distillation temperature for soft targets",
+    )
     args = parser.parse_args()
     return TrainConfig(
         teacher_model=args.teacher_model,
+        dataset=args.dataset,
         dataset_path=args.dataset_path,
         output_dir=args.output_dir,
         lr=args.lr,
