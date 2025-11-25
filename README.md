@@ -190,6 +190,16 @@ for action in actions:
     print(action.get("type"), action.get("payload"))
 ```
 
+#### CLI demo
+
+To try the same pipeline from the terminal, run the `examples/cli_smartglass.py` demo from the repository root. It loads an image, walks through the agent pipeline, and streams the generated response (optionally using the SNN backend):
+
+```bash
+python -m examples.cli_smartglass --image images/scene.jpg --backend snn
+```
+
+Omit `--backend snn` to use the default backend.
+
 #### Provider selection
 
 The data access layer defaults to the offline `mock` provider so examples and CI run without hardware:
