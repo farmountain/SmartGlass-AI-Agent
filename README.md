@@ -87,6 +87,7 @@ See [PRIVACY.md](PRIVACY.md) for detailed threat-modeling notes and guidance on 
 
 - **Pipeline:** `scripts/train_snn_student.py` distills a transformer teacher into a spiking-friendly student with temperature-scaled KD and gradient accumulation so it can run in constrained Colab-style environments.【F:scripts/train_snn_student.py†L1-L208】
 - **Artifacts:** Training writes `student.pt` and `metadata.json` under `artifacts/snn_student` by default (override with `--output-dir`).【F:scripts/train_snn_student.py†L224-L236】【F:scripts/train_snn_student.py†L242-L275】
+- **Detailed walkthrough:** See [`docs/snn_pipeline.md`](docs/snn_pipeline.md) for a step-by-step runbook, artifact layout, and how `SNNLLMBackend` consumes the saved files.【F:docs/snn_pipeline.md†L1-L77】
 - **Launch training:**
 
   ```bash
