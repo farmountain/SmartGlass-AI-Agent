@@ -175,13 +175,18 @@ result = agent.process_multimodal_query(
     image_input="A person standing next to a bicycle",
 )
 
-# Top-level fields are always present
-print("response:", result.response)  # Model reply text
-print("actions:", result.actions)    # Suggested action list (defaults to [])
-print("raw:", result.raw)            # Provider payloads (defaults to {})
+# Backward-compatible extraction of the generated reply
+response_text = result.get("response", result) if isinstance(result, dict) else result
+print("response:", response_text)
+
+# Optional structured outputs
+actions = result.get("actions", []) if isinstance(result, dict) else []
+raw_payload = result.get("raw", {}) if isinstance(result, dict) else {}
+print("actions:", actions)
+print("raw:", raw_payload)
 
 # Actions can be inspected further
-for action in result.actions:
+for action in actions:
     print(action.get("type"), action.get("payload"))
 ```
 

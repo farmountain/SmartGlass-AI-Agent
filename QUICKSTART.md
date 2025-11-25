@@ -63,9 +63,18 @@ result = agent.process_multimodal_query(
     image_input="scene.jpg"      # What you're looking at
 )
 
-print(f"Query: {result['query']}")
-print(f"Context: {result['visual_context']}")
-print(f"Response: {result['response']}")
+query = result.get("query", "<unknown query>") if isinstance(result, dict) else "<unknown query>"
+context = result.get("visual_context", "<no context>") if isinstance(result, dict) else "<no context>"
+response_text = result.get("response", result) if isinstance(result, dict) else result
+
+print(f"Query: {query}")
+print(f"Context: {context}")
+print(f"Response: {response_text}")
+
+# Optional structured outputs
+if isinstance(result, dict):
+    print(f"Actions: {result.get('actions', [])}")
+    print(f"Raw payload: {result.get('raw', {})}")
 ```
 
 ## 📓 Google Colab (No Installation Required!)

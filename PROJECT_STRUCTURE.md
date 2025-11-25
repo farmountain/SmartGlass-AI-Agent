@@ -177,11 +177,17 @@ Response to User
        audio_input="command.wav",
        image_input="scene.jpg"
    )
+
+    # Extract response with backward compatibility
+    response_text = result.get("response", result) if isinstance(result, dict) else result
+    actions = result.get("actions", []) if isinstance(result, dict) else []
+    raw_payload = result.get("raw", {}) if isinstance(result, dict) else {}
    ```
 
 4. **Get Response**
-   - Text response from GPT-2
-   - (Optional) Convert to speech for audio output
+   - Text response from GPT-2 (see `response_text` above)
+   - Optional structured actions/metadata available via `actions` / `raw`
+   - (Optional) Convert the text response to speech for audio output
 
 ## 🛠️ Configuration Options
 
