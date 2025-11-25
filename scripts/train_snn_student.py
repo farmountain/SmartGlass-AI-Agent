@@ -30,6 +30,7 @@ class TrainConfig:
     batch_size: int
     grad_accum_steps: int
     num_steps: int
+    log_interval: int
     device: str
     max_length: int
     temperature: float
@@ -238,6 +239,10 @@ def train(config: TrainConfig):
                 optimizer.zero_grad()
                 global_step += 1
 
+                if config.log_interval > 0 and global_step % config.log_interval == 0:
+                    step_loss = running_loss * config.grad_accum_steps / accum_steps
+                    print(f"Step {global_step}/{config.num_steps}: loss={step_loss:.4f}")
+
                 if global_step >= config.num_steps:
                     break
 
@@ -267,7 +272,8 @@ def train(config: TrainConfig):
     }
     (artifact_dir / "metadata.json").write_text(json.dumps(metadata, indent=2))
     print(f"Training complete. Steps: {global_step}, avg_loss: {avg_loss:.4f}")
-    print(f"Artifacts saved to: {artifact_dir}")
+    print(f"Student params: {student_param_count}")
+    print(f"Artifacts: {artifact_dir}")
 
 
 # ------------------------ Entry point ------------------------
@@ -303,6 +309,7 @@ def parse_args() -> TrainConfig:
     parser.add_argument("--batch-size", type=int, default=2, help="Batch size (Colab-friendly)")
     parser.add_argument("--grad-accum-steps", type=int, default=4, help="Gradient accumulation steps")
     parser.add_argument("--num-steps", type=int, default=20, help="Number of optimization steps")
+    parser.add_argument("--log-interval", type=int, default=5, help="Steps between loss logs (0 to disable)")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Training device")
     parser.add_argument(
         "--max-length",
@@ -326,6 +333,7 @@ def parse_args() -> TrainConfig:
         batch_size=args.batch_size,
         grad_accum_steps=args.grad_accum_steps,
         num_steps=args.num_steps,
+        log_interval=args.log_interval,
         device=args.device,
         max_length=args.max_length,
         temperature=args.temperature,
