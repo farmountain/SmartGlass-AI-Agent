@@ -27,6 +27,9 @@ gTTS                     # Text-to-speech (for audio reply, Week 11+)
 gradio                   # Web app prototype (Week 18 optional)
 fastapi                  # API serving (Week 18 optional)
 
+# Validation & schema tooling
+jsonschema>=4.21.1
+
 # Colab-specific (auto-installed in Colab but listed for local testing)
 ipython
 notebook

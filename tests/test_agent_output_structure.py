@@ -1,11 +1,21 @@
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import sys
 import types
 from pathlib import Path
 
 import pytest
+
+schema_validation_spec = importlib.util.spec_from_file_location(
+    "schema_validation", Path(__file__).resolve().parents[1] / "src/utils/schema_validation.py"
+)
+if not schema_validation_spec or not schema_validation_spec.loader:  # pragma: no cover - defensive
+    raise ImportError("Could not load schema_validation module")
+schema_validation = importlib.util.module_from_spec(schema_validation_spec)
+schema_validation_spec.loader.exec_module(schema_validation)
+validate_agent_output_schema = schema_validation.validate_agent_output_schema
 
 
 class DummyAudioProcessor:
@@ -111,3 +121,13 @@ def test_process_multimodal_query_with_audio_and_image(smartglass_agent_cls):
     assert isinstance(result["response"], str)
     assert isinstance(result["actions"], list)
     assert isinstance(result["raw"], dict)
+
+
+def test_process_multimodal_query_matches_agent_output_schema(smartglass_agent_cls):
+    backend = DummyLLMBackend()
+    agent = smartglass_agent_cls(llm_backend=backend)
+
+    result = agent.process_multimodal_query(text_query="schema validation")
+
+    # Should not raise any validation errors when coerced to the documented envelope
+    validate_agent_output_schema(result)
