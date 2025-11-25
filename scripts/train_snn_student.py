@@ -207,6 +207,7 @@ def train(config: TrainConfig):
     vocab_size = tokenizer.vocab_size
 
     student = SpikingStudentLM(vocab_size=vocab_size).to(device)
+    student_param_count = sum(p.numel() for p in student.parameters())
     optimizer = torch.optim.AdamW(student.parameters(), lr=config.lr)
 
     prompts = load_prompts(config.dataset, config.dataset_path)
@@ -249,6 +250,17 @@ def train(config: TrainConfig):
 
     torch.save(student.state_dict(), artifact_dir / "student.pt")
     metadata = {
+        "model_type": student.__class__.__name__,
+        "vocab_size": vocab_size,
+        "student_params": student_param_count,
+        "training_config": {
+            "num_steps": config.num_steps,
+            "batch_size": config.batch_size,
+            "teacher_model": config.teacher_model,
+            "lr": config.lr,
+            "temperature": config.temperature,
+            "dataset": config.dataset,
+        },
         "config": asdict(config),
         "steps": global_step,
         "avg_loss": avg_loss,
