@@ -84,9 +84,17 @@ def main():
         audio_input='command.wav',
         image_input='scene.jpg'
     )
-    print(f"Query: {result['query']}")
-    print(f"Visual Context: {result['visual_context']}")
-    print(f"Response: {result['response']}")
+
+    # Backward-compatible response extraction
+    response_text = result.get('response', result) if isinstance(result, dict) else result
+    actions = result.get('actions', []) if isinstance(result, dict) else []
+    raw_payload = result.get('raw', {}) if isinstance(result, dict) else {}
+
+    print(f"Query: {result.get('query', '<unknown>')}")
+    print(f"Visual Context: {result.get('visual_context', '<none>')}")
+    print(f"Response: {response_text}")
+    print(f"Actions: {actions}")
+    print(f"Raw payload: {raw_payload}")
     """)
     
     # Example 5: Conversation history

@@ -157,7 +157,7 @@ result = agent.process_multimodal_query(
     image_input: Optional[Union[str, Image.Image, np.ndarray]] = None,
     text_query: Optional[str] = None,
     language: Optional[str] = None
-) -> Dict[str, str]
+) -> Dict[str, Any]
 ```
 
 **Parameters:**
@@ -166,7 +166,10 @@ result = agent.process_multimodal_query(
 - `text_query`: Direct text query (if no audio)
 - `language`: Language for audio transcription
 
-**Returns:** Dictionary with 'query', 'visual_context', and 'response'
+**Returns:** Dictionary with:
+- `response`: Generated assistant message (string)
+- `actions`: Optional list of structured action dictionaries
+- `raw`: Optional nested payload preserving query, context, and metadata
 
 **Example:**
 ```python
@@ -174,9 +177,20 @@ result = agent.process_multimodal_query(
     audio_input="command.wav",
     image_input="scene.jpg"
 )
-print(f"Query: {result['query']}")
-print(f"Context: {result['visual_context']}")
-print(f"Response: {result['response']}")
+
+# Backward-compatible accessors
+query = result.get("query", "<unknown query>") if isinstance(result, dict) else "<unknown query>"
+visual_context = result.get("visual_context", "<no context>") if isinstance(result, dict) else "<no context>"
+response_text = result.get("response", result) if isinstance(result, dict) else result
+
+print(f"Query: {query}")
+print(f"Context: {visual_context}")
+print(f"Response: {response_text}")
+
+# Optional structured outputs
+if isinstance(result, dict):
+    print(f"Actions: {result.get('actions', [])}")
+    print(f"Raw payload: {result.get('raw', {})}")
 ```
 
 ---
