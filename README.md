@@ -203,10 +203,19 @@ Omit `--backend snn` to use the default backend.
 
 #### Provider selection
 
-The data access layer defaults to the offline `mock` provider so examples and CI run without hardware:
+The data access layer defaults to the offline `mock` provider so examples and CI run without hardware. `SmartGlassAgent` will read the ``PROVIDER`` environment variable (default: ``"mock"``) when you omit the ``provider`` argument, and it uses ``drivers.providers.get_provider`` to construct the instance automatically:
 
 ```bash
 export PROVIDER=mock  # default, optional
+```
+
+You can also create the provider yourself and pass it into the agent for explicit control:
+
+```python
+from drivers.providers import get_provider
+from src.smartglass_agent import SmartGlassAgent
+
+agent = SmartGlassAgent(provider=get_provider("meta", api_key="YOUR_META_APP_KEY"))
 ```
 
 `PROVIDER=meta` now selects a **Meta Ray-Ban SDK wrapper** that automatically falls back to deterministic mocks whenever the `metarayban` SDK package is not installed. The wrapper accepts three key configuration fields when you construct it directly in Python:
@@ -229,6 +238,8 @@ provider = MetaRayBanProvider(
 ```
 
 When `prefer_sdk=True` **and** the `metarayban` dependency is importable, the provider will route camera and microphone calls into the real SDK hooks (to be implemented) instead of the deterministic fixtures. CI and default local runs keep using the mock data because `prefer_sdk` defaults to `False` and the SDK is not present in the test environment.
+
+When a vendor SDK package is missing, the provider automatically falls back to deterministic mock fixtures so you can still exercise the camera, microphone, and overlay flows without hardware.
 
 Deterministic vendor-specific mocks are also available so you can stub integrations for different runtimes:
 
