@@ -27,6 +27,39 @@ This guide covers how to consume the SmartGlass Android SDK, configure the edge 
   val client = SmartGlassEdgeClient(baseUrl = "http://192.168.1.50:8765")
   ```
 
+> [!NOTE]
+> The edge runtime client above targets the low-latency edge service. The HTTP client described below is separate and talks to
+> the Python server exposed in `sdk_python.server`; configure only one client type per use case to avoid mixing endpoints.
+
+## Using the Python HTTP server with `SmartGlassClient`
+1. Start the lightweight HTTP server from the repo root (enable the dummy agent to avoid heavyweight model downloads):
+   ```bash
+   export SDK_PYTHON_DUMMY_AGENT=1
+   python -m sdk_python.server --host 0.0.0.0 --port 8000
+   ```
+   - For emulators, use `http://10.0.2.2:8000` as the reachable host from Android.
+   - For physical devices on the same network, substitute your machine's LAN IP, for example `http://192.168.1.50:8000`.
+
+2. Configure the Android client with the server's base URL:
+   ```kotlin
+   val client = SmartGlassClient(baseUrl = "http://10.0.2.2:8000")
+   ```
+
+3. Drive the request flow with `startSession` followed by `answer` calls:
+   ```kotlin
+   viewModelScope.launch {
+       // Create a new session with optional initial text or image path
+       val sessionId = client.startSession(text = "Hello from Android")
+
+       // Send follow-up prompts (and optional image paths) against the same session
+       val response = client.answer(sessionId, text = "What's next?")
+
+       // Inspect the response and actions as needed
+       handleResponse(response)
+   }
+   ```
+   The `/ingest` call creates and returns a `sessionId`; subsequent `/answer` calls reuse that identifier to maintain context.
+
 ## Coroutine and threading guidance
 - All public APIs on `SmartGlassEdgeClient` are `suspend` functions; call them from a coroutine scope (e.g., `lifecycleScope`, `viewModelScope`).
 - Network work is dispatched onto `Dispatchers.IO` internally, but you should avoid blocking the main thread when chaining calls.
