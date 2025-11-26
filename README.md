@@ -209,6 +209,9 @@ The data access layer defaults to the offline `mock` provider so examples and CI
 export PROVIDER=mock  # default, optional
 ```
 
+Calling ``get_provider()`` with no arguments respects the same environment
+variable, so scripts and tests can share a single default selection.
+
 You can also create the provider yourself and pass it into the agent for explicit control:
 
 ```python

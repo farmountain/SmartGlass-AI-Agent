@@ -10,7 +10,7 @@ import pytest
 np = pytest.importorskip("numpy")
 
 try:
-    from drivers.factory import get_provider
+    from drivers.providers import get_provider
     import drivers.providers.meta as meta_module
 except ModuleNotFoundError as exc:  # pragma: no cover - import guard
     if exc.name == "whisper":
@@ -48,8 +48,7 @@ def _extract_audio(raw_chunk: object) -> np.ndarray:
 def test_supported_providers_expose_camera_and_mic(provider_name: str, monkeypatch: pytest.MonkeyPatch) -> None:
     """Every supported provider must expose camera and microphone streams."""
 
-    monkeypatch.setenv("PROVIDER", provider_name)
-    provider = get_provider()
+    provider = get_provider(provider_name)
 
     camera = provider.open_video_stream()
     microphone = provider.open_audio_stream()
@@ -70,8 +69,7 @@ def test_supported_providers_expose_camera_and_mic(provider_name: str, monkeypat
 def test_mock_providers_emit_deterministic_streams(provider_name: str, monkeypatch: pytest.MonkeyPatch) -> None:
     """Mock-backed providers must yield repeatable camera and microphone frames."""
 
-    monkeypatch.setenv("PROVIDER", provider_name)
-    provider = get_provider()
+    provider = get_provider(provider_name)
 
     frames_first = [_extract_frame(frame) for frame in _take(provider.iter_frames(), 3)]
     frames_second = [_extract_frame(frame) for frame in _take(provider.iter_frames(), 3)]

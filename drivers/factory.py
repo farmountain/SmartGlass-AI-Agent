@@ -3,34 +3,18 @@
 from __future__ import annotations
 
 import os
-from typing import Callable
 
-from .providers.base import BaseProvider
-from .providers.meta import MetaRayBanProvider
-from .providers.mock import MockProvider
-from .providers.openxr_mock import OpenXRMockProvider
-from .providers.visionos_mock import VisionOSMockProvider
-from .providers.vuzix_mock import VuzixMockProvider
-from .providers.xreal_mock import XrealMockProvider
+from .providers import BaseProvider, get_provider as _resolve_provider
 from src.io.telemetry import log_metric
 
 Provider = BaseProvider
 
 
-def get_provider() -> Provider:
-    """Return a provider instance configured via the ``PROVIDER`` environment variable."""
+def get_provider(name: str | None = None, **kwargs) -> Provider:
+    """Return a provider instance configured via ``name`` or the ``PROVIDER`` env var."""
 
-    provider_name = os.getenv("PROVIDER", "mock").lower()
-    provider_map: dict[str, Callable[[], Provider]] = {
-        "mock": MockProvider,
-        "meta": MetaRayBanProvider,
-        "vuzix": VuzixMockProvider,
-        "xreal": XrealMockProvider,
-        "openxr": OpenXRMockProvider,
-        "visionos": VisionOSMockProvider,
-    }
-    provider_factory = provider_map.get(provider_name, MockProvider)
-    provider: Provider = provider_factory()
+    provider_name = (name or os.getenv("PROVIDER", "mock") or "mock").lower()
+    provider: Provider = _resolve_provider(provider_name, **kwargs)
 
     log_metric("sdk.provider", 1, tags={"name": provider_name})
 
