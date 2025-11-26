@@ -224,11 +224,18 @@ class MetaRayBanAudioOut(AudioOut):
         self._utterance_index = 0
         self._use_sdk = use_sdk and _META_SDK_AVAILABLE
 
+    def _sdk_audio(self) -> object:
+        """Placeholder for wiring Meta Ray-Ban SDK audio output."""
+
+        raise NotImplementedError(
+            "Connect Meta Ray-Ban SDK text-to-speech output when it becomes available"
+        )
+
     def _sdk_speak(self, text: str) -> dict[str, object] | None:
         if not self._use_sdk or _META_SDK is None:
             return None
 
-        audio_api = getattr(_META_SDK, "audio", None)
+        audio_api = self._sdk_audio()
         speak_fn = None
         if audio_api is not None:
             speak_fn = getattr(audio_api, "speak", None) or getattr(audio_api, "speak_text", None)

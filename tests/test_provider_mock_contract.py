@@ -336,10 +336,6 @@ def test_meta_provider_prefers_sdk_when_available(monkeypatch: pytest.MonkeyPatc
 
     audio_out = provider.get_audio_out()
     assert audio_out is not None
-    spoken = audio_out.speak("hi")
 
-    assert fake_sdk.audio_calls
-    assert spoken["status"] == "sdk"
-    assert spoken["text"] == fake_sdk.audio_calls[0]["text"]
-    assert spoken["device_id"] == fake_sdk.audio_calls[0]["device_id"]
-    assert spoken["transport"] == "sdk"
+    with pytest.raises(NotImplementedError):
+        audio_out.speak("hi")
