@@ -278,6 +278,18 @@ The mock-first Meta Ray-Ban wrapper lives in `drivers/providers/meta.py`. To lan
 - Keep the deterministic mock generators as the fallback path for CI and local dev (they should still run when `prefer_sdk` is `False` or the SDK is missing).
 - Add regression tests under `tests/test_provider_conformance.py` that exercise both the mock and SDK-backed paths so we can keep provider swaps safe.
 
+### 🕶️ Meta Ray-Ban Integration (Stub)
+
+The Android sample ships with a **`MetaRayBanManager`** façade that mirrors the expected Meta Ray-Ban SDK shape while SDK bindings are still pending. The manager exposes connect, capture, and streaming-style methods that currently emit deterministic placeholder behavior:
+
+- `connect(deviceId, transport)` logs a connection attempt and waits briefly to simulate setup while noting that the provided `device_id` plus `BLE`/`Wi-Fi` transport should map directly onto the future SDK discovery/connection calls.【F:sdk-android/src/main/kotlin/com/smartglass/sdk/rayban/MetaRayBanManager.kt†L14-L38】
+- `capturePhoto()` returns a packaged placeholder bitmap until the SDK camera stream is available, and `startAudioStreaming()` emits a short flow of labeled fake audio chunks to exercise downstream consumers.【F:sdk-android/src/main/kotlin/com/smartglass/sdk/rayban/MetaRayBanManager.kt†L40-L73】
+- Both stub entry points include TODOs marking where real SDK calls and resource teardown will land once Meta publishes the official interfaces.【F:sdk-android/src/main/kotlin/com/smartglass/sdk/rayban/MetaRayBanManager.kt†L20-L52】【F:sdk-android/src/main/kotlin/com/smartglass/sdk/rayban/MetaRayBanManager.kt†L69-L76】
+
+The **demo app buttons** exercise these stubbed hooks end-to-end: **Connect** invokes `MetaRayBanManager.connect` with a placeholder device ID and BLE transport, **Capture** calls `capturePhoto` then posts the saved JPEG through `SmartGlassClient.answer`, and **Send** submits text-only prompts. Each path includes inline TODOs noting where real SDK wiring, image capture, and streaming should be substituted once the bindings are available.【F:sample/src/main/java/com/smartglass/sample/SampleActivity.kt†L28-L104】
+
+When you upgrade to real SDK access, swap the stubbed connect/capture/streaming logic inside `MetaRayBanManager` for the official calls and plumb the **`device_id`/transport** mapping through to the SDK’s discovery options. The demo activity can then forward actual camera frames and microphone streams via `SmartGlassClient` without changing the button UX, keeping the mock path available for CI by leaving the placeholder flows as the fallback.
+
 ---
 
 ## 🧩 RaySkillKit Skill Catalogue
