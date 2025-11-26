@@ -68,6 +68,14 @@ The CI summary step automatically runs this helper and posts the newest table al
 
 ---
 
+### 📱 Android HTTP integration
+
+Building a mobile client? Follow the step-by-step endpoint guide in
+[`docs/android_integration.md`](docs/android_integration.md) for payloads,
+session handling, and a local server quickstart.
+
+---
+
 ### 🔒 Edge runtime privacy controls
 
 The edge runtime defaults to **not** retaining raw audio, frames, or transcripts in memory to reduce the risk of accidental data
