@@ -100,3 +100,12 @@ class DemoViewModel : ViewModel() {
 
 ## Runnable example
 A full runnable example is available in the [`sample/`](sample/) Android app, which wires the client into an Activity lifecycle and demonstrates the end-to-end workflow.
+
+## Meta Ray-Ban Integration (Stub)
+The sample app includes a stubbed `MetaRayBanManager` that stands in for the real Ray-Ban SDK. It models the connection lifecycle and capture hooks without performing hardware work so developers can wire UI flows before integrating the official SDK.
+
+- **Purpose and behavior**: The manager exposes a `connect` flow, capture trigger, and a streaming loop that emits placeholder audio data. The stub logs progress and invokes callbacks immediately to simulate success while running a coroutine that feeds dummy PCM bytes to listeners.
+- **Mapping `device_id` and transport**: The Python provider passes `device_id` along with the preferred transport (BLE vs. Wi-Fi). In the stub, these inputs are threaded into `connect` and logged to illustrate how they would select the underlying transport in the real SDK (e.g., choosing BLE pairing vs. Wi-Fi Direct). Replace the logging/placeholder branch with SDK-specific connect calls keyed by the provided `device_id` and transport.
+- **Capture and streaming**: Invoking `capture` on the stub toggles a mock recording session and reuses the coroutine loop to stream fabricated audio chunks. Insert SDK microphone start/stop calls here when wiring actual hardware, and forward microphone frames to the same callbacks that currently receive dummy data.
+- **UI touchpoints**: The sample app's **Connect** button invokes `connect` on the manager, while the **Capture** button toggles the stubbed capture/stream path. Swap these callbacks to call the real SDK when available so UI behavior remains unchanged.
+- **TODO handoff points**: Replace log lines with SDK APIs for discovery/connection, insert microphone start/stop in the capture handler, and route incoming audio/video frames through the same listener interfaces already consumed by the sample UI and Python provider.
