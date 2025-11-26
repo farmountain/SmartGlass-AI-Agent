@@ -266,6 +266,7 @@ Each of these providers exposes deterministic camera/mic fixtures tuned to the v
 The mock-first Meta Ray-Ban wrapper lives in `drivers/providers/meta.py`. To land real SDK calls:
 
 - Replace the `_sdk_frames` stubs inside `MetaRayBanCameraIn` and `MetaRayBanMicIn` with calls into the `metarayban` APIs once the official bindings are available.
+- Swap the `_sdk_audio`/`_sdk_speak` placeholder in `drivers/providers/meta.py` for real metarayban TTS and earcon hooks when those bindings land, keeping the current mocks as the fallback path.
 - Keep the deterministic mock generators as the fallback path for CI and local dev (they should still run when `prefer_sdk` is `False` or the SDK is missing).
 - Add regression tests under `tests/test_provider_conformance.py` that exercise both the mock and SDK-backed paths so we can keep provider swaps safe.
 
