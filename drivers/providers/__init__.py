@@ -1,5 +1,9 @@
 """Provider implementations for driver interfaces."""
 
+from __future__ import annotations
+
+from typing import Callable
+
 from .base import BaseProvider, ProviderBase
 from .meta import (
     MetaRayBanAudioOut,
@@ -56,7 +60,45 @@ from .xreal_mock import (
     XrealMockProvider,
 )
 
+Provider = BaseProvider
+
+
+def get_provider(name: str, **kwargs) -> Provider:
+    """Return a provider instance for the given ``name``.
+
+    Supported provider names (case-insensitive): ``mock``, ``meta``, ``vuzix``,
+    ``xreal``, ``openxr``, and ``visionos``. Unknown names fall back to the
+    generic mock provider.
+    """
+
+    provider_name = (name or "mock").lower()
+    if provider_name == "meta":
+        provider_kwargs = {
+            "prefer_sdk": kwargs.pop("prefer_sdk", None),
+            "api_key": kwargs.pop("api_key", None),
+            "device_id": kwargs.pop("device_id", None),
+            "transport": kwargs.pop("transport", "mock"),
+        }
+        provider_kwargs.update(kwargs)
+        return MetaRayBanProvider(**provider_kwargs)
+
+    provider_map: dict[str, Callable[..., Provider]] = {
+        "mock": MockProvider,
+        "vuzix": VuzixMockProvider,
+        "xreal": XrealMockProvider,
+        "openxr": OpenXRMockProvider,
+        "visionos": VisionOSMockProvider,
+    }
+
+    provider_factory = provider_map.get(provider_name, MockProvider)
+    return provider_factory(**kwargs)
+
+
 __all__ = [
+    "BaseProvider",
+    "Provider",
+    "ProviderBase",
+    "get_provider",
     "MetaRayBanAudioOut",
     "MetaRayBanCameraIn",
     "MetaRayBanDisplayOverlay",
@@ -64,8 +106,6 @@ __all__ = [
     "MetaRayBanMicIn",
     "MetaRayBanPermissions",
     "MetaRayBanProvider",
-    "BaseProvider",
-    "ProviderBase",
     "MockAudioOut",
     "MockCameraIn",
     "MockDisplayOverlay",
