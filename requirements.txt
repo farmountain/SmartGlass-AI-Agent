@@ -26,6 +26,7 @@ tesseract                 # For OCR in Week 7 (note: installed via system packag
 gTTS                     # Text-to-speech (for audio reply, Week 11+)
 gradio                   # Web app prototype (Week 18 optional)
 fastapi                  # API serving (Week 18 optional)
+uvicorn[standard]        # ASGI server for FastAPI-based endpoints
 
 # Validation & schema tooling
 jsonschema>=4.21.1
