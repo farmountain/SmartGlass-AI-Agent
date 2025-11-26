@@ -2,24 +2,36 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@color/background_light"
     android:gravity="center_horizontal"
     android:orientation="vertical"
-    android:padding="24dp"
-    android:background="@color/background_light">
+    android:padding="24dp">
 
-    <TextView
-        android:id="@+id/statusText"
+    <EditText
+        android:id="@+id/promptInput"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingBottom="16dp"
-        android:text="Tap the button to start a SmartGlass session."
-        android:textAlignment="center"
+        android:hint="@string/prompt_hint"
+        android:inputType="textCapSentences|textMultiLine"
+        android:minHeight="64dp"
+        android:padding="12dp"
         android:textAppearance="@style/TextAppearance.MaterialComponents.Body1" />
 
     <Button
-        android:id="@+id/startSessionButton"
+        android:id="@+id/sendButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/start_session"
+        android:layout_marginTop="12dp"
+        android:text="@string/send_prompt"
         android:textAllCaps="false" />
+
+    <TextView
+        android:id="@+id/responseText"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="16dp"
+        android:layout_weight="1"
+        android:padding="12dp"
+        android:text="@string/waiting_prompt"
+        android:textAppearance="@style/TextAppearance.MaterialComponents.Body1" />
 </LinearLayout>

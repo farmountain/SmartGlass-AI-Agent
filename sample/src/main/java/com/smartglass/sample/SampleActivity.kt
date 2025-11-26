@@ -1,117 +1,71 @@
 package com.smartglass.sample
 
 import android.os.Bundle
-import android.util.Base64
-import android.util.Log
 import android.widget.Button
+import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.smartglass.sdk.SmartGlassEdgeClient
-import com.smartglass.sdk.EdgeResponse
+import com.smartglass.sdk.SmartGlassClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class SampleActivity : AppCompatActivity() {
 
-    private lateinit var statusText: TextView
-    private val client = SmartGlassEdgeClient()
+    private lateinit var promptInput: EditText
+    private lateinit var responseText: TextView
+
+    private val client = SmartGlassClient()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_sample)
 
-        statusText = findViewById(R.id.statusText)
-        findViewById<Button>(R.id.startSessionButton).setOnClickListener {
-            runDemoWorkflow()
+        promptInput = findViewById(R.id.promptInput)
+        responseText = findViewById(R.id.responseText)
+
+        findViewById<Button>(R.id.sendButton).setOnClickListener {
+            sendPrompt()
         }
     }
 
-    private fun runDemoWorkflow() {
+    private fun sendPrompt() {
+        val prompt = promptInput.text.toString()
+        if (prompt.isBlank()) {
+            Toast.makeText(this, R.string.prompt_required, Toast.LENGTH_SHORT).show()
+            return
+        }
+
         lifecycleScope.launch {
-            setStatus("Creating SmartGlass session…")
+            setStatus(getString(R.string.starting_session))
             try {
-                val sessionId = client.createSession()
-                logStatus("Session created: $sessionId")
+                // Stubbed image handling for now; only text is sent.
+                val sessionId = client.startSession(text = prompt)
+                val response = client.answer(sessionId = sessionId, text = prompt)
 
-                val audioBytes = ByteArray(3200) { (it % 50).toByte() }
-                val audioResponse = client.sendAudioChunk(sessionId, audioBytes, sampleRate = 16000)
-                logEdgeResponse("Audio response", audioResponse)
+                val actionsSummary = response.actions.takeIf { it.isNotEmpty() }
+                    ?.joinToString(prefix = "\nActions:\n", separator = "\n") { action ->
+                        "• ${action.type}: ${action.payload}"
+                    } ?: ""
 
-                val imageBytes = Base64.decode(MOCK_JPEG_BASE64, Base64.DEFAULT)
-                val frameResponse = client.sendFrame(sessionId, imageBytes, width = 1, height = 1)
-                logEdgeResponse("Frame response", frameResponse)
+                val responseSummary = buildString {
+                    append(getString(R.string.response_prefix, response.response))
+                    if (actionsSummary.isNotBlank()) append(actionsSummary)
+                }
 
-                val queryResponse = client.runQuery(
-                    sessionId = sessionId,
-                    textQuery = getString(R.string.session_prompt),
-                )
-                logEdgeResponse("Query response", queryResponse)
-
-                val closeResponse = client.closeSession(sessionId)
-                logEdgeResponse("Session closed", closeResponse)
-                setStatus("Finished session: $sessionId")
+                setStatus(responseSummary)
             } catch (exc: Exception) {
-                Log.e(TAG, "Failed to run sample workflow", exc)
-                setStatus("Error: ${exc.message}")
+                setStatus(getString(R.string.response_error, exc.message))
             }
         }
     }
 
     private suspend fun setStatus(message: String) {
         withContext(Dispatchers.Main) {
-            statusText.text = message
+            responseText.text = message
             Toast.makeText(this@SampleActivity, message, Toast.LENGTH_SHORT).show()
         }
-        Log.i(TAG, message)
-    }
-
-    private fun logStatus(message: String) {
-        statusText.text = message
-        Log.i(TAG, message)
-    }
-
-    private fun logEdgeResponse(label: String, response: EdgeResponse) {
-        val summary = buildString {
-            append(label)
-            response.sessionId?.let { append(" | session=" + it) }
-            response.transcript?.let { append(" | transcript=" + it) }
-            response.response?.let { append(" | response=" + it) }
-            response.overlays?.takeIf { it.isNotEmpty() }?.let { overlays ->
-                val overlayDetails = overlays.joinToString(prefix = "[", postfix = "]") { overlay ->
-                    buildString {
-                        append(overlay.type)
-                        overlay.content?.let { append(":$it") }
-                        overlay.text?.let { append(":$it") }
-                        overlay.boxes?.takeIf { boxes -> boxes.isNotEmpty() }?.let { boxes ->
-                            append(" (${boxes.size} boxes)")
-                        }
-                    }
-                }
-                append(" | overlays=" + overlayDetails)
-            }
-            response.metadata?.let { metadata ->
-                val metadataFields = buildList {
-                    metadata.cloudOffload?.let { add("cloudOffload=$it") }
-                    metadata.latencyMs?.let { add("latencyMs=$it") }
-                    metadata.redactionSummary?.let { summary -> add("redaction=$summary") }
-                }
-                if (metadataFields.isNotEmpty()) {
-                    append(" | metadata=" + metadataFields.joinToString())
-                }
-            }
-            response.redaction?.let { append(" | redaction=$it") }
-            response.status?.let { append(" | status=" + it) }
-            response.error?.let { append(" | error=" + it) }
-        }
-        statusText.text = summary
-        Log.i(TAG, summary)
-    }
-
-    companion object {
-        private const val TAG = "SmartGlassSample"
-        private const val MOCK_JPEG_BASE64 = "/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxISEhUTEhIVFRUVFRUVFRUVFRUVFRUWFhUVFRUYHSggGBolHRUVITEhJSkrLi4uFx8zODMtNygtLisBCgoKDg0OGhAQGi0lHyUtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAKgBLAMBIgACEQEDEQH/xAAWAAEBAQAAAAAAAAAAAAAAAAAABQf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAQL/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCfYA//2Q=="
     }
 }
