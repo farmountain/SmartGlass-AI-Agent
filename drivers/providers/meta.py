@@ -85,42 +85,18 @@ class MetaRayBanCameraIn(CameraIn):
             enriched.setdefault("transport", self._transport)
             yield enriched
 
+    def _placeholder_sdk_camera_stream(self) -> Iterator[dict[str, object]]:
+        """Placeholder stub for wiring Meta Ray-Ban SDK camera streaming."""
+
+        raise NotImplementedError(
+            "Meta Ray-Ban SDK camera streaming will be connected when available"
+        )
+
     def _sdk_frames(self) -> Iterator[dict[str, object]] | None:
         if not self._use_sdk or _META_SDK is None:
             return None
 
-        stream_iter: Iterator[object] | None = None
-        camera_api = getattr(_META_SDK, "camera", None)
-        if camera_api is not None:
-            stream_factory = getattr(camera_api, "stream_frames", None)
-            if callable(stream_factory):
-                stream_iter = stream_factory(
-                    device_id=self._device_id,
-                    transport=self._transport,
-                    resolution=(self._height, self._width),
-                )
-            elif callable(getattr(camera_api, "stream", None)):
-                stream_obj = camera_api.stream(
-                    device_id=self._device_id, transport=self._transport, resolution=(self._height, self._width)
-                )
-                frames_callable = getattr(stream_obj, "frames", None)
-                if callable(frames_callable):
-                    stream_iter = frames_callable()
-
-        if stream_iter is None:
-            legacy_factory = getattr(_META_SDK, "camera_frames", None)
-            if callable(legacy_factory):
-                stream_iter = legacy_factory(
-                    device_id=self._device_id,
-                    transport=self._transport,
-                    resolution=(self._height, self._width),
-                )
-
-        if stream_iter is None:
-            LOGGER.info("Meta SDK detected; camera streaming is not yet implemented")
-            return None
-
-        return self._wrap_camera_stream(stream_iter)
+        return self._placeholder_sdk_camera_stream()
 
     def get_frames(self) -> Iterator[dict[str, object]]:  # type: ignore[override]
         sdk_stream = self._sdk_frames()
@@ -190,50 +166,18 @@ class MetaRayBanMicIn(MicIn):
             enriched.setdefault("transport", self._transport)
             yield enriched
 
+    def _placeholder_sdk_microphone_stream(self) -> Iterator[dict[str, object]]:
+        """Placeholder stub for wiring Meta Ray-Ban SDK microphone capture."""
+
+        raise NotImplementedError(
+            "Meta Ray-Ban SDK microphone streaming will be connected when available"
+        )
+
     def _sdk_frames(self) -> Iterator[dict[str, object]] | None:
         if not self._use_sdk or _META_SDK is None:
             return None
 
-        stream_iter: Iterator[object] | None = None
-        microphone_api = getattr(_META_SDK, "microphone", None)
-        if microphone_api is not None:
-            stream_factory = getattr(microphone_api, "stream_frames", None)
-            if callable(stream_factory):
-                stream_iter = stream_factory(
-                    device_id=self._device_id,
-                    transport=self._transport,
-                    sample_rate_hz=self._sample_rate_hz,
-                    frame_size=self._frame_size,
-                    channels=self._channels,
-                )
-            elif callable(getattr(microphone_api, "stream", None)):
-                stream_obj = microphone_api.stream(
-                    device_id=self._device_id,
-                    transport=self._transport,
-                    sample_rate_hz=self._sample_rate_hz,
-                    frame_size=self._frame_size,
-                    channels=self._channels,
-                )
-                frames_callable = getattr(stream_obj, "frames", None)
-                if callable(frames_callable):
-                    stream_iter = frames_callable()
-
-        if stream_iter is None:
-            legacy_factory = getattr(_META_SDK, "microphone_frames", None)
-            if callable(legacy_factory):
-                stream_iter = legacy_factory(
-                    device_id=self._device_id,
-                    transport=self._transport,
-                    sample_rate_hz=self._sample_rate_hz,
-                    frame_size=self._frame_size,
-                    channels=self._channels,
-                )
-
-        if stream_iter is None:
-            LOGGER.info("Meta SDK detected; microphone capture is not yet implemented")
-            return None
-
-        return self._wrap_microphone_stream(stream_iter)
+        return self._placeholder_sdk_microphone_stream()
 
     def get_frames(self) -> Iterator[dict[str, object]]:  # type: ignore[override]
         sdk_stream = self._sdk_frames()
@@ -502,7 +446,7 @@ class MetaRayBanProvider(ProviderBase):
         device_id: str | None = None,
         transport: str = "mock",
         endpoint: str | None = None,
-        prefer_sdk: bool | None = None,
+        prefer_sdk: bool = False,
         camera_resolution: tuple[int, int] = (720, 960),
         microphone_sample_rate_hz: int = 16000,
         microphone_frame_size: int = 400,

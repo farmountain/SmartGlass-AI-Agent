@@ -328,26 +328,16 @@ def test_meta_provider_prefers_sdk_when_available(monkeypatch: pytest.MonkeyPatc
     fake_sdk = _install_fake_sdk(monkeypatch)
     provider = MetaRayBanProvider(prefer_sdk=True, transport="sdk")
 
-    frame = next(provider.iter_frames())
-    audio_chunk = next(provider.iter_audio_chunks())
+    with pytest.raises(NotImplementedError):
+        next(provider.iter_frames())
+
+    with pytest.raises(NotImplementedError):
+        next(provider.iter_audio_chunks())
+
     audio_out = provider.get_audio_out()
     assert audio_out is not None
     spoken = audio_out.speak("hi")
 
-    assert fake_sdk.camera_calls and fake_sdk.microphone_calls
-    assert frame["frame_id"] == 0
-    assert frame["format"] == "rgb888"
-    assert frame["device_id"] == fake_sdk.camera_calls[0]["device_id"]
-    assert frame["transport"] == "sdk"
-    assert "timestamp_ms" in frame
-
-    assert audio_chunk["format"] == "pcm_float32"
-    assert audio_chunk["sample_rate_hz"] == fake_sdk.microphone_calls[0]["sample_rate_hz"]
-    assert audio_chunk["frame_size"] == fake_sdk.microphone_calls[0]["frame_size"]
-    assert audio_chunk["channels"] == fake_sdk.microphone_calls[0]["channels"]
-    assert audio_chunk["device_id"] == fake_sdk.microphone_calls[0]["device_id"]
-    assert audio_chunk["transport"] == "sdk"
-    assert "timestamp_ms" in audio_chunk
     assert fake_sdk.audio_calls
     assert spoken["status"] == "sdk"
     assert spoken["text"] == fake_sdk.audio_calls[0]["text"]

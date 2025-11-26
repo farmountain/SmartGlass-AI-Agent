@@ -76,7 +76,7 @@ def get_provider(name: str | None = None, **kwargs) -> Provider:
     provider_name = (name or os.getenv("PROVIDER", "mock") or "mock").lower()
     if provider_name == "meta":
         provider_kwargs = {
-            "prefer_sdk": kwargs.pop("prefer_sdk", None),
+            "prefer_sdk": kwargs.pop("prefer_sdk", False),
             "api_key": kwargs.pop("api_key", None),
             "device_id": kwargs.pop("device_id", None),
             "transport": kwargs.pop("transport", "mock"),
