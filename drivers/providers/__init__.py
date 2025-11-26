@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Callable
 
 from .base import BaseProvider, ProviderBase
@@ -63,15 +64,16 @@ from .xreal_mock import (
 Provider = BaseProvider
 
 
-def get_provider(name: str, **kwargs) -> Provider:
-    """Return a provider instance for the given ``name``.
+def get_provider(name: str | None = None, **kwargs) -> Provider:
+    """Return a provider instance for the given ``name`` or ``PROVIDER`` env var.
 
     Supported provider names (case-insensitive): ``mock``, ``meta``, ``vuzix``,
     ``xreal``, ``openxr``, and ``visionos``. Unknown names fall back to the
-    generic mock provider.
+    generic mock provider. When ``name`` is omitted, the ``PROVIDER``
+    environment variable is used (default ``"mock"``).
     """
 
-    provider_name = (name or "mock").lower()
+    provider_name = (name or os.getenv("PROVIDER", "mock") or "mock").lower()
     if provider_name == "meta":
         provider_kwargs = {
             "prefer_sdk": kwargs.pop("prefer_sdk", None),
