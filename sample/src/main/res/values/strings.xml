@@ -9,4 +9,12 @@
     <string name="response_prefix">Response: %1$s</string>
     <string name="response_error">Error: %1$s</string>
     <string name="prompt_required">Please enter a prompt before sending.</string>
+    <string name="connect_glasses">Connect Glasses</string>
+    <string name="capture_photo">Capture</string>
+    <string name="connecting_glasses">Connecting to glasses…</string>
+    <string name="glasses_connected_stub">Glasses connected (stubbed)</string>
+    <string name="connect_error">Connection failed: %1$s</string>
+    <string name="capturing_photo">Capturing photo…</string>
+    <string name="capture_failed">No image returned from glasses.</string>
+    <string name="capture_error">Capture failed: %1$s</string>
 </resources>
