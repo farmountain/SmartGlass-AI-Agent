@@ -203,14 +203,19 @@ Omit `--backend snn` to use the default backend.
 
 #### Provider selection
 
-The data access layer defaults to the offline `mock` provider so examples and CI run without hardware. `SmartGlassAgent` will read the ``PROVIDER`` environment variable (default: ``"mock"``) when you omit the ``provider`` argument, and it uses ``drivers.providers.get_provider`` to construct the instance automatically:
+`drivers.providers.get_provider` constructs the driver layer for you. When you omit the ``name`` argument, it reads the ``PROVIDER`` environment variable (default: ``"mock"``) so scripts and tests can share a single default selection. Supported provider names are ``mock``, ``meta``, ``vuzix``, ``xreal``, ``openxr``, and ``visionos``; unknown values fall back to the deterministic mock provider. `SmartGlassAgent` mirrors this behavior—if you skip the ``provider`` argument, it calls ``get_provider()`` under the hood to honor the environment variable:
 
 ```bash
 export PROVIDER=mock  # default, optional
 ```
 
-Calling ``get_provider()`` with no arguments respects the same environment
-variable, so scripts and tests can share a single default selection.
+Passing a string uses the same resolver explicitly:
+
+```python
+from src.smartglass_agent import SmartGlassAgent
+
+agent = SmartGlassAgent(provider="meta")
+```
 
 You can also create the provider yourself and pass it into the agent for explicit control:
 
@@ -218,7 +223,8 @@ You can also create the provider yourself and pass it into the agent for explici
 from drivers.providers import get_provider
 from src.smartglass_agent import SmartGlassAgent
 
-agent = SmartGlassAgent(provider=get_provider("meta", api_key="YOUR_META_APP_KEY"))
+provider = get_provider("meta", api_key="YOUR_META_APP_KEY")
+agent = SmartGlassAgent(provider=provider)
 ```
 
 `PROVIDER=meta` now selects a **Meta Ray-Ban SDK wrapper** that automatically falls back to deterministic mocks whenever the `metarayban` SDK package is not installed. The wrapper accepts three key configuration fields when you construct it directly in Python:
