@@ -27,11 +27,15 @@ class SNNLLMBackend(BaseLLMBackend):
         device: str | None = None,
     ) -> None:
         self.model_path = Path(model_path)
-        self.metadata_path = Path(metadata_path) if metadata_path else None
+        self.metadata_path = Path(metadata_path) if metadata_path else self.model_path.with_name("metadata.json")
         self.tokenizer_name = tokenizer_name
         self.device = device
 
         self.metadata: Dict[str, object] = self._load_metadata()
+        self.model_type: str | None = self.metadata.get("model_type") if isinstance(self.metadata, dict) else None
+        self.vocab_size: int | None = self.metadata.get("vocab_size") if isinstance(self.metadata, dict) else None
+        training_config = self.metadata.get("training_config") if isinstance(self.metadata, dict) else None
+        self.training_config: Dict[str, object] = training_config if isinstance(training_config, dict) else {}
         self.config: Dict[str, object] = self._extract_config(self.metadata)
         self._torch = self._import_torch()
         self.device = self.device or (
@@ -42,18 +46,31 @@ class SNNLLMBackend(BaseLLMBackend):
         self._vocab: Dict[str, int] = {}
         self._reverse_vocab: List[str] = []
         self.model = self._load_model()
+        self.stub_mode = self.model is None or self._torch is None
+        if self.stub_mode:
+            logging.warning(
+                "SNNLLMBackend running in stub mode; student artifacts are missing or PyTorch is unavailable"
+            )
 
     def _load_metadata(self) -> Dict[str, object]:
-        if self.metadata_path is None:
-            return {}
-
         if not self.metadata_path.exists():
             logging.info("SNN metadata %s not found; falling back to defaults", self.metadata_path)
             return {}
 
         try:
             with self.metadata_path.open("r", encoding="utf-8") as handle:
-                return json.load(handle)
+                metadata = json.load(handle)
+            if isinstance(metadata, dict):
+                if "vocab_size" in metadata:
+                    logging.info("Loaded SNN metadata with vocab_size=%s", metadata.get("vocab_size"))
+                if "model_type" in metadata:
+                    logging.info("SNN model type: %s", metadata.get("model_type"))
+                training_cfg = metadata.get("training_config")
+                if isinstance(training_cfg, dict) and training_cfg:
+                    logging.info("SNN training config keys: %s", ",".join(sorted(training_cfg.keys())))
+                return metadata
+            logging.warning("SNN metadata %s is not a mapping; ignoring", self.metadata_path)
+            return {}
         except Exception as exc:  # pragma: no cover - defensive fallback
             logging.warning("Failed to parse SNN metadata %s: %s", self.metadata_path, exc)
             return {}
