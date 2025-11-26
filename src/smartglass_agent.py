@@ -4,12 +4,15 @@ Integrates Whisper, CLIP, and GPT-2 for multimodal smart glass interactions
 """
 
 import logging
+import os
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from PIL import Image
 
 from privacy.redact import DeterministicRedactor, RedactionSummary
+
+from drivers.providers import BaseProvider, get_provider
 
 from .clip_vision import CLIPVisionProcessor
 from .gpt2_generator import GPT2Backend
@@ -46,6 +49,7 @@ class SmartGlassAgent:
             Callable[[Union[str, Image.Image, np.ndarray]], Tuple[Any, RedactionSummary]]
         ] = None,
         llm_backend: Optional[BaseLLMBackend] = None,
+        provider: Optional[Union[str, BaseProvider]] = None,
     ):
         """
         Initialize SmartGlass AI Agent.
@@ -61,10 +65,32 @@ class SmartGlassAgent:
                 legacy :class:`~src.gpt2_generator.GPT2Backend` is instantiated so
                 downstream callers can inject alternative implementations (e.g.,
                 cloud or distilled models) without modifying the agent logic.
+            provider: Optional provider instance or name. When omitted, the
+                ``PROVIDER`` environment variable (default: ``"mock"``) is read and
+                :func:`drivers.providers.get_provider` is used to construct an
+                instance.
         """
         print("Initializing SmartGlass AI Agent...")
         print("=" * 60)
-        
+
+        provider_name = os.getenv("PROVIDER", "mock")
+        if provider is None:
+            provider_instance = get_provider(provider_name)
+            selected_provider_label = provider_name
+        elif isinstance(provider, str):
+            provider_instance = get_provider(provider)
+            selected_provider_label = provider
+        else:
+            provider_instance = provider
+            selected_provider_label = provider.__class__.__name__
+
+        self.provider: BaseProvider = provider_instance
+        self.camera = self.provider.open_video_stream()
+        self.microphone = self.provider.open_audio_stream()
+
+        print(f"Provider selected: {selected_provider_label}")
+        logger.info("SmartGlassAgent using provider: %s", selected_provider_label)
+
         # Initialize components
         self.audio_processor = WhisperAudioProcessor(model_size=whisper_model, device=device)
         print("-" * 60)
@@ -339,6 +365,7 @@ class SmartGlassAgent:
     def get_agent_info(self) -> Dict:
         """Get information about agent components."""
         return {
+            "provider": getattr(self.provider, "__class__", type(self.provider)).__name__,
             "audio": self.audio_processor.get_model_info(),
             "vision": self.vision_processor.get_model_info(),
             "language": {
@@ -346,6 +373,17 @@ class SmartGlassAgent:
                 "model": getattr(self.llm_backend, "model_name", "unknown"),
             },
         }
+
+    # Provider-backed ingestion helpers ---------------------------------
+    def iter_camera_frames(self):
+        """Stream frames from the configured provider camera."""
+
+        return self.provider.iter_frames()
+
+    def iter_microphone_chunks(self):
+        """Stream audio chunks from the configured provider microphone."""
+
+        return self.provider.iter_audio_chunks()
 
 
 if __name__ == "__main__":
