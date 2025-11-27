@@ -10,6 +10,53 @@ private const val DEFAULT_LANGUAGE_MODEL_ASSET = "models/snn_student.onnx"
 private const val TOKEN_SPACE = 32768L
 private const val UNKNOWN_TOKEN_ID = 0L
 
+interface SessionFactory {
+    fun create(context: Context, modelAssetName: String): LanguageSession
+}
+
+interface LanguageSession : AutoCloseable {
+    val inputNames: Set<String>
+    fun run(inputs: Map<String, OnnxTensor>): SessionResult
+}
+
+interface SessionResult : AutoCloseable {
+    val isEmpty: Boolean
+    operator fun get(index: Int): SessionValue
+}
+
+data class SessionValue(val value: Any?)
+
+class DefaultSessionFactory(private val environment: OrtEnvironment) : SessionFactory {
+    override fun create(context: Context, modelAssetName: String): LanguageSession {
+        val modelBytes = context.assets.open(modelAssetName).use { it.readBytes() }
+        val ortSession = environment.createSession(modelBytes)
+        return OrtLanguageSession(ortSession)
+    }
+}
+
+class OrtLanguageSession(private val delegate: OrtSession) : LanguageSession {
+    override val inputNames: Set<String>
+        get() = delegate.inputNames
+
+    override fun run(inputs: Map<String, OnnxTensor>): SessionResult =
+        OrtSessionResult(delegate.run(inputs))
+
+    override fun close() {
+        delegate.close()
+    }
+}
+
+class OrtSessionResult(private val delegate: OrtSession.Result) : SessionResult {
+    override val isEmpty: Boolean
+        get() = delegate.isEmpty
+
+    override fun get(index: Int): SessionValue = SessionValue(delegate[index].value)
+
+    override fun close() {
+        delegate.close()
+    }
+}
+
 /**
  * Minimal language engine wrapper that wires an ONNX Runtime session to the SNN language model.
  *
@@ -19,15 +66,13 @@ private const val UNKNOWN_TOKEN_ID = 0L
  */
 class SnnLanguageEngine(
     context: Context,
-    modelAssetName: String = DEFAULT_LANGUAGE_MODEL_ASSET
+    modelAssetName: String = DEFAULT_LANGUAGE_MODEL_ASSET,
+    environment: OrtEnvironment = OrtEnvironment.getEnvironment(),
+    sessionFactory: SessionFactory = DefaultSessionFactory(environment),
+    session: LanguageSession? = null
 ) {
-    private val environment: OrtEnvironment = OrtEnvironment.getEnvironment()
-    private val inferenceSession: OrtSession
-
-    init {
-        val modelBytes = context.assets.open(modelAssetName).use { it.readBytes() }
-        inferenceSession = environment.createSession(modelBytes)
-    }
+    private val environment: OrtEnvironment = environment
+    private val inferenceSession: LanguageSession = session ?: sessionFactory.create(context, modelAssetName)
 
     /**
      * Generates a reply for [prompt] by running a single ONNX inference.
@@ -85,7 +130,7 @@ class SnnLanguageEngine(
         return padded
     }
 
-    private fun decode(result: OrtSession.Result?, vocabulary: Map<Long, String>): String {
+    private fun decode(result: SessionResult?, vocabulary: Map<Long, String>): String {
         if (result == null || result.isEmpty()) {
             return ""
         }
