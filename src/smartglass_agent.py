@@ -7,7 +7,6 @@ import json
 import logging
 import os
 import re
-from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
@@ -20,6 +19,7 @@ from drivers.providers import BaseProvider, get_provider
 from .clip_vision import CLIPVisionProcessor
 from .gpt2_generator import GPT2Backend
 from .llm_backend_base import BaseLLMBackend
+from .utils.skill_registry import index_skill_capabilities, load_skill_registry, validate_skill_id
 from .whisper_processor import WhisperAudioProcessor
 from .utils.metrics import record_latency
 
@@ -119,35 +119,14 @@ class SmartGlassAgent:
         self.max_history = 5
 
         # RaySkillKit catalog for skill-aware actions
-        self.skill_registry = self._load_skill_registry()
-        self._capability_to_skill = self._index_skill_capabilities()
+        self.skill_registry = load_skill_registry()
+        self._capability_to_skill = index_skill_capabilities(self.skill_registry)
 
     # Action and skill helpers -------------------------------------------------
-    def _load_skill_registry(self) -> Dict[str, Dict[str, Any]]:
-        """Load the RaySkillKit skill catalog used to link actions to skills."""
+    def _is_valid_skill(self, skill_id: Optional[str]) -> bool:
+        """Return True when the skill id exists in the loaded registry."""
 
-        skills_path = Path(__file__).resolve().parents[1] / "rayskillkit" / "skills.json"
-        if not skills_path.exists():
-            logger.warning("Skill catalog not found at %s", skills_path)
-            return {}
-
-        with skills_path.open(encoding="utf-8") as handle:
-            payload = json.load(handle)
-
-        skills = payload.get("skills", [])
-        return {entry["id"]: entry for entry in skills if isinstance(entry, dict) and entry.get("id")}
-
-    def _index_skill_capabilities(self) -> Dict[str, str]:
-        """Map lowercased capabilities to their corresponding skill identifiers."""
-
-        capability_map: Dict[str, str] = {}
-        for skill_id, entry in self.skill_registry.items():
-            for capability in entry.get("capabilities", []):
-                capability_map.setdefault(capability.lower(), skill_id)
-        # Ensure common fallbacks remain available even if the catalog changes
-        capability_map.setdefault("navigation", "skill_001")
-        capability_map.setdefault("vision", "skill_002")
-        return capability_map
+        return validate_skill_id(self.skill_registry, skill_id)
 
     def _build_action(
         self,
@@ -192,6 +171,9 @@ class SmartGlassAgent:
                     for key, value in candidate.items()
                     if key not in {"type", "action", "skill", "skill_id", "result"}
                 }
+            if skill_id and not self._is_valid_skill(skill_id):
+                logger.warning("Skipping unknown skill_id '%s' in JSON block", skill_id)
+                continue
             actions.append(
                 self._build_action(
                     action_type,
@@ -222,6 +204,9 @@ class SmartGlassAgent:
                 payload = signal.get("payload")
                 if payload is None:
                     payload = {k: v for k, v in signal.items() if k not in {"type", "skill_id", "id"}}
+                if skill_id and not self._is_valid_skill(skill_id):
+                    logger.warning("Dropping unknown skill_id '%s' from skill runtime signal", skill_id)
+                    continue
                 action = self._build_action(
                     action_type,
                     skill_id=skill_id,
@@ -251,6 +236,9 @@ class SmartGlassAgent:
 
         # Simple pattern matching for known skills (skill_### ids or capability hints)
         for skill_id in set(re.findall(r"skill_\d{3}", response_text)):
+            if not self._is_valid_skill(skill_id):
+                logger.debug("Ignoring unregistered skill id %s in response text", skill_id)
+                continue
             if ("skill_invocation", skill_id) in seen_actions:
                 continue
             actions.append(
@@ -270,6 +258,9 @@ class SmartGlassAgent:
             if capability in response_text.lower():
                 key = ("skill_invocation", skill_id)
                 if key in seen_actions:
+                    continue
+                if not self._is_valid_skill(skill_id):
+                    logger.debug("Ignoring capability '%s' mapped to unknown skill '%s'", capability, skill_id)
                     continue
                 actions.append(
                     self._build_action(

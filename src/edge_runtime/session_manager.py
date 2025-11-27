@@ -2,13 +2,14 @@
 
 import threading
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from uuid import uuid4
 
 import numpy as np
 from PIL import Image
 
-from src.smartglass_agent import SmartGlassAgent
+if TYPE_CHECKING:  # pragma: no cover - hints only
+    from src.smartglass_agent import SmartGlassAgent
 from src.utils.metrics import metrics, record_latency
 
 from .config import EdgeRuntimeConfig
@@ -22,7 +23,7 @@ class BufferLimitExceeded(Exception):
 class SessionState:
     """Container for per-session runtime state."""
 
-    agent: SmartGlassAgent
+    agent: "SmartGlassAgent"
     transcripts: List[str] = field(default_factory=list)
     audio_buffers: List[np.ndarray] = field(default_factory=list)
     audio_durations: List[Optional[float]] = field(default_factory=list)
@@ -44,6 +45,8 @@ class SessionManager:
 
         with self._lock:
             session_id = str(uuid4())
+            from src.smartglass_agent import SmartGlassAgent
+
             agent = SmartGlassAgent(
                 whisper_model=self.config.whisper_model,
                 clip_model=self.config.vision_model,
