@@ -71,3 +71,20 @@ print(backend.generate("Hello from the glasses", max_tokens=24))
 ```
 
 If the artifacts or PyTorch are unavailable, the backend emits warnings and uses a stubbed tokenizer/model so the call still succeeds—useful for quick demos or CI environments.【F:src/llm_snn_backend.py†L90-L181】
+
+## Exporting to ONNX
+You can produce an ONNX artifact alongside the PyTorch checkpoint for deployment to lightweight runtimes:
+
+- Add `--export-onnx` to the training command to automatically call the exporter and write `student.onnx` next to `student.pt` and `metadata.json`. The flag wraps `scripts/export_snn_to_onnx.py`, which rebuilds the `SpikingStudentLM`, loads `student.pt`, and exports with dynamic sequence length for `input_ids`/`logits`.【F:scripts/train_snn_student.py†L205-L236】【F:scripts/export_snn_to_onnx.py†L9-L48】
+- Or run the exporter manually if you trained earlier:
+
+  ```bash
+  python scripts/export_snn_to_onnx.py \
+    --model-path artifacts/snn_student_demo/student.pt \
+    --metadata-path artifacts/snn_student_demo/metadata.json \
+    --output-path artifacts/snn_student_demo/student.onnx
+  ```
+
+## Consuming ONNX on mobile
+- Package `student.onnx` with your mobile client (e.g., copy into Android assets or an iOS bundle) and load it with ONNX Runtime Mobile or another ONNX-compatible runtime that supports opset 17. The exported graph expects `input_ids` shaped `[batch, seq_len]` and produces `logits` with a matching dynamic `seq_len` dimension.【F:scripts/export_snn_to_onnx.py†L9-L48】
+- Reuse the tokenizer configuration from `metadata.json` to ensure the mobile client tokenizes text identically to training. The same vocab size is embedded in the ONNX export, so tokenizer/token-to-id parity is required for correct logits.【F:scripts/export_snn_to_onnx.py†L25-L39】
