@@ -12,6 +12,8 @@ import argparse
 import json
 import math
 from dataclasses import dataclass, asdict
+import subprocess
+import sys
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence
 
@@ -34,6 +36,7 @@ class TrainConfig:
     device: str
     max_length: int
     temperature: float
+    export_onnx: bool
 
 
 # ------------------------ Teacher utilities ------------------------
@@ -201,6 +204,29 @@ def distillation_loss(student_logits: torch.Tensor, teacher_logits: torch.Tensor
     return loss
 
 
+def export_student_to_onnx(artifact_dir: Path) -> None:
+    """Export the trained student checkpoint to ONNX using the helper script."""
+
+    export_script = Path(__file__).with_name("export_snn_to_onnx.py")
+    model_path = artifact_dir / "student.pt"
+    metadata_path = artifact_dir / "metadata.json"
+    onnx_path = artifact_dir / "student.onnx"
+
+    subprocess.run(
+        [
+            sys.executable,
+            str(export_script),
+            "--model-path",
+            str(model_path),
+            "--metadata-path",
+            str(metadata_path),
+            "--output-path",
+            str(onnx_path),
+        ],
+        check=True,
+    )
+
+
 def train(config: TrainConfig):
     device = torch.device(config.device if torch.cuda.is_available() or "cuda" not in config.device else config.device)
 
@@ -271,6 +297,10 @@ def train(config: TrainConfig):
         "avg_loss": avg_loss,
     }
     (artifact_dir / "metadata.json").write_text(json.dumps(metadata, indent=2))
+    if config.export_onnx:
+        print("Exporting ONNX artifact...")
+        export_student_to_onnx(artifact_dir)
+
     print(f"Training complete. Steps: {global_step}, avg_loss: {avg_loss:.4f}")
     print(f"Student params: {student_param_count}")
     print(f"Artifacts: {artifact_dir}")
@@ -323,6 +353,11 @@ def parse_args() -> TrainConfig:
         default=1.0,
         help="Distillation temperature for soft targets",
     )
+    parser.add_argument(
+        "--export-onnx",
+        action="store_true",
+        help="Export the trained student to ONNX using export_snn_to_onnx.py",
+    )
     args = parser.parse_args()
     return TrainConfig(
         teacher_model=args.teacher_model,
@@ -337,6 +372,7 @@ def parse_args() -> TrainConfig:
         device=args.device,
         max_length=args.max_length,
         temperature=args.temperature,
+        export_onnx=args.export_onnx,
     )
 
 
