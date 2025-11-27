@@ -56,6 +56,10 @@ dependencies {
     implementation("com.squareup.moshi:moshi-adapters:1.15.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
+    // Always compile against ONNX Runtime so inference wrappers are available while
+    // still allowing the dependency to be optional at runtime for lightweight builds.
+    compileOnly("com.microsoft.onnxruntime:onnxruntime-android:1.18.0")
+
     if (useAndroidOrt) {
         implementation("com.microsoft.onnxruntime:onnxruntime-android:1.18.0")
     }
