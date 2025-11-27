@@ -60,6 +60,21 @@ This guide covers how to consume the SmartGlass Android SDK, configure the edge 
    ```
    The `/ingest` call creates and returns a `sessionId`; subsequent `/answer` calls reuse that identifier to maintain context.
 
+## On-device SNN Inference
+- **Model placement**: Copy your exported `snn_student.onnx` into `sdk-android/src/main/assets/models/snn_student.onnx` so the Gradle build packages it inside the SDK AAR.
+- **Engine initialization**: Create a `SnnLanguageEngine` with an Android `Context`; override the `modelAssetName` parameter if you store the ONNX file under a different asset path.
+- **Tokenizer/shape caveats**: The current tokenizer hashes whitespace-delimited tokens into a fixed 32K ID space and pads/truncates tensors to the requested `maxTokens`. This is a placeholder implementation—the tokenizer and ONNX input/output shapes will be aligned with `metadata.json` from the SNN export pipeline in upcoming updates.
+
+Prompt-to-reply usage:
+
+```kotlin
+val engine = SnnLanguageEngine(context)
+val reply = engine.generateReply("Hello SNN world!", maxTokens = 32)
+println("Model replied: $reply")
+```
+
+Use this engine when you want fully local inference without the edge or Python servers. Replace the placeholder tokenizer once the production vocabulary and tensor shapes from `metadata.json` are available.
+
 ## Coroutine and threading guidance
 - All public APIs on `SmartGlassEdgeClient` are `suspend` functions; call them from a coroutine scope (e.g., `lifecycleScope`, `viewModelScope`).
 - Network work is dispatched onto `Dispatchers.IO` internally, but you should avoid blocking the main thread when chaining calls.
