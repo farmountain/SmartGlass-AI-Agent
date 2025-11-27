@@ -5,6 +5,8 @@ plugins {
 
 import java.util.Locale
 
+val useAndroidOrt = (project.findProperty("USE_ANDROID_ORT") as? String)?.toBoolean() ?: false
+
 android {
     namespace = "rayskillkit.core"
     compileSdk = 34
@@ -13,7 +15,7 @@ android {
         minSdk = 24
         targetSdk = 34
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("boolean", "USE_ANDROID_ORT", "false")
+        buildConfigField("boolean", "USE_ANDROID_ORT", useAndroidOrt.toString())
         val isCi = System.getenv("CI")?.lowercase(Locale.US) == "true"
         buildConfigField("boolean", "IS_CI", isCi.toString())
     }
@@ -53,6 +55,10 @@ dependencies {
     implementation("com.squareup.moshi:moshi-kotlin:1.15.1")
     implementation("com.squareup.moshi:moshi-adapters:1.15.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+
+    if (useAndroidOrt) {
+        implementation("com.microsoft.onnxruntime:onnxruntime-android:1.18.0")
+    }
 
     testImplementation(kotlin("test"))
     testImplementation("junit:junit:4.13.2")
