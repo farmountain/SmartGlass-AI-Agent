@@ -3,9 +3,12 @@ SmartGlass AI Agent - Main Agent Class
 Integrates Whisper, CLIP, and GPT-2 for multimodal smart glass interactions
 """
 
+import json
 import logging
 import os
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+import re
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 from PIL import Image
@@ -114,6 +117,177 @@ class SmartGlassAgent:
         # Conversation history
         self.conversation_history: List[str] = []
         self.max_history = 5
+
+        # RaySkillKit catalog for skill-aware actions
+        self.skill_registry = self._load_skill_registry()
+        self._capability_to_skill = self._index_skill_capabilities()
+
+    # Action and skill helpers -------------------------------------------------
+    def _load_skill_registry(self) -> Dict[str, Dict[str, Any]]:
+        """Load the RaySkillKit skill catalog used to link actions to skills."""
+
+        skills_path = Path(__file__).resolve().parents[1] / "rayskillkit" / "skills.json"
+        if not skills_path.exists():
+            logger.warning("Skill catalog not found at %s", skills_path)
+            return {}
+
+        with skills_path.open(encoding="utf-8") as handle:
+            payload = json.load(handle)
+
+        skills = payload.get("skills", [])
+        return {entry["id"]: entry for entry in skills if isinstance(entry, dict) and entry.get("id")}
+
+    def _index_skill_capabilities(self) -> Dict[str, str]:
+        """Map lowercased capabilities to their corresponding skill identifiers."""
+
+        capability_map: Dict[str, str] = {}
+        for skill_id, entry in self.skill_registry.items():
+            for capability in entry.get("capabilities", []):
+                capability_map.setdefault(capability.lower(), skill_id)
+        # Ensure common fallbacks remain available even if the catalog changes
+        capability_map.setdefault("navigation", "skill_001")
+        capability_map.setdefault("vision", "skill_002")
+        return capability_map
+
+    def _build_action(
+        self,
+        action_type: str,
+        *,
+        skill_id: Optional[str] = None,
+        payload: Optional[Dict[str, Any]] = None,
+        source: str,
+        result: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """Normalize action dictionaries so downstream consumers can rely on a stable shape."""
+
+        action: Dict[str, Any] = {"type": action_type}
+        if skill_id:
+            action["skill_id"] = skill_id
+        if payload:
+            action["payload"] = payload
+        if result is not None:
+            action["result"] = result
+        action["source"] = source
+        return action
+
+    def _actions_from_json_block(self, block: str) -> List[Dict[str, Any]]:
+        """Extract action candidates from JSON content embedded in model text."""
+
+        actions: List[Dict[str, Any]] = []
+        try:
+            parsed = json.loads(block)
+        except json.JSONDecodeError:
+            return actions
+
+        candidates = parsed if isinstance(parsed, list) else [parsed]
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            action_type = candidate.get("type") or candidate.get("action") or "skill_invocation"
+            skill_id = candidate.get("skill_id") or candidate.get("skill")
+            payload = candidate.get("payload")
+            if payload is None:
+                payload = {
+                    key: value
+                    for key, value in candidate.items()
+                    if key not in {"type", "action", "skill", "skill_id", "result"}
+                }
+            actions.append(
+                self._build_action(
+                    action_type,
+                    skill_id=skill_id,
+                    payload=payload or None,
+                    result=candidate.get("result"),
+                    source="llm_json",
+                )
+            )
+        return actions
+
+    def _parse_actions(
+        self, response_text: str, skill_signals: Optional[List[Dict[str, Any]]] = None
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Parse actions from model output and RaySkillKit runtime signals."""
+
+        actions: List[Dict[str, Any]] = []
+        linked_skills: List[Dict[str, Any]] = []
+        seen_actions: Set[Tuple[str, Optional[str]]] = set()
+
+        # Structured signals coming from RaySkillKit runtime
+        if skill_signals:
+            for signal in skill_signals:
+                if not isinstance(signal, dict):
+                    continue
+                skill_id = signal.get("skill_id") or signal.get("id")
+                action_type = signal.get("type") or "skill_invocation"
+                payload = signal.get("payload")
+                if payload is None:
+                    payload = {k: v for k, v in signal.items() if k not in {"type", "skill_id", "id"}}
+                action = self._build_action(
+                    action_type,
+                    skill_id=skill_id,
+                    payload=payload or None,
+                    result=signal.get("result"),
+                    source="skill_runtime",
+                )
+                key = (action_type, skill_id)
+                if key not in seen_actions:
+                    actions.append(action)
+                    seen_actions.add(key)
+                if skill_id and skill_id in self.skill_registry:
+                    linked_skills.append(self.skill_registry[skill_id])
+
+        # JSON snippets inside the LLM response
+        json_blocks = re.findall(r"```(?:json)?\s*(\{.*?\}|\[.*?\])\s*```", response_text, flags=re.DOTALL)
+        for block in json_blocks:
+            for action in self._actions_from_json_block(block):
+                key = (action.get("type"), action.get("skill_id"))
+                if key in seen_actions:
+                    continue
+                actions.append(action)
+                seen_actions.add(key)
+                skill_id = action.get("skill_id")
+                if skill_id and skill_id in self.skill_registry:
+                    linked_skills.append(self.skill_registry[skill_id])
+
+        # Simple pattern matching for known skills (skill_### ids or capability hints)
+        for skill_id in set(re.findall(r"skill_\d{3}", response_text)):
+            if ("skill_invocation", skill_id) in seen_actions:
+                continue
+            actions.append(
+                self._build_action(
+                    "skill_invocation",
+                    skill_id=skill_id,
+                    payload={"utterance": response_text},
+                    source="text_match",
+                )
+            )
+            seen_actions.add(("skill_invocation", skill_id))
+            if skill_id in self.skill_registry:
+                linked_skills.append(self.skill_registry[skill_id])
+
+        # Infer skills from capability keywords such as "navigation" or "vision"
+        for capability, skill_id in self._capability_to_skill.items():
+            if capability in response_text.lower():
+                key = ("skill_invocation", skill_id)
+                if key in seen_actions:
+                    continue
+                actions.append(
+                    self._build_action(
+                        "skill_invocation",
+                        skill_id=skill_id,
+                        payload={"capability_hint": capability, "utterance": response_text},
+                        source="capability_hint",
+                    )
+                )
+                seen_actions.add(key)
+                if skill_id in self.skill_registry:
+                    linked_skills.append(self.skill_registry[skill_id])
+
+        if linked_skills:
+            unique_skills = {entry["id"]: entry for entry in linked_skills if entry.get("id")}
+            linked_skills = list(unique_skills.values())
+
+        return actions, linked_skills
     
     def process_audio_command(
         self,
@@ -236,6 +410,7 @@ class SmartGlassAgent:
         text_query: Optional[str] = None,
         language: Optional[str] = None,
         cloud_offload: bool = False,
+        skill_signals: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """
         Process multimodal query combining audio, vision, and text.
@@ -245,12 +420,14 @@ class SmartGlassAgent:
             image_input: Image from smart glasses
             text_query: Direct text query (if no audio)
             language: Language for audio transcription
+            cloud_offload: Whether to redact and offload vision processing
+            skill_signals: Optional RaySkillKit runtime events that should be reflected in the returned actions
         
         Returns:
             Dictionary containing:
                 - response: Generated assistant message
-                - actions: List of structured action dictionaries (empty by default)
-                - raw: Nested payload preserving query, visual context, metadata, and
+                - actions: List of structured action dictionaries enriched with skill IDs when available
+                - raw: Nested payload preserving query, visual context, metadata, skill metadata, and
                   redaction details when available
 
         The prompt forwarded to the language backend combines the user query
@@ -286,12 +463,16 @@ class SmartGlassAgent:
         
         # Generate response
         response = self.generate_response(query, visual_context)
+        actions, linked_skills = self._parse_actions(response, skill_signals)
 
         raw_payload: Dict[str, Any] = {
             "query": query,
             "visual_context": visual_context or "No visual input",
             "metadata": metadata,
         }
+
+        if linked_skills:
+            raw_payload["skills"] = linked_skills
 
         if redaction_summary is not None:
             redaction_details = redaction_summary.as_dict()
@@ -303,7 +484,7 @@ class SmartGlassAgent:
             "visual_context": raw_payload["visual_context"],
             "response": response,
             "metadata": metadata,
-            "actions": [],
+            "actions": actions,
             "raw": raw_payload,
         }
 
