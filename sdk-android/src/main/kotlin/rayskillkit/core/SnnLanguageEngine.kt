@@ -6,7 +6,7 @@ import ai.onnxruntime.OrtSession
 import android.content.Context
 import kotlin.math.absoluteValue
 
-private const val DEFAULT_LANGUAGE_MODEL_ASSET = "models/snn_language.onnx"
+private const val DEFAULT_LANGUAGE_MODEL_ASSET = "models/snn_student.onnx"
 private const val TOKEN_SPACE = 32768L
 private const val UNKNOWN_TOKEN_ID = 0L
 
