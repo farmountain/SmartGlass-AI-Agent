@@ -9,6 +9,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.smartglass.sdk.ActionExecutor
 import com.smartglass.sdk.SmartGlassClient
 import com.smartglass.sdk.rayban.MetaRayBanManager
 import java.io.File
@@ -23,6 +24,7 @@ class SampleActivity : AppCompatActivity() {
     private lateinit var responseText: TextView
     private lateinit var rayBanManager: MetaRayBanManager
 
+    private val actionExecutor = ActionExecutor
     private val client = SmartGlassClient()
     private var lastSessionId: String? = null
 
@@ -61,6 +63,7 @@ class SampleActivity : AppCompatActivity() {
                 val sessionId = client.startSession(text = prompt)
                 lastSessionId = sessionId
                 val response = client.answer(sessionId = sessionId, text = prompt)
+                actionExecutor.execute(response.actions, this@SampleActivity)
 
                 val actionsSummary = response.actions.takeIf { it.isNotEmpty() }
                     ?.joinToString(prefix = "\nActions:\n", separator = "\n") { action ->
@@ -114,6 +117,7 @@ class SampleActivity : AppCompatActivity() {
                 }
 
                 val response = client.answer(sessionId = sessionId, imagePath = imageFile.absolutePath)
+                actionExecutor.execute(response.actions, this@SampleActivity)
 
                 val actionsSummary = response.actions.takeIf { it.isNotEmpty() }
                     ?.joinToString(prefix = "\nActions:\n", separator = "\n") { action ->
