@@ -5,6 +5,12 @@ import os
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 
+from privacy_flags import (
+    should_store_audio,
+    should_store_frames,
+    should_store_transcripts,
+)
+
 
 @dataclass
 class EdgeRuntimeConfig:
@@ -89,9 +95,9 @@ def load_config_from_env() -> EdgeRuntimeConfig:
         os.getenv("FRAME_BUFFER_POLICY"), default="trim"
     )
     frame_buffer_max_bytes = _parse_optional_int(os.getenv("FRAME_BUFFER_MAX_BYTES"))
-    store_raw_audio = _parse_bool(os.getenv("STORE_RAW_AUDIO"), default=False)
-    store_raw_frames = _parse_bool(os.getenv("STORE_RAW_FRAMES"), default=False)
-    store_transcripts = _parse_bool(os.getenv("STORE_TRANSCRIPTS"), default=False)
+    store_raw_audio = should_store_audio()
+    store_raw_frames = should_store_frames()
+    store_transcripts = should_store_transcripts()
 
     ports = _parse_ports_env(ports_env)
 
@@ -147,15 +153,3 @@ def _parse_buffer_policy(raw_value: str | None, *, default: str = "trim") -> str
     return policy
 
 
-def _parse_bool(raw_value: str | None, *, default: bool = False) -> bool:
-    if raw_value is None:
-        return default
-
-    normalized = raw_value.strip().lower()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "off"}:
-        return False
-    raise ValueError(
-        "Invalid boolean value; use one of: true, false, 1, 0, yes, no, on, off"
-    )
