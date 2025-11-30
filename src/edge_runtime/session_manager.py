@@ -150,9 +150,12 @@ class SessionManager:
                 language=language,
                 cloud_offload=cloud_offload,
             )
-        state.query_history.append(result)
-        if self.config.store_transcripts and "query" in result:
-            state.transcripts.append(result["query"])
+        if self.config.store_transcripts:
+            state.query_history.append(result)
+            if "query" in result:
+                state.transcripts.append(result["query"])
+        else:
+            state.query_history.append({"redacted": True})
         return result
 
     def get_summary(self, session_id: str) -> Dict[str, Any]:
