@@ -81,3 +81,27 @@ from `/ingest` so follow-up questions stay threaded.
 - When the dummy agent is enabled, responses are deterministic echo strings; no
   vision or speech models are loaded. This is useful for instrumenting Android
   networking without heavy dependencies.
+
+## Action execution on Android
+
+LLM responses can include a list of suggested actions (e.g., `NAVIGATE` or
+`SHOW_TEXT`) that the Android client can execute locally. The SDK provides a
+convenience helper to process these actions in one call:
+
+```kotlin
+ActionExecutor.execute(response.actions, context)
+```
+
+### Built-in behaviors
+
+- **`NAVIGATE`**: Opens a Google Maps URI of the form `geo:0,0?q=<destination>`
+  using the Maps app when available, with a generic `ACTION_VIEW` fallback for
+  other map providers.
+- **`SHOW_TEXT`**: Displays the supplied `message` as both a toast and a system
+  notification for quick on-device confirmation.
+
+### Extending actions
+
+`ActionExecutor` routes on the action `type`, so you can extend support by
+adding new `when` branches (and handlers) for custom action types or payload
+shapes before invoking `ActionExecutor.execute` in your app.
