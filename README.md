@@ -199,6 +199,8 @@ for action in actions:
     print(action.get("type"), action.get("payload"))
 ```
 
+See [Action schema and RaySkillKit mapping](docs/actions_and_skills.md) for the structured envelope, sample payloads, and how to bind each `action` entry to a concrete skill implementation.
+
 #### CLI demo
 
 To try the same pipeline from the terminal, run the `examples/cli_smartglass.py` demo from the repository root. It loads an image, walks through the agent pipeline, and streams the generated response (optionally using the SNN backend):
