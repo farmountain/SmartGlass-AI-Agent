@@ -69,4 +69,6 @@ dependencies {
     testImplementation("com.goterl:lazysodium-java:5.1.0")
     testImplementation("net.java.dev.jna:jna:5.13.0")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    testImplementation("org.robolectric:robolectric:4.12.2")
+    testImplementation("androidx.test:core:1.5.0")
 }
