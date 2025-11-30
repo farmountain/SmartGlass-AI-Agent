@@ -60,6 +60,18 @@ This guide covers how to consume the SmartGlass Android SDK, configure the edge 
    ```
    The `/ingest` call creates and returns a `sessionId`; subsequent `/answer` calls reuse that identifier to maintain context.
 
+## Action execution
+LLM responses can include actions (for example `NAVIGATE` or `SHOW_TEXT`) that you can trigger on-device. The SDK ships an `ActionExecutor` helper that processes a list of actions and invokes the right handler for each entry:
+
+```kotlin
+ActionExecutor.execute(response.actions, context)
+```
+
+- **`NAVIGATE`**: Builds a `geo:0,0?q=<destination>` URI and attempts to open it in Google Maps, falling back to a generic `ACTION_VIEW` intent if Maps is unavailable.
+- **`SHOW_TEXT`**: Shows the provided `message` as both a Toast and a notification for quick user feedback.
+
+To support additional action types or payload shapes, extend the `when` branches inside `ActionExecutor` (or wrap the helper with your own dispatcher) before calling `ActionExecutor.execute`.
+
 ## On-device SNN Inference
 - **Model placement**: Copy your exported `snn_student.onnx` into `sdk-android/src/main/assets/models/snn_student.onnx` so the Gradle build packages it inside the SDK AAR.
 - **Engine initialization**: Create a `SnnLanguageEngine` with an Android `Context`; override the `modelAssetName` parameter if you store the ONNX file under a different asset path.
