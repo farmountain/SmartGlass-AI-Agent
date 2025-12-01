@@ -14,24 +14,30 @@ import com.smartglass.sdk.SmartGlassClient
 import com.smartglass.sdk.rayban.MetaRayBanManager
 import java.io.File
 import java.io.FileOutputStream
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class SampleActivity : AppCompatActivity() {
 
+    private lateinit var deviceIdInput: EditText
     private lateinit var promptInput: EditText
     private lateinit var responseText: TextView
     private lateinit var rayBanManager: MetaRayBanManager
 
     private val actionExecutor = ActionExecutor
     private val client = SmartGlassClient()
+    private var audioStreamJob: Job? = null
     private var lastSessionId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_sample)
 
+        deviceIdInput = findViewById(R.id.deviceIdInput)
         promptInput = findViewById(R.id.promptInput)
         responseText = findViewById(R.id.responseText)
         rayBanManager = MetaRayBanManager(applicationContext)
@@ -47,6 +53,20 @@ class SampleActivity : AppCompatActivity() {
         findViewById<Button>(R.id.captureButton).setOnClickListener {
             captureAndSend()
         }
+
+        findViewById<Button>(R.id.startAudioButton).setOnClickListener {
+            startAudioStreaming()
+        }
+
+        findViewById<Button>(R.id.stopAudioButton).setOnClickListener {
+            stopAudioStreaming()
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        stopAudioStreaming()
+        rayBanManager.disconnect()
     }
 
     private fun sendPrompt() {
@@ -59,7 +79,6 @@ class SampleActivity : AppCompatActivity() {
         lifecycleScope.launch {
             setStatus(getString(R.string.starting_session))
             try {
-                // Stubbed image handling for now; only text is sent.
                 val sessionId = client.startSession(text = prompt)
                 lastSessionId = sessionId
                 val response = client.answer(sessionId = sessionId, text = prompt)
@@ -83,17 +102,16 @@ class SampleActivity : AppCompatActivity() {
     }
 
     private fun connectGlasses() {
+        val deviceId = resolveDeviceId()
         lifecycleScope.launch {
             setStatus(getString(R.string.connecting_glasses))
             try {
-                // TODO: Replace the stubbed connect call with the Meta Ray-Ban SDK discovery/connection
-                //  once available. Device identifiers and transports should be provided by the real
-                //  SDK APIs instead of hard-coded placeholders.
-                rayBanManager.connect(deviceId = "demo-device-id", transport = MetaRayBanManager.Transport.BLE)
-                setStatus(getString(R.string.glasses_connected_stub))
+                rayBanManager.connect(deviceId = deviceId, transport = MetaRayBanManager.Transport.BLE)
+                setStatus(getString(R.string.glasses_connected, deviceId))
             } catch (exc: Exception) {
                 Log.e("SampleActivity", "Failed to connect to glasses", exc)
                 setStatus(getString(R.string.connect_error, exc.message))
+                rayBanManager.disconnect()
             }
         }
     }
@@ -102,9 +120,6 @@ class SampleActivity : AppCompatActivity() {
         lifecycleScope.launch {
             setStatus(getString(R.string.capturing_photo))
             try {
-                // TODO: Replace the placeholder capture with the Meta Ray-Ban SDK camera stream once
-                //  the official SDK is available. The resulting JPEG or encoded bytes should be
-                //  forwarded through SmartGlassClient.answer for processing.
                 val capturedBitmap = rayBanManager.capturePhoto()
                 if (capturedBitmap == null) {
                     setStatus(getString(R.string.capture_failed))
@@ -137,6 +152,33 @@ class SampleActivity : AppCompatActivity() {
         }
     }
 
+    private fun startAudioStreaming() {
+        val deviceId = resolveDeviceId()
+        lifecycleScope.launch {
+            setStatus(getString(R.string.starting_audio_stream))
+            audioStreamJob?.cancel()
+            audioStreamJob = launch(start = CoroutineStart.UNDISPATCHED) {
+                try {
+                    rayBanManager.connect(deviceId = deviceId, transport = MetaRayBanManager.Transport.BLE)
+                    rayBanManager.startAudioStreaming().collect { chunk ->
+                        Log.d("SampleActivity", "Received ${chunk.size} bytes of audio")
+                    }
+                } catch (exc: Exception) {
+                    Log.e("SampleActivity", "Audio streaming failed", exc)
+                    setStatus(getString(R.string.stream_error, exc.message))
+                } finally {
+                    setStatus(getString(R.string.stream_stopped))
+                }
+            }
+        }
+    }
+
+    private fun stopAudioStreaming() {
+        audioStreamJob?.cancel()
+        audioStreamJob = null
+        rayBanManager.stopAudioStreaming()
+    }
+
     private suspend fun saveBitmapToTempFile(bitmap: Bitmap): File =
         withContext(Dispatchers.IO) {
             val imageFile = File.createTempFile("rayban_capture", ".jpg", cacheDir)
@@ -145,6 +187,9 @@ class SampleActivity : AppCompatActivity() {
             }
             imageFile
         }
+
+    private fun resolveDeviceId(): String =
+        deviceIdInput.text.toString().ifBlank { getString(R.string.default_device_id) }
 
     private suspend fun setStatus(message: String) {
         withContext(Dispatchers.Main) {

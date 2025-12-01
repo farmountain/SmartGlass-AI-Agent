@@ -8,6 +8,16 @@
     android:padding="24dp">
 
     <EditText
+        android:id="@+id/deviceIdInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="@string/device_id_hint"
+        android:inputType="text"
+        android:minHeight="48dp"
+        android:padding="12dp"
+        android:textAppearance="@style/TextAppearance.MaterialComponents.Body1" />
+
+    <EditText
         android:id="@+id/promptInput"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -31,6 +41,22 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
         android:text="@string/capture_photo"
+        android:textAllCaps="false" />
+
+    <Button
+        android:id="@+id/startAudioButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="@string/start_audio_stream"
+        android:textAllCaps="false" />
+
+    <Button
+        android:id="@+id/stopAudioButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="@string/stop_audio_stream"
         android:textAllCaps="false" />
 
     <Button
