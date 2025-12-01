@@ -4,70 +4,85 @@
 
 ```
 SmartGlass-AI-Agent/
-├── src/                          # Core source code
-│   ├── __init__.py              # Package initialization
+├── src/                          # Core source code (agent orchestration, backends, policies)
+│   ├── smartglass_agent.py      # Stable v1.0 SmartGlassAgent entry point
+│   ├── llm_backend_base.py      # Backend protocol for SNN/ANN/cloud text generators
+│   ├── llm_snn_backend.py       # On-device spiking student backend (SNN)
+│   ├── llm_backend.py           # ANN/text backends, routing, and tokenizer helpers
 │   ├── whisper_processor.py     # Whisper audio processing
-│   ├── clip_vision.py           # CLIP vision processing
-│   ├── gpt2_generator.py        # GPT-2 text generation
-│   └── smartglass_agent.py      # Main agent integrating all components
+│   ├── clip_vision.py           # CLIP / DeepSeek-Vision processing
+│   ├── agent/                   # Policies, fusion, and action formatting
+│   ├── edge_runtime/            # Edge runtime toggles and privacy protections
+│   └── skills/                  # Action execution shims and RaySkillKit bindings
 │
-├── examples/                     # Usage examples
-│   ├── basic_usage.py           # Basic functionality demo
-│   └── vision_example.py        # Vision processing demo
+├── drivers/                      # Device drivers and provider abstractions
+│   ├── providers/               # Provider resolver (mock, meta, vuzix, xreal, visionos, openxr)
+│   └── ...
 │
-├── docs/                         # Documentation
-│   └── API_REFERENCE.md         # Complete API documentation
-│
-├── SmartGlass_AI_Agent_Meta_RayBan.ipynb    # Google Colab notebook (basic)
-├── SmartGlass_AI_Agent_Advanced.ipynb       # Google Colab notebook (advanced)
-│
+├── rayskillkit/                  # Skill/action execution adapters and payload schemas
+├── scripts/                      # Training, evaluation, and tooling scripts (e.g., SNN distillation)
+├── examples/                     # Usage examples and CLI demos
+├── tests/                        # Unit and integration tests
+├── sdk-android/                  # Native Android client and bridge code
+├── sdk_python/                   # Python SDK distribution (pip-installable layout)
+├── colab_notebooks/              # Weekly notebooks and interactive workshops
+├── docs/                         # Documentation, reports, and integration guides
 ├── requirements.txt              # Python dependencies
 ├── setup.py                      # Package installation setup
 ├── README.md                     # Main documentation
 ├── QUICKSTART.md                 # Quick start guide
 ├── CONTRIBUTING.md               # Contributing guidelines
-├── LICENSE                       # MIT License
-└── .gitignore                    # Git ignore rules
+├── LICENSE                       # MIT License with NOTICE
+└── NOTICE.md                     # Third-party notices for the v1.0 stable release
 ```
 
 ## 🔧 Core Modules
 
-### 1. whisper_processor.py
+### 1. smartglass_agent.py
+- **Purpose**: Main integration layer for multimodal queries
+- **Features**:
+  - Coordinates speech, vision, and language backends
+  - Returns structured responses with `actions` aligned to RaySkillKit
+  - Delegates provider selection to `drivers.providers.get_provider`
+- **Use Case**: Stable entry point for apps and SDKs (Python/Android)
+
+### 2. llm_backend_base.py & llm_snn_backend.py
+- **Purpose**: Pluggable language generation backends
+- **Backends**:
+  - **SNNLLMBackend**: On-device spiking student for low-power glasses
+  - **ANN/Cloud adapters**: GPT-style or hosted models via `llm_backend.py`
+- **Features**:
+  - Shared interface for `generate`/`chat` semantics
+  - Tokenizer/model fallbacks to keep demos runnable without checkpoints
+- **Use Case**: Swap between on-device SNN, local ANN, or remote providers without changing agent code
+
+### 3. whisper_processor.py
 - **Purpose**: Speech-to-text transcription
-- **Model**: OpenAI Whisper
+- **Model**: OpenAI Whisper (all sizes)
 - **Features**:
-  - Real-time audio processing
-  - Multilingual support
-  - Multiple model sizes (tiny to large)
-- **Use Case**: Convert voice commands to text
+  - Streaming and chunked audio support
+  - Multilingual, with device-friendly configuration for edge runtime
+- **Use Case**: Convert voice commands to text across providers
 
-### 2. clip_vision.py
+### 4. clip_vision.py
 - **Purpose**: Visual understanding
-- **Model**: OpenAI CLIP
+- **Models**: OpenAI CLIP and DeepSeek-Vision
 - **Features**:
-  - Zero-shot image classification
-  - Scene understanding
-  - Object identification
-  - Image-text matching
-- **Use Case**: Understand what the smart glasses see
+  - Zero-shot image classification and captioning hooks
+  - Scene understanding for action planning
+- **Use Case**: Understand what the smart glasses see and feed context to the LLM backend
 
-### 3. gpt2_generator.py
-- **Purpose**: Natural language generation
-- **Model**: GPT-2
-- **Features**:
-  - Context-aware responses
-  - Conversation management
-  - Text summarization
-- **Use Case**: Generate helpful responses to user queries
+### 5. drivers.providers
+- **Purpose**: Abstract device I/O (camera, mic, haptics) behind a provider interface
+- **Providers**: mock, meta (Ray-Ban), vuzix, xreal, openxr, visionos
+- **Use Case**: Target multiple devices while preserving a consistent API
 
-### 4. smartglass_agent.py
-- **Purpose**: Main integration layer
+### 6. rayskillkit and skills/
+- **Purpose**: Map LLM-emitted `actions` to concrete skill implementations
 - **Features**:
-  - Combines all three models
-  - Multimodal query processing
-  - Conversation history management
-  - Unified API
-- **Use Case**: Complete smart glass assistant
+  - Action schemas for navigation, notifications, and device control
+  - Adapters that bind RaySkillKit skills to provider capabilities
+- **Use Case**: Execute actions on-device or via paired mobile/edge runtimes
 
 ## 📓 Notebooks
 
@@ -241,10 +256,10 @@ The system is designed to be extended:
 
 ## 📝 Version Information
 
-- **Current Version**: 0.1.0
-- **Status**: Alpha
-- **Python**: 3.8+
-- **License**: MIT
+- **Current Version**: 1.0.0
+- **Status**: Stable SDK (SmartGlassAgent and core backends)
+- **Python**: 3.9+
+- **License**: MIT (see LICENSE and NOTICE for third-party attributions)
 
 ## 🔗 Key Dependencies
 
