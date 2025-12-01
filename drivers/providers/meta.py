@@ -85,18 +85,33 @@ class MetaRayBanCameraIn(CameraIn):
             enriched.setdefault("transport", self._transport)
             yield enriched
 
-    def _placeholder_sdk_camera_stream(self) -> Iterator[dict[str, object]]:
-        """Placeholder stub for wiring Meta Ray-Ban SDK camera streaming."""
-
-        raise NotImplementedError(
-            "Meta Ray-Ban SDK camera streaming will be connected when available"
-        )
-
     def _sdk_frames(self) -> Iterator[dict[str, object]] | None:
         if not self._use_sdk or _META_SDK is None:
             return None
 
-        return self._placeholder_sdk_camera_stream()
+        camera_api = getattr(_META_SDK, "camera", None)
+        stream_fn = None
+        if camera_api is not None:
+            stream_fn = getattr(camera_api, "stream_frames", None) or getattr(
+                camera_api, "stream", None
+            )
+        stream_fn = stream_fn or getattr(_META_SDK, "stream_camera_frames", None)
+
+        if not callable(stream_fn):
+            LOGGER.info("Meta SDK detected; camera streaming is not available")
+            return None
+
+        try:
+            stream = stream_fn(
+                device_id=self._device_id,
+                transport=self._transport,
+                resolution=(self._height, self._width),
+            )
+        except Exception:
+            LOGGER.exception("Meta SDK camera streaming failed; falling back to mock")
+            return None
+
+        return self._wrap_camera_stream(stream)
 
     def get_frames(self) -> Iterator[dict[str, object]]:  # type: ignore[override]
         sdk_stream = self._sdk_frames()
@@ -166,18 +181,35 @@ class MetaRayBanMicIn(MicIn):
             enriched.setdefault("transport", self._transport)
             yield enriched
 
-    def _placeholder_sdk_microphone_stream(self) -> Iterator[dict[str, object]]:
-        """Placeholder stub for wiring Meta Ray-Ban SDK microphone capture."""
-
-        raise NotImplementedError(
-            "Meta Ray-Ban SDK microphone streaming will be connected when available"
-        )
-
     def _sdk_frames(self) -> Iterator[dict[str, object]] | None:
         if not self._use_sdk or _META_SDK is None:
             return None
 
-        return self._placeholder_sdk_microphone_stream()
+        microphone_api = getattr(_META_SDK, "microphone", None) or getattr(_META_SDK, "mic", None)
+        stream_fn = None
+        if microphone_api is not None:
+            stream_fn = getattr(microphone_api, "stream_frames", None) or getattr(
+                microphone_api, "stream", None
+            )
+        stream_fn = stream_fn or getattr(_META_SDK, "stream_microphone_frames", None)
+
+        if not callable(stream_fn):
+            LOGGER.info("Meta SDK detected; microphone streaming is not available")
+            return None
+
+        try:
+            stream = stream_fn(
+                device_id=self._device_id,
+                transport=self._transport,
+                sample_rate_hz=self._sample_rate_hz,
+                frame_size=self._frame_size,
+                channels=self._channels,
+            )
+        except Exception:
+            LOGGER.exception("Meta SDK microphone streaming failed; falling back to mock")
+            return None
+
+        return self._wrap_microphone_stream(stream)
 
     def get_frames(self) -> Iterator[dict[str, object]]:  # type: ignore[override]
         sdk_stream = self._sdk_frames()
@@ -224,12 +256,10 @@ class MetaRayBanAudioOut(AudioOut):
         self._utterance_index = 0
         self._use_sdk = use_sdk and _META_SDK_AVAILABLE
 
-    def _sdk_audio(self) -> object:
-        """Placeholder for wiring Meta Ray-Ban SDK audio output."""
-
-        raise NotImplementedError(
-            "Connect Meta Ray-Ban SDK text-to-speech output when it becomes available"
-        )
+    def _sdk_audio(self) -> object | None:
+        audio_api = getattr(_META_SDK, "audio", None) if _META_SDK is not None else None
+        audio_api = audio_api or (getattr(_META_SDK, "tts", None) if _META_SDK is not None else None)
+        return audio_api
 
     def _sdk_speak(self, text: str) -> dict[str, object] | None:
         if not self._use_sdk or _META_SDK is None:
@@ -281,9 +311,12 @@ class MetaRayBanDisplayOverlay(DisplayOverlay):
     once the SDK supports developer access.
     """
 
-    def __init__(self, *, device_id: str, transport: str, use_sdk: bool = False) -> None:
+    def __init__(
+        self, *, device_id: str, transport: str, use_sdk: bool = False, api_key: str | None = None
+    ) -> None:
         self._device_id = device_id
         self._transport = transport
+        self._api_key = api_key
         self._use_sdk = use_sdk and _META_SDK_AVAILABLE
         self.history: list[dict[str, object]] = []
         self._render_index = 0
@@ -302,7 +335,9 @@ class MetaRayBanDisplayOverlay(DisplayOverlay):
             LOGGER.info("Meta SDK detected; overlay rendering is not yet implemented")
             return None
 
-        return render_fn(card=card, device_id=self._device_id, transport=self._transport)
+        return render_fn(
+            card=card, device_id=self._device_id, transport=self._transport, api_key=self._api_key
+        )
 
     def render(self, card: dict) -> dict:
         rendered_at = _BASE_TIME + timedelta(milliseconds=350 * self._render_index)
@@ -329,9 +364,18 @@ class MetaRayBanDisplayOverlay(DisplayOverlay):
 class MetaRayBanHaptics(Haptics):
     """Simulate Ray-Ban haptics envelopes and timestamps."""
 
-    def __init__(self, *, device_id: str, transport: str, use_sdk: bool = False, sdk: object | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        device_id: str,
+        transport: str,
+        use_sdk: bool = False,
+        sdk: object | None = None,
+        api_key: str | None = None,
+    ) -> None:
         self._device_id = device_id
         self._transport = transport
+        self._api_key = api_key
         self._sdk = sdk if sdk is not None else _META_SDK
         self._use_sdk = use_sdk and self._sdk is not None
         self.patterns: list[dict[str, object]] = []
@@ -352,7 +396,12 @@ class MetaRayBanHaptics(Haptics):
             LOGGER.info("Meta SDK detected; haptics control is not yet implemented")
             return None
 
-        return handler(duration_ms=ms, device_id=self._device_id, transport=self._transport)
+        return handler(
+            duration_ms=ms,
+            device_id=self._device_id,
+            transport=self._transport,
+            api_key=self._api_key,
+        )
 
     def vibrate(self, ms: int) -> None:
         payload = {
@@ -499,12 +548,19 @@ class MetaRayBanProvider(ProviderBase):
 
     def _create_overlay(self) -> DisplayOverlay | None:
         return MetaRayBanDisplayOverlay(
-            device_id=self._device_id, transport=self._transport, use_sdk=self._use_sdk
+            device_id=self._device_id,
+            transport=self._transport,
+            use_sdk=self._use_sdk,
+            api_key=self._api_key,
         )
 
     def _create_haptics(self) -> Haptics | None:
         return MetaRayBanHaptics(
-            device_id=self._device_id, transport=self._transport, use_sdk=self._use_sdk, sdk=_META_SDK
+            device_id=self._device_id,
+            transport=self._transport,
+            use_sdk=self._use_sdk,
+            sdk=_META_SDK,
+            api_key=self._api_key,
         )
 
     def _create_permissions(self) -> Permissions | None:
