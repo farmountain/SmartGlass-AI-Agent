@@ -1,6 +1,7 @@
 """
 SmartGlass AI Agent - Main Agent Class
-Integrates Whisper, CLIP, and GPT-2 for multimodal smart glass interactions
+Integrates Whisper, CLIP, and pluggable language backends for multimodal smart
+glass interactions.
 """
 
 import json
@@ -34,7 +35,7 @@ class SmartGlassAgent:
     Features:
     - Speech recognition via Whisper
     - Visual understanding via CLIP
-    - Natural language responses via GPT-2
+    - Natural language responses via a pluggable backend
 
     The language model component is injected via the
     :class:`~src.llm_backend_base.BaseLLMBackend`
