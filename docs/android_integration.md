@@ -2,7 +2,10 @@
 
 This guide shows how an Android client can talk to the lightweight HTTP server
 exposed by `sdk_python.server`. It covers the two endpoints, request/response
-payloads, and how to manage sessions from the app.
+payloads, and how to manage sessions from the app. Use it with the
+`SmartGlassClient` (Python HTTP server, `startSession`/`answer`) rather than the
+`SmartGlassEdgeClient` (edge runtime, `createSession`/`runQuery` against
+`/sessions/...`).
 
 ## Quickstart: run the server locally
 
@@ -86,7 +89,7 @@ from `/ingest` so follow-up questions stay threaded.
 
 LLM responses can include a list of suggested actions (e.g., `NAVIGATE` or
 `SHOW_TEXT`) that the Android client can execute locally. The SDK provides a
-convenience helper to process these actions in one call:
+stable v1.0 convenience helper to process these actions in one call:
 
 ```kotlin
 ActionExecutor.execute(response.actions, context)
@@ -96,12 +99,15 @@ ActionExecutor.execute(response.actions, context)
 
 - **`NAVIGATE`**: Opens a Google Maps URI of the form `geo:0,0?q=<destination>`
   using the Maps app when available, with a generic `ACTION_VIEW` fallback for
-  other map providers.
+  other map providers. The helper reads the `destination` payload key; empty or
+  missing values are ignored.
 - **`SHOW_TEXT`**: Displays the supplied `message` as both a toast and a system
-  notification for quick on-device confirmation.
+  notification for quick on-device confirmation. Empty or missing values are
+  ignored.
 
 ### Extending actions
 
-`ActionExecutor` routes on the action `type`, so you can extend support by
-adding new `when` branches (and handlers) for custom action types or payload
-shapes before invoking `ActionExecutor.execute` in your app.
+`ActionExecutor` routes on the uppercased action `type`, so you can extend
+support by adding new `when` branches (and handlers) for custom action types or
+payload shapes before invoking `ActionExecutor.execute` in your app. Wrapping
+the helper with your own dispatcher is another stable extension point.

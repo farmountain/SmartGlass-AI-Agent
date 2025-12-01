@@ -21,15 +21,18 @@ This guide covers how to consume the SmartGlass Android SDK, configure the edge 
    ```
 
 ## Client configuration
-- The `SmartGlassEdgeClient` accepts an optional `baseUrl` for the edge runtime and defaults to `http://127.0.0.1:8765`.
-- Trim trailing slashes are handled automatically; provide the reachable host/port of your edge deployment, for example:
-  ```kotlin
-  val client = SmartGlassEdgeClient(baseUrl = "http://192.168.1.50:8765")
-  ```
+- Use **`SmartGlassEdgeClient`** when talking to the **edge runtime**. It issues `createSession` / `runQuery` requests to the
+  runtime's REST surface (see sample below) and expects endpoints rooted at `/sessions` on port `8765` by default.
+- Use **`SmartGlassClient`** when talking to the **Python HTTP server** in `sdk_python.server`. It issues `startSession`
+  (`POST /ingest`) followed by `answer` (`POST /answer`) calls and defaults to port `8000`.
+- Only configure one of these clients in a given flow; they target different servers and are not interchangeable.
+- Both clients trim trailing slashes from the `baseUrl` you pass.
 
-> [!NOTE]
-> The edge runtime client above targets the low-latency edge service. The HTTP client described below is separate and talks to
-> the Python server exposed in `sdk_python.server`; configure only one client type per use case to avoid mixing endpoints.
+Edge runtime configuration example:
+
+```kotlin
+val edgeClient = SmartGlassEdgeClient(baseUrl = "http://192.168.1.50:8765")
+```
 
 ## Using the Python HTTP server with `SmartGlassClient`
 1. Start the lightweight HTTP server from the repo root (enable the dummy agent to avoid heavyweight model downloads):
@@ -58,24 +61,35 @@ This guide covers how to consume the SmartGlass Android SDK, configure the edge 
        handleResponse(response)
    }
    ```
-   The `/ingest` call creates and returns a `sessionId`; subsequent `/answer` calls reuse that identifier to maintain context.
+   `startSession` issues `POST /ingest` to receive a `session_id`; each `answer` call issues `POST /answer` with that identifier
+   to maintain conversation context.
 
 ## Action execution
-LLM responses can include actions (for example `NAVIGATE` or `SHOW_TEXT`) that you can trigger on-device. The SDK ships an `ActionExecutor` helper that processes a list of actions and invokes the right handler for each entry:
+LLM responses can include actions (for example `NAVIGATE` or `SHOW_TEXT`) that you can trigger on-device. The SDK ships an
+`ActionExecutor` helper that processes a list of actions and invokes the right handler for each entry. This helper is part of the
+stable v1.0 Android surface:
 
 ```kotlin
 ActionExecutor.execute(response.actions, context)
 ```
 
-- **`NAVIGATE`**: Builds a `geo:0,0?q=<destination>` URI and attempts to open it in Google Maps, falling back to a generic `ACTION_VIEW` intent if Maps is unavailable.
-- **`SHOW_TEXT`**: Shows the provided `message` as both a Toast and a notification for quick user feedback.
+- **`NAVIGATE`**: Builds a `geo:0,0?q=<destination>` URI from the `destination` payload key and attempts to open it in Google
+  Maps, falling back to a generic `ACTION_VIEW` intent if Maps is unavailable.
+- **`SHOW_TEXT`**: Reads the `message` payload key, then shows it as both a Toast and a notification for quick user feedback.
 
-To support additional action types or payload shapes, extend the `when` branches inside `ActionExecutor` (or wrap the helper with your own dispatcher) before calling `ActionExecutor.execute`.
+To support additional action types or payload shapes, add new `when` branches inside `ActionExecutor` (or wrap the helper with
+your own dispatcher) before calling `ActionExecutor.execute`.
 
 ## On-device SNN Inference
-- **Model placement**: Copy your exported `snn_student.onnx` into `sdk-android/src/main/assets/models/snn_student.onnx` so the Gradle build packages it inside the SDK AAR.
-- **Engine initialization**: Create a `SnnLanguageEngine` with an Android `Context`; override the `modelAssetName` parameter if you store the ONNX file under a different asset path.
-- **Tokenizer/shape caveats**: The current tokenizer hashes whitespace-delimited tokens into a fixed 32K ID space and pads/truncates tensors to the requested `maxTokens`. This is a placeholder implementation—the tokenizer and ONNX input/output shapes will be aligned with `metadata.json` from the SNN export pipeline in upcoming updates.
+- **Model placement**: Copy your exported `snn_student.onnx` into `sdk-android/src/main/assets/models/snn_student.onnx` so the
+  Gradle build packages it inside the SDK AAR. If your export uses a different filename or subdirectory, override the
+  `modelAssetName` argument to `SnnLanguageEngine` (default: `"models/snn_student.onnx"`).
+- **Engine initialization**: Create a `SnnLanguageEngine` with an Android `Context`; the constructor and `generateReply` API are
+  part of the stable v1.0 surface.
+- **Tokenizer/shape caveats**: The current tokenizer splits on whitespace, hashes tokens into a fixed 32K ID space (reserving `0`
+  for unknown), and pads/truncates tensors to the requested `maxTokens`. This is a placeholder implementation—the tokenizer and
+  ONNX input/output shapes will be aligned with `metadata.json` from the SNN export pipeline in upcoming updates while keeping
+  the public API consistent.
 
 Prompt-to-reply usage:
 
