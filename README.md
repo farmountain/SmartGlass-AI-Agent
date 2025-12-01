@@ -211,9 +211,7 @@ provider = MetaRayBanProvider(
 )
 ```
 
-When `prefer_sdk=True` **and** the `metarayban` dependency is importable, the provider will route camera and microphone calls into the real SDK hooks (to be implemented) instead of the deterministic fixtures. CI and default local runs keep using the mock data because `prefer_sdk` defaults to `False` and the SDK is not present in the test environment.
-
-When a vendor SDK package is missing, the provider automatically falls back to deterministic mock fixtures so you can still exercise the camera, microphone, and overlay flows without hardware.
+When `prefer_sdk=True` **and** the `metarayban` dependency is importable, the provider now routes camera, microphone, audio, overlay, and haptics calls into the official SDK while threading your `api_key`, `device_id`, and `transport` through every request. CI and default local runs keep using the mock data because `prefer_sdk` defaults to `False` and the SDK is not present in the test environment. If the SDK import fails or a runtime SDK call raises, the provider logs the failure and immediately falls back to deterministic fixtures so you can still exercise the flows without hardware.
 
 Deterministic vendor-specific mocks are also available so you can stub integrations for different runtimes:
 
@@ -226,26 +224,17 @@ export PROVIDER=visionos # 1440x1440 persona frames + shared-space overlays
 
 Each of these providers exposes deterministic camera/mic fixtures tuned to the vendor's expected resolutions, vendor-tagged audio/permission responses, and a `has_display()` helper that the SDK uses to reflect true overlay availability.
 
-##### Contributing Meta SDK bindings
+##### Meta SDK requirements and fallback behavior
 
-The mock-first Meta Ray-Ban wrapper lives in `drivers/providers/meta.py`. To land real SDK calls:
+The mock-first Meta Ray-Ban wrapper lives in `drivers/providers/meta.py` and now calls into the `metarayban` package whenever it is available. Install it locally with `pip install metarayban` and provide a valid `api_key` plus the `device_id`/`transport` for your Ray-Ban device to stream live camera and microphone data, trigger SDK-managed audio output, render overlays, and request haptics. All SDK calls are guarded with mock fallbacks, so CI remains green even when the SDK is absent.
 
-- Replace the `_sdk_frames` stubs inside `MetaRayBanCameraIn` and `MetaRayBanMicIn` with calls into the `metarayban` APIs once the official bindings are available.
-- Swap the `_sdk_audio`/`_sdk_speak` placeholder in `drivers/providers/meta.py` for real metarayban TTS and earcon hooks when those bindings land, keeping the current mocks as the fallback path.
-- Keep the deterministic mock generators as the fallback path for CI and local dev (they should still run when `prefer_sdk` is `False` or the SDK is missing).
-- Add regression tests under `tests/test_provider_conformance.py` that exercise both the mock and SDK-backed paths so we can keep provider swaps safe.
+### 🕶️ Meta Ray-Ban Integration
 
-### 🕶️ Meta Ray-Ban Integration (Stub)
+The Android sample still ships with a **`MetaRayBanManager`** façade that mirrors the expected Meta Ray-Ban SDK shape. It continues to emit deterministic placeholder behavior for UI wiring while the Python provider now talks to the official SDK when present:
 
-The Android sample ships with a **`MetaRayBanManager`** façade that mirrors the expected Meta Ray-Ban SDK shape while SDK bindings are still pending. The manager exposes connect, capture, and streaming-style methods that currently emit deterministic placeholder behavior:
-
-- `connect(deviceId, transport)` logs a connection attempt and waits briefly to simulate setup while noting that the provided `device_id` plus `BLE`/`Wi-Fi` transport should map directly onto the future SDK discovery/connection calls.【F:sdk-android/src/main/kotlin/com/smartglass/sdk/rayban/MetaRayBanManager.kt†L14-L38】
-- `capturePhoto()` returns a packaged placeholder bitmap until the SDK camera stream is available, and `startAudioStreaming()` emits a short flow of labeled fake audio chunks to exercise downstream consumers.【F:sdk-android/src/main/kotlin/com/smartglass/sdk/rayban/MetaRayBanManager.kt†L40-L73】
-- Both stub entry points include TODOs marking where real SDK calls and resource teardown will land once Meta publishes the official interfaces.【F:sdk-android/src/main/kotlin/com/smartglass/sdk/rayban/MetaRayBanManager.kt†L20-L52】【F:sdk-android/src/main/kotlin/com/smartglass/sdk/rayban/MetaRayBanManager.kt†L69-L76】
-
-The **demo app buttons** exercise these stubbed hooks end-to-end: **Connect** invokes `MetaRayBanManager.connect` with a placeholder device ID and BLE transport, **Capture** calls `capturePhoto` then posts the saved JPEG through `SmartGlassClient.answer`, and **Send** submits text-only prompts. Each path includes inline TODOs noting where real SDK wiring, image capture, and streaming should be substituted once the bindings are available.【F:sample/src/main/java/com/smartglass/sample/SampleActivity.kt†L28-L104】
-
-When you upgrade to real SDK access, swap the stubbed connect/capture/streaming logic inside `MetaRayBanManager` for the official calls and plumb the **`device_id`/transport** mapping through to the SDK’s discovery options. The demo activity can then forward actual camera frames and microphone streams via `SmartGlassClient` without changing the button UX, keeping the mock path available for CI by leaving the placeholder flows as the fallback.
+- `connect(deviceId, transport)` logs a connection attempt and simulates setup while threading the provided `device_id` and transport so they line up with the Python provider’s SDK-backed calls.【F:sdk-android/src/main/kotlin/com/smartglass/sdk/rayban/MetaRayBanManager.kt†L14-L38】
+- `capturePhoto()` returns a packaged placeholder bitmap until the Android SDK surfaces camera streaming, and `startAudioStreaming()` emits a short flow of labeled fake audio chunks.【F:sdk-android/src/main/kotlin/com/smartglass/sdk/rayban/MetaRayBanManager.kt†L40-L73】
+- TODOs remain in place to swap these mocks for the official Android interfaces; the Python side already wires the same fields through to the `metarayban` package and will continue to fall back to deterministic fixtures when the SDK is unavailable or raises.【F:sdk-android/src/main/kotlin/com/smartglass/sdk/rayban/MetaRayBanManager.kt†L20-L52】【F:sdk-android/src/main/kotlin/com/smartglass/sdk/rayban/MetaRayBanManager.kt†L69-L76】
 
 ---
 

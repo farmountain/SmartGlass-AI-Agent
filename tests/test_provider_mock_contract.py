@@ -3,10 +3,71 @@
 from __future__ import annotations
 
 from itertools import islice
+import sys
 import types
 
 import numpy as np
 import pytest
+
+sys.modules.setdefault(
+    "whisper",
+    types.SimpleNamespace(
+        load_model=lambda *_, **__: types.SimpleNamespace(
+            transcribe=lambda *a, **k: {}, transcribe_realtime=lambda *a, **k: ""
+        )
+    ),
+)
+sys.modules.setdefault("torch", types.SimpleNamespace(cuda=types.SimpleNamespace(is_available=lambda: False)))
+sys.modules.setdefault("soundfile", types.SimpleNamespace(read=lambda *_, **__: ([0.0], 16000)))
+class _DummySessionManager:
+    def __init__(self, *_, **__):
+        self.created = []
+
+    def create_session(self):
+        self.created.append(True)
+        return "dummy-session"
+
+    def ingest_audio(self, *_, **__):
+        return None
+
+
+edge_runtime_module = types.ModuleType("src.edge_runtime")
+edge_runtime_module.load_config_from_env = lambda *_, **__: {}
+edge_runtime_module.SessionManager = _DummySessionManager
+session_manager_module = types.ModuleType("src.edge_runtime.session_manager")
+session_manager_module.SessionManager = _DummySessionManager
+src_root = sys.modules.setdefault("src", types.ModuleType("src"))
+src_root.__path__ = []  # mark as package
+sys.modules.setdefault("src.edge_runtime", edge_runtime_module)
+sys.modules.setdefault("src.edge_runtime.session_manager", session_manager_module)
+io_module = types.ModuleType("src.io")
+telemetry_module = types.ModuleType("src.io.telemetry")
+telemetry_module.log_metric = lambda *_, **__: None
+io_module.telemetry = telemetry_module
+sys.modules.setdefault("src.io", io_module)
+sys.modules.setdefault("src.io.telemetry", telemetry_module)
+class _DummyModel:
+    @classmethod
+    def from_pretrained(cls, *_, **__):
+        return cls()
+
+    def to(self, *_, **__):
+        return self
+
+
+class _DummyProcessor:
+    @classmethod
+    def from_pretrained(cls, *_, **__):
+        return cls()
+
+
+sys.modules.setdefault(
+    "transformers",
+    types.SimpleNamespace(CLIPProcessor=_DummyProcessor, CLIPModel=_DummyModel),
+)
+_dummy_pil_image = types.SimpleNamespace(Image=type("ImageClass", (), {}))
+sys.modules.setdefault("PIL", types.SimpleNamespace(Image=_dummy_pil_image))
+sys.modules.setdefault("PIL.Image", _dummy_pil_image)
 
 from drivers.providers.mock import MockProvider
 from drivers.providers.meta import MetaRayBanProvider
@@ -89,26 +150,29 @@ def _install_fake_sdk(monkeypatch: pytest.MonkeyPatch) -> types.SimpleNamespace:
         def __init__(self):
             self.calls: list[dict[str, object]] = []
 
-        def render(self, *, card: dict, device_id: str, transport: str):
-            self.calls.append({"card": card, "device_id": device_id, "transport": transport})
-            return {"card": card, "device_id": device_id, "transport": transport, "status": "sdk"}
+        def render(self, *, card: dict, device_id: str, transport: str, api_key: str | None = None):
+            self.calls.append({"card": card, "device_id": device_id, "transport": transport, "api_key": api_key})
+            return {"card": card, "device_id": device_id, "transport": transport, "status": "sdk", "api_key": api_key}
 
     class FakeHaptics:
         def __init__(self):
             self.calls: list[dict[str, object]] = []
 
-        def vibrate(self, *, duration_ms: int, device_id: str, transport: str):
+        def vibrate(self, *, duration_ms: int, device_id: str, transport: str, api_key: str | None = None):
             payload = {
                 "duration_ms": duration_ms,
                 "device_id": device_id,
                 "transport": transport,
+                "api_key": api_key,
                 "status": "sdk",
             }
             self.calls.append(payload)
             return payload
 
-        def buzz(self, *, duration_ms: int, device_id: str, transport: str):
-            return self.vibrate(duration_ms=duration_ms, device_id=device_id, transport=transport)
+        def buzz(self, *, duration_ms: int, device_id: str, transport: str, api_key: str | None = None):
+            return self.vibrate(
+                duration_ms=duration_ms, device_id=device_id, transport=transport, api_key=api_key
+            )
 
     class FakePermissions:
         def __init__(self):
@@ -326,16 +390,37 @@ def test_permissions_request_reports_grants(provider_factory) -> None:
 
 def test_meta_provider_prefers_sdk_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_sdk = _install_fake_sdk(monkeypatch)
-    provider = MetaRayBanProvider(prefer_sdk=True, transport="sdk")
+    provider = MetaRayBanProvider(prefer_sdk=True, transport="sdk", api_key="meta-key")
 
-    with pytest.raises(NotImplementedError):
-        next(provider.iter_frames())
+    camera_frames = list(islice(provider.iter_frames(), 2))
+    assert fake_sdk.camera_calls
+    assert camera_frames[0]["device_id"] == provider._device_id
+    assert camera_frames[0]["transport"] == "sdk"
+    assert camera_frames[0]["format"] == "rgb888"
 
-    with pytest.raises(NotImplementedError):
-        next(provider.iter_audio_chunks())
+    mic_frames = list(islice(provider.iter_audio_chunks(), 2))
+    assert fake_sdk.microphone_calls
+    assert mic_frames[0]["device_id"] == provider._device_id
+    assert mic_frames[0]["format"] == "pcm_float32"
 
     audio_out = provider.get_audio_out()
     assert audio_out is not None
+    response = audio_out.speak("hi")
+    assert response["status"] == "sdk"
+    assert fake_sdk.audio_calls[0]["api_key"] == "meta-key"
 
-    with pytest.raises(NotImplementedError):
-        audio_out.speak("hi")
+
+def test_meta_overlay_and_haptics_pass_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_sdk = _install_fake_sdk(monkeypatch)
+    provider = MetaRayBanProvider(prefer_sdk=True, transport="sdk", api_key="meta-key")
+
+    overlay = provider.get_overlay()
+    assert overlay is not None
+    overlay.render({"title": "sdk"})
+
+    haptics = provider.get_haptics()
+    assert haptics is not None
+    haptics.vibrate(111)
+
+    assert fake_sdk.overlay_calls[0]["api_key"] == "meta-key"
+    assert fake_sdk.haptics_calls[0]["api_key"] == "meta-key"
