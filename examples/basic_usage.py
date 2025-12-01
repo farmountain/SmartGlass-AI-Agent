@@ -2,7 +2,7 @@
 Basic SmartGlass Agent Usage Example
 
 This example demonstrates how to initialize and use the SmartGlass AI Agent
-for basic multimodal interactions.
+for basic multimodal interactions using the pluggable backend interface.
 """
 
 import sys
@@ -19,12 +19,15 @@ def main():
     
     # Initialize the agent
     print("\nInitializing SmartGlass AI Agent...")
+
+    # The provider resolves from PROVIDER (default: mock) when omitted. Pass an
+    # explicit provider string or instance for fine-grained device selection.
+    # Swap the LLM backend by injecting any BaseLLMBackend implementation.
     agent = SmartGlassAgent(
-        whisper_model="base",      # Use 'tiny' for faster processing, 'base' for better accuracy
-        clip_model="openai/clip-vit-base-patch32",
-        gpt2_model="gpt2"
-        # llm_backend defaults to ANN via GPT-2. Pass SNNLLMBackend() to experiment
-        # with the placeholder SNN student implementation while keeping the same API.
+        whisper_model="base",  # Speech model selection
+        clip_model="openai/clip-vit-base-patch32",  # Vision encoder selection
+        llm_backend=SNNLLMBackend(),  # On-device-capable, pluggable backend
+        # provider=os.getenv("PROVIDER", "mock"),
     )
     
     # Display agent information

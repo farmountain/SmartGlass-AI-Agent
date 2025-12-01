@@ -6,32 +6,46 @@ Complete API documentation for all components.
 - [SmartGlassAgent](#smartglassagent)
 - [WhisperAudioProcessor](#whisperaudioprocessor)
 - [CLIPVisionProcessor](#clipvisionprocessor)
-- [GPT2TextGenerator](#gpt2textgenerator)
 
 ---
 
 ## SmartGlassAgent
 
-Main agent class integrating all components.
+Main agent class integrating all components. The public methods are considered
+stable as of v1.0 and are designed around a pluggable language backend and
+provider resolver to avoid breaking downstream applications.
 
 ### Initialization
 
 ```python
+from src.llm_snn_backend import SNNLLMBackend
 from src.smartglass_agent import SmartGlassAgent
 
+# PROVIDER env var controls device/provider selection when `provider` is omitted
+# (default: "mock"). Pass a provider string or instance to override.
 agent = SmartGlassAgent(
     whisper_model: str = "base",
     clip_model: str = "openai/clip-vit-base-patch32",
-    gpt2_model: str = "gpt2",
-    device: Optional[str] = None
+    llm_backend: Optional[BaseLLMBackend] = None,
+    device: Optional[str] = None,
+    provider: Optional[Union[str, BaseProvider]] = None,
+)
+
+# Example: SNN backend + provider resolved from PROVIDER
+agent = SmartGlassAgent(
+    llm_backend=SNNLLMBackend(model_path="artifacts/snn_student/student.pt"),
 )
 ```
 
 **Parameters:**
 - `whisper_model` (str): Whisper model size - 'tiny', 'base', 'small', 'medium', 'large'
 - `clip_model` (str): CLIP model name from HuggingFace
-- `gpt2_model` (str): GPT-2 model name - 'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'
-- `device` (str, optional): Device to run models - 'cuda', 'cpu', or None for auto-detect
+- `llm_backend` (BaseLLMBackend, optional): Language backend implementation. Defaults to the ANN/GPT-2 compatibility path when
+  omitted; inject `SNNLLMBackend` for on-device generation or any custom backend that implements
+  `BaseLLMBackend.generate`.
+- `device` (str, optional): Device hint used by the processors/backends - 'cuda', 'cpu', or None for auto-detect
+- `provider` (str or BaseProvider, optional): Provider name or instance. When omitted, the `PROVIDER` env var is read (default:
+  `"mock"`) and resolved via `drivers.providers.get_provider`.
 
 ### Methods
 
@@ -156,7 +170,8 @@ result = agent.process_multimodal_query(
     audio_input: Optional[Union[str, np.ndarray]] = None,
     image_input: Optional[Union[str, Image.Image, np.ndarray]] = None,
     text_query: Optional[str] = None,
-    language: Optional[str] = None
+    language: Optional[str] = None,
+    provider: Optional[Union[str, BaseProvider]] = None,
 ) -> Dict[str, Any]
 ```
 
@@ -165,32 +180,32 @@ result = agent.process_multimodal_query(
 - `image_input`: Image from smart glasses
 - `text_query`: Direct text query (if no audio)
 - `language`: Language for audio transcription
+- `provider`: Optional override for the active provider (otherwise `SmartGlassAgent` uses the resolver configured at init time).
 
 **Returns:** Dictionary with:
 - `response`: Generated assistant message (string)
 - `actions`: Optional list of structured action dictionaries
 - `raw`: Optional nested payload preserving query, context, and metadata
 
-**Example:**
+**Example (multimodal actions with SNN backend):**
 ```python
+from src.llm_snn_backend import SNNLLMBackend
+from src.smartglass_agent import SmartGlassAgent
+
+# PROVIDER selects the device bridge; defaults to "mock" if unset
+agent = SmartGlassAgent(llm_backend=SNNLLMBackend())
+
 result = agent.process_multimodal_query(
-    audio_input="command.wav",
-    image_input="scene.jpg"
+    text_query="What should I do next?",  # optional audio_input instead
+    image_input="scene.jpg",
 )
 
-# Backward-compatible accessors
-query = result.get("query", "<unknown query>") if isinstance(result, dict) else "<unknown query>"
-visual_context = result.get("visual_context", "<no context>") if isinstance(result, dict) else "<no context>"
-response_text = result.get("response", result) if isinstance(result, dict) else result
+print("Response:", result.get("response"))
+print("Actions:")
+for action in result.get("actions", []):
+    print(" -", action.get("type"), action.get("payload"))
 
-print(f"Query: {query}")
-print(f"Context: {visual_context}")
-print(f"Response: {response_text}")
-
-# Optional structured outputs
-if isinstance(result, dict):
-    print(f"Actions: {result.get('actions', [])}")
-    print(f"Raw payload: {result.get('raw', {})}")
+print("Raw payload keys:", sorted(result.get("raw", {}).keys()))
 ```
 
 ---
@@ -420,131 +435,44 @@ print(description)
 
 ---
 
-## GPT2TextGenerator
+## Language Backends (pluggable)
 
-Text generation using GPT-2.
+Language generation is provided by implementations of `BaseLLMBackend`. The
+SmartGlassAgent API remains stable as of v1.0, allowing backends to be swapped
+without changing application code.
 
-### Initialization
+### SNNLLMBackend (on-device friendly)
 
 ```python
-from src.gpt2_generator import GPT2TextGenerator
+from src.llm_snn_backend import SNNLLMBackend
 
-generator = GPT2TextGenerator(
-    model_name: str = "gpt2",
-    device: Optional[str] = None
+backend = SNNLLMBackend(
+    model_path: str = "artifacts/snn_student/student.pt",  # optional stub fallback
+    device: Optional[str] = None,  # e.g., "cpu" or "cuda" hint
 )
 ```
 
-### Methods
+**Key behaviors:**
+- Uses the saved spiking student checkpoint when available and falls back to a stub for portability.
+- Respects the provided `device` hint but otherwise auto-selects based on environment.
+- Implements `generate(prompt: str, max_tokens: int = 64, **kwargs) -> str`, so it can be dropped into `SmartGlassAgent` via
+  the `llm_backend` parameter.
 
-#### generate_response()
-
-Generate text response based on prompt.
+### Swapping backends
 
 ```python
-responses = generator.generate_response(
-    prompt: str,
-    max_length: int = 100,
-    temperature: float = 0.7,
-    top_p: float = 0.9,
-    top_k: int = 50,
-    num_return_sequences: int = 1,
-    no_repeat_ngram_size: int = 2
-) -> List[str]
-```
+from src.llm_backend import LLMBackend  # ANN baseline
+from src.llm_snn_backend import SNNLLMBackend
+from src.smartglass_agent import SmartGlassAgent
 
-**Parameters:**
-- `prompt`: Input text prompt
-- `max_length`: Maximum length of generated text
-- `temperature`: Sampling temperature (higher = more random)
-- `top_p`: Nucleus sampling parameter
-- `top_k`: Top-k sampling parameter
-- `num_return_sequences`: Number of responses to generate
-- `no_repeat_ngram_size`: Prevent repetition of n-grams
-
-**Returns:** List of generated text responses
-
-**Example:**
-```python
-responses = generator.generate_response(
-    "What is artificial intelligence?",
-    max_length=50,
-    temperature=0.7
+# Use PROVIDER to steer device/provider resolution (default: "mock")
+agent = SmartGlassAgent(
+    llm_backend=SNNLLMBackend(),  # or LLMBackend("student/llama-3.2-3b")
+    provider=None,  # omitting uses drivers.providers.get_provider(os.getenv("PROVIDER", "mock"))
 )
-print(responses[0])
 ```
 
----
-
-#### generate_smart_response()
-
-Generate a smart, context-aware response.
-
-```python
-response = generator.generate_smart_response(
-    user_query: str,
-    context: Optional[str] = None,
-    response_type: str = "helpful"
-) -> str
-```
-
-**Parameters:**
-- `user_query`: User's question or command
-- `context`: Additional context (e.g., "I see a red car")
-- `response_type`: 'helpful', 'informative', or 'conversational'
-
-**Returns:** Generated response text
-
-**Example:**
-```python
-response = generator.generate_smart_response(
-    "What should I do?",
-    context="You are at a crosswalk",
-    response_type="helpful"
-)
-print(response)
-```
-
----
-
-#### summarize_text()
-
-Generate a summary of the given text.
-
-```python
-summary = generator.summarize_text(
-    text: str,
-    max_length: int = 50
-) -> str
-```
-
-**Example:**
-```python
-long_text = "Very long text here..."
-summary = generator.summarize_text(long_text, max_length=30)
-print(summary)
-```
-
----
-
-#### continue_conversation()
-
-Continue a conversation based on history.
-
-```python
-response = generator.continue_conversation(
-    conversation_history: List[str],
-    max_history: int = 3
-) -> str
-```
-
-**Parameters:**
-- `conversation_history`: List of previous exchanges
-- `max_history`: Maximum number of history items to use
-
-**Returns:** Generated response
-
----
+Backends can implement custom kwargs (e.g., temperature or max_tokens) while still exposing the same `generate` interface. This makes it straightforward to migrate between on-device, cloud-hosted, or experimental language models without rewriting the agent or driver wiring. Consult each backend class for supported keyword arguments.
 
 ## Error Handling
 

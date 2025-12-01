@@ -3,7 +3,7 @@
 A multimodal AI assistant for smart glasses integrating:
 - Whisper for speech recognition
 - CLIP for visual understanding
-- GPT-2 for natural language generation
+- Pluggable language backends for natural language generation
 """
 
 from __future__ import annotations
