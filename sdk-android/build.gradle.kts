@@ -66,6 +66,7 @@ dependencies {
 
     testImplementation(kotlin("test"))
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
     testImplementation("com.goterl:lazysodium-java:5.1.0")
     testImplementation("net.java.dev.jna:jna:5.13.0")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")

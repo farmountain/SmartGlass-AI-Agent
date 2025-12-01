@@ -12,9 +12,16 @@
     <string name="connect_glasses">Connect Glasses</string>
     <string name="capture_photo">Capture</string>
     <string name="connecting_glasses">Connecting to glasses…</string>
-    <string name="glasses_connected_stub">Glasses connected (stubbed)</string>
+    <string name="glasses_connected">Glasses connected: %1$s</string>
     <string name="connect_error">Connection failed: %1$s</string>
     <string name="capturing_photo">Capturing photo…</string>
     <string name="capture_failed">No image returned from glasses.</string>
     <string name="capture_error">Capture failed: %1$s</string>
+    <string name="start_audio_stream">Start Audio Stream</string>
+    <string name="stop_audio_stream">Stop Audio Stream</string>
+    <string name="starting_audio_stream">Starting audio stream…</string>
+    <string name="stream_error">Audio streaming failed: %1$s</string>
+    <string name="stream_stopped">Audio stream stopped.</string>
+    <string name="device_id_hint">Meta Ray-Ban device ID</string>
+    <string name="default_device_id">rayban-demo-device</string>
 </resources>
