@@ -7,7 +7,7 @@ A multimodal AI assistant for smart glasses, integrating:
 - **🧠 student: Llama-3.2-3B / Qwen-2.5-3B (Week 10/11 plan)** for natural language generation (legacy GPT-2 path deprecated)
 
 Built for the **Meta Ray-Ban Wayfarer** and similar wearable devices.
-Includes an **18-week learning program** with step-by-step **Google Colab workshops**, and a fully functional modular Python agent (`SmartGlassAgent`) for real-world deployment.
+Includes an **18-week learning program** with step-by-step **Google Colab workshops**, and a fully functional modular Python agent (`SmartGlassAgent`) for real-world deployment. The **SmartGlassAgent** and primary SDK classes are considered **stable as of v1.0**, so downstream apps can rely on their public methods without churn.
 
 📄 Latest weekly doc: [Week 4 Report](docs/WEEK_04.md).
 
@@ -20,7 +20,7 @@ Includes an **18-week learning program** with step-by-step **Google Colab worksh
 - 💬 **Language Generation**: Responses via the student Llama-3.2-3B / Qwen-2.5-3B interim models (GPT-2 deprecated)
 - 🔄 **Multimodal Integration**: Voice + Vision → LLM-powered interaction
 - 🧪 **Google Colab Ready**: Modular 18-week training + live testing
-- 🔧 **Modular Agent SDK**: `SmartGlassAgent` class with clean APIs
+- 🔧 **Modular Agent SDK**: `SmartGlassAgent` class with clean APIs and stable SDK entry points as of v1.0
 
 ---
 
@@ -123,83 +123,38 @@ See [PRIVACY.md](PRIVACY.md) for detailed threat-modeling notes and guidance on 
 
 ### 🔨 Use the Agent in Python
 
-The agent now consumes any backend implementing `src.llm_backend_base.BaseLLMBackend` so you can swap language generators without touching the agent logic.
+The agent now consumes any backend implementing `src.llm_backend_base.BaseLLMBackend` so you can swap language generators without touching the agent logic. The built-in `SNNLLMBackend` exposes the same interface for on-device, spiking-friendly generation, while the ANN/GPT-2 adapter remains available for comparison.
 
-**GPT-2 (ANN) backend via `BaseLLMBackend`:**
-
-```python
-from src.gpt2_generator import GPT2Backend
-from src.smartglass_agent import SmartGlassAgent
-
-gpt2_backend = GPT2Backend(model_name="gpt2")
-
-agent = SmartGlassAgent(
-    whisper_model="base",
-    clip_model="openai/clip-vit-base-patch32",
-    llm_backend=gpt2_backend,
-)
-
-print(
-    agent.generate_response(
-        user_query="What am I looking at?",
-        visual_context="A street sign next to a coffee shop",
-    )
-)
-```
-
-**SNN student backend via the same interface:**
+**Action-aware multimodal query with the SNN backend (on-device capable):**
 
 ```python
+import os
+
 from src.llm_snn_backend import SNNLLMBackend
 from src.smartglass_agent import SmartGlassAgent
 
+# Runs fully on-device when the spiking student checkpoint is present
 snn_backend = SNNLLMBackend(model_path="artifacts/snn_student/student.pt")
-
-snn_agent = SmartGlassAgent(
-    whisper_model="base",
-    clip_model="openai/clip-vit-base-patch32",
-    llm_backend=snn_backend,
-)
-
-print(
-    snn_agent.generate_response(
-        user_query="Summarize what you see",
-        visual_context="Indoor bookshelf with fiction and travel guides",
-    )
-)
-```
-
-**Inspect multimodal outputs from the agent:**
-
-```python
-from src.smartglass_agent import SmartGlassAgent
 
 agent = SmartGlassAgent(
     whisper_model="base",
     clip_model="openai/clip-vit-base-patch32",
+    llm_backend=snn_backend,
+    provider=os.getenv("PROVIDER", "mock"),  # honors PROVIDER env var
 )
 
 result = agent.process_multimodal_query(
-    text_query="Describe the scene and suggest an action",
+    text_query="Describe the scene and propose next steps",
     image_input="A person standing next to a bicycle",
 )
 
-# Backward-compatible extraction of the generated reply
-response_text = result.get("response", result) if isinstance(result, dict) else result
-print("response:", response_text)
-
-# Optional structured outputs
-actions = result.get("actions", []) if isinstance(result, dict) else []
-raw_payload = result.get("raw", {}) if isinstance(result, dict) else {}
-print("actions:", actions)
-print("raw:", raw_payload)
-
-# Actions can be inspected further
-for action in actions:
-    print(action.get("type"), action.get("payload"))
+print("response:", result["response"])
+print("actions:")
+for action in result["actions"]:
+    print(" -", action.get("type"), action.get("payload"))
 ```
 
-See [Action schema and RaySkillKit mapping](docs/actions_and_skills.md) for the structured envelope, sample payloads, and how to bind each `action` entry to a concrete skill implementation.
+See [Action schema and RaySkillKit mapping](docs/actions_and_skills.md) for the structured envelope, sample payloads, and how to bind each `action` entry to a concrete skill implementation. The same `process_multimodal_query` shape applies to any `BaseLLMBackend`, so swapping in cloud backends or the ANN GPT-2 adapter continues to return action-aware responses while `SNNLLMBackend` keeps generation entirely on-device when the checkpoint is available.
 
 #### CLI demo
 
@@ -390,26 +345,26 @@ loop entirely offline-friendly.
 
 ## 🧭 18-Week Learning Journey (Google Colab Curriculum)
 
-| Week | Module                                                                                        |
-| ---- | -------------------------------------------------------------------------------------------   |
-| 1    | [Multimodal Basics: Whisper + CLIP + GPT](colab_notebooks/Session1_Multimodal_Basics.ipynb)   |
-| 2    | [Wake Words with Whisper](colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)       |
-| 3    | [Scene Description with Vision-Language Models](colab_notebooks/Session3_Scene_Description_CLIP.ipynb)                                                |
-| 4    | [Intent Detection + Prompt Engineering](colab_notebooks/Session4_Intent_Detection_Prompt_Engineering.ipynb)                                                        |
-| 5    | [Meta Ray-Ban SDK Simulation](colab_notebooks/Session5_Meta_RayBan_SDK_Simulation.ipynb)                                                                  |
-| 6    | [Real-Time Audio Streaming](colab_notebooks/Session6_RealTime_Audio_Streaming.ipynb)                                                                   |
-| 7    | [Visual OCR and Translation](ccolab_notebooks/Session7_Visual_OCR_and_Translation.ipynb)                                                                   |
-| 8    | [Domain-Specific Voice Commands](colab_notebooks/Session8_Domain_Specific_Voice_Commands.ipynb)                                                              |
-| 9    | [On-Device Tiny Models (CPU)](colab_notebooks/Session9_On_Device_Tiny_Models_CPU.ipynb)                                                                 |
-| 10   | [Caching & Optimization](colab_notebooks/Session10_Caching_Optimization.ipynb)                                                                      |
-| 11   | [Mobile UI/UX Considerations](colab_notebooks/Session11_Mobile_UI_UX.ipynb)                                                                 |
-| 12   | [Meta Ray-Ban Deployment Flow](colab_notebooks/Session12_Meta_RayBan_Deployment.ipynb)                                                                |
-| 13   | [Use Case: Healthcare](colab_notebooks/Session13_Healthcare_UseCase.ipynb)                                                                        |
-| 14   | [Use Case: Retail](to be continued)                                                                            |
-| 15   | [Use Case: Travel Assistant](To be continued)                                                                  |
-| 16   | [Use Case: Security Agent](to be continued)                                                                    |
-| 17   | [Assemble End-to-End Glass Agent](to be continued)                                                             |
-| 18   | [Pitch Deck + Commercial Demo](For private use only)                                                                |
+| Week | Module                                                                                                    |
+| ---- | --------------------------------------------------------------------------------------------------------- |
+| 1    | [Multimodal Basics: Whisper + CLIP + GPT](colab_notebooks/Session1_Multimodal_Basics.ipynb)               |
+| 2    | [Wake Words with Whisper](colab_notebooks/Session2_WakeWord_Detector_WhisperOnly.ipynb)                   |
+| 3    | [Scene Description with Vision-Language Models](colab_notebooks/Session3_Scene_Description_CLIP.ipynb)    |
+| 4    | [Intent Detection + Prompt Engineering](colab_notebooks/Session4_Intent_Detection_Prompt_Engineering.ipynb)|
+| 5    | [Meta Ray-Ban SDK Simulation](colab_notebooks/Session5_Meta_RayBan_SDK_Simulation.ipynb)                  |
+| 6    | [Real-Time Audio Streaming](colab_notebooks/Session6_RealTime_Audio_Streaming.ipynb)                      |
+| 7    | [Visual OCR and Translation](colab_notebooks/Session7_Visual_OCR_and_Translation.ipynb)                   |
+| 8    | [Domain-Specific Voice Commands](colab_notebooks/Session8_Domain_Specific_Voice_Commands.ipynb)           |
+| 9    | [On-Device Tiny Models (CPU)](colab_notebooks/Session9_On_Device_Tiny_Models_CPU.ipynb)                   |
+| 10   | [Caching & Optimization](colab_notebooks/Session10_Caching_Optimization.ipynb)                            |
+| 11   | [Mobile UI/UX Considerations](colab_notebooks/Session11_Mobile_UI_UX.ipynb)                               |
+| 12   | [Meta Ray-Ban Deployment Flow](colab_notebooks/Session12_Meta_RayBan_Deployment.ipynb)                    |
+| 13   | [Use Case: Healthcare](colab_notebooks/Session13_Healthcare_UseCase.ipynb)                                |
+| 14   | [SNN Student Distillation & Edge Eval](ANN_Llm2SNN.ipynb)                                                  |
+| 15   | [Android Integration & Client Walkthrough](SmartGlass_AI_Agent_Meta_RayBan.ipynb)                          |
+| 16   | [Advanced SmartGlass Agent Orchestration](SmartGlass_AI_Agent_Advanced.ipynb)                             |
+| 17   | [Action Mapping with RaySkillKit](docs/actions_and_skills.md)                                              |
+| 18   | [Pitch Deck + Commercial Demo](roadmap.md)                                                                 |
 
 See [`roadmap.md`](roadmap.md) for full breakdown.
 
@@ -435,19 +390,16 @@ See [`roadmap.md`](roadmap.md) for full breakdown.
 
 ```plaintext
 SmartGlass-AI-Agent/
-├── colab_notebooks/         # 18-week training notebooks
-├── src/
-│   ├── whisper_processor.py
-│   ├── clip_vision.py
-│   ├── gpt2_generator.py
-│   └── smartglass_agent.py
-├── examples/                # Domain-specific demos
-├── audio_samples/           # Wake word and command audio
-├── images/                  # Architecture diagrams
-├── requirements.txt
-├── roadmap.md
-├── LICENSE
-├── NOTICE
+├── colab_notebooks/    # 18-week training notebooks and end-to-end labs
+├── docs/               # Architecture notes, integration guides, privacy docs
+├── drivers/            # Provider implementations (see drivers/providers)
+├── examples/           # Domain-specific demos and CLIs
+├── rayskillkit/        # Skill registry and artifacts
+├── scripts/            # Training, packaging, and utility scripts
+├── sdk-android/        # Kotlin/Android SDK (stable APIs as of v1.0)
+├── sdk_python/         # Python SDK facade (mirrors src/ agent APIs)
+├── src/                # Core SmartGlassAgent implementation and backends
+├── tests/              # Automated regression suite
 └── README.md
 ```
 
