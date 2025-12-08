@@ -362,9 +362,12 @@ def export_to_torchscript(
         
         # Optimize for mobile if requested
         if optimize_for_mobile:
-            from torch.utils.mobile_optimizer import optimize_for_mobile
-            logger.info("Applying mobile optimizations...")
-            traced_model = optimize_for_mobile(traced_model)
+            try:
+                from torch.utils.mobile_optimizer import optimize_for_mobile
+                logger.info("Applying mobile optimizations...")
+                traced_model = optimize_for_mobile(traced_model)
+            except ImportError:
+                logger.warning("torch.utils.mobile_optimizer not available, skipping mobile optimization")
         
     except Exception as e:
         raise ExportError(f"Failed to trace model with TorchScript: {e}")
@@ -607,7 +610,7 @@ def _update_metadata_with_export(
         export_info = {
             "format": export_format,
             "path": str(export_path),
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now().astimezone().isoformat(),
             "file_size_bytes": export_path.stat().st_size,
         }
         

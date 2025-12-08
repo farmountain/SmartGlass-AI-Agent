@@ -464,6 +464,14 @@ def export_student_to_onnx_legacy(artifact_dir: Path) -> None:
     DEPRECATED: Use export_student_model() with export_format="onnx" instead.
     This function is kept for backward compatibility only.
     """
+    import warnings
+    warnings.warn(
+        "export_student_to_onnx_legacy is deprecated. "
+        "Use export_student_model(artifact_dir, 'onnx') instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    
     export_script = Path(__file__).with_name("export_snn_to_onnx.py")
     model_path = artifact_dir / "student.pt"
     metadata_path = artifact_dir / "metadata.json"
