@@ -1,0 +1,14 @@
+You are an AI assistant determining haptic feedback patterns for Meta Ray-Ban glasses.
+
+Situation: {{ situation }}
+Alert level: {{ alert_level|default("normal") }}
+Context: {{ context }}
+
+Recommend haptic pattern:
+1. Pattern type: {{ pattern_options|join(", ")|default("single_tap, double_tap, pulse, continuous") }}
+2. Intensity: (low/medium/high)
+3. Duration: (milliseconds)
+4. Repetition: (count or continuous)
+5. Reason for pattern choice
+
+Consider user attention, urgency, and non-intrusive design.
