@@ -8,6 +8,12 @@ and gradient accumulation.
 Supports larger teachers like Llama-3.2-3B and Qwen-2.5-3B with configurable
 SNN hyperparameters, learning rate schedules, and comprehensive metadata tracking.
 
+Export for Mobile:
+  Use --export-format to export trained models for mobile deployment:
+  - torchscript: PyTorch Mobile runtime (Android/iOS)
+  - onnx: ONNX Runtime Mobile (cross-platform)
+  - none: Skip export (default)
+
 Example usage:
   # Demo with tiny teacher (Colab-friendly)
   python scripts/train_snn_student.py \\
@@ -15,7 +21,7 @@ Example usage:
     --dataset synthetic \\
     --num-steps 50
 
-  # Production training with Llama-3.2-3B
+  # Production training with Llama-3.2-3B and mobile export
   python scripts/train_snn_student.py \\
     --teacher-model meta-llama/Llama-3.2-3B \\
     --dataset wikitext-2 \\
@@ -28,7 +34,8 @@ Example usage:
     --warmup-steps 500 \\
     --snn-timesteps 8 \\
     --snn-surrogate fast_sigmoid \\
-    --snn-threshold 0.5
+    --snn-threshold 0.5 \\
+    --export-format torchscript
 """
 
 from __future__ import annotations
@@ -82,7 +89,7 @@ class TrainConfig:
     device: str
     max_length: int
     temperature: float
-    export_onnx: bool
+    export_format: str  # none, torchscript, onnx
     
     # Learning rate schedule
     scheduler: str = "constant"  # constant, cosine, linear
@@ -93,6 +100,9 @@ class TrainConfig:
     
     # Metadata tracking
     track_git_commit: bool = True
+    
+    # Backward compatibility
+    export_onnx: bool = False  # Deprecated: use export_format instead
 
 
 # ------------------------ Teacher utilities ------------------------
@@ -393,9 +403,75 @@ def create_lr_scheduler(optimizer, config: TrainConfig):
         raise ValueError(f"Unknown scheduler type: {config.scheduler}")
 
 
-def export_student_to_onnx(artifact_dir: Path) -> None:
-    """Export the trained student checkpoint to ONNX using the helper script."""
+def export_student_model(artifact_dir: Path, export_format: str, max_length: int = 64) -> None:
+    """Export the trained student model using the new export module.
+    
+    Args:
+        artifact_dir: Directory containing student.pt and metadata.json
+        export_format: Export format ("none", "torchscript", "onnx")
+        max_length: Example sequence length for export (default: 64)
+    """
+    if export_format == "none":
+        return
+    
+    try:
+        # Import from new export module
+        from src.snn_export import export_to_torchscript, export_to_onnx
+        import torch
+        
+        print(f"\nExporting model in {export_format} format...")
+        
+        # Create example inputs for export (use smaller sequence for tracing)
+        example_seq_len = min(4, max_length)  # Use small sequence for export
+        example_inputs = {
+            "input_ids": torch.zeros((1, example_seq_len), dtype=torch.long)
+        }
+        
+        exports_dir = artifact_dir / "exports"
+        exports_dir.mkdir(parents=True, exist_ok=True)
+        
+        if export_format == "torchscript":
+            output_path = exports_dir / "student_mobile.pt"
+            export_to_torchscript(
+                output_path=str(output_path),
+                example_inputs=example_inputs,
+                model_path=str(artifact_dir / "student.pt"),
+                metadata_path=str(artifact_dir / "metadata.json"),
+            )
+            print(f"✓ Exported TorchScript model: {output_path}")
+            
+        elif export_format == "onnx":
+            output_path = exports_dir / "student.onnx"
+            export_to_onnx(
+                output_path=str(output_path),
+                example_inputs=example_inputs,
+                model_path=str(artifact_dir / "student.pt"),
+                metadata_path=str(artifact_dir / "metadata.json"),
+            )
+            print(f"✓ Exported ONNX model: {output_path}")
+            
+    except ImportError as e:
+        print(f"Warning: Failed to import export module: {e}")
+        print("Skipping export. Ensure src/snn_export.py is available.")
+    except Exception as e:
+        print(f"Warning: Model export failed: {e}")
+        print(f"Training artifacts are still available at {artifact_dir}")
 
+
+def export_student_to_onnx_legacy(artifact_dir: Path) -> None:
+    """Export the trained student checkpoint to ONNX using legacy script.
+    
+    DEPRECATED: Use export_student_model() with export_format="onnx" instead.
+    This function is kept for backward compatibility only.
+    """
+    import warnings
+    warnings.warn(
+        "export_student_to_onnx_legacy is deprecated. "
+        "Use export_student_model(artifact_dir, 'onnx') instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    
     export_script = Path(__file__).with_name("export_snn_to_onnx.py")
     model_path = artifact_dir / "student.pt"
     metadata_path = artifact_dir / "metadata.json"
@@ -531,9 +607,15 @@ def train(config: TrainConfig):
     }
     (artifact_dir / "metadata.json").write_text(json.dumps(metadata, indent=2))
     
-    if config.export_onnx:
-        print("Exporting ONNX artifact...")
-        export_student_to_onnx(artifact_dir)
+    # Handle export (new format or legacy flag)
+    export_fmt = config.export_format
+    if config.export_onnx and export_fmt == "none":
+        # Backward compatibility: --export-onnx flag
+        print("Note: --export-onnx is deprecated, use --export-format onnx instead")
+        export_fmt = "onnx"
+    
+    if export_fmt != "none":
+        export_student_model(artifact_dir, export_fmt, config.max_length)
 
     print(f"\nTraining complete!")
     print(f"  Steps: {global_step}")
@@ -542,6 +624,9 @@ def train(config: TrainConfig):
     print(f"  Artifacts: {artifact_dir}")
     if git_commit:
         print(f"  Git commit: {git_commit[:8]}")
+    if export_fmt != "none":
+        exports_dir = artifact_dir / "exports"
+        print(f"  Exports: {exports_dir}")
 
 
 # ------------------------ Entry point ------------------------
@@ -605,9 +690,17 @@ Examples:
         help="Directory for artifacts (default: artifacts/snn_student)",
     )
     parser.add_argument(
+        "--export-format",
+        type=str,
+        default="none",
+        choices=["none", "torchscript", "onnx"],
+        help="Export format for mobile deployment (default: none). "
+             "Use 'torchscript' for PyTorch Mobile or 'onnx' for ONNX Runtime Mobile.",
+    )
+    parser.add_argument(
         "--export-onnx",
         action="store_true",
-        help="Export the trained student to ONNX using export_snn_to_onnx.py",
+        help="DEPRECATED: Use --export-format onnx instead. Export the trained student to ONNX.",
     )
     
     # Training hyperparameters
@@ -727,7 +820,8 @@ Examples:
         device=args.device,
         max_length=args.max_length,
         temperature=args.temperature,
-        export_onnx=args.export_onnx,
+        export_format=args.export_format,
+        export_onnx=args.export_onnx,  # Kept for backward compatibility
         scheduler=args.scheduler,
         warmup_steps=args.warmup_steps,
         snn_config=snn_config,

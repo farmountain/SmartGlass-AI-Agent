@@ -91,36 +91,32 @@ python scripts/train_snn_student.py \
 ### Metadata and Logging
 - `--log-interval`: Steps between loss logs, 0 to disable (default: 5).
 - `--no-git-tracking`: Disable git commit tracking in metadata.
-- `--export-onnx`: Export the trained student to ONNX after training.
+- `--export-format {none,torchscript,onnx}`: Export format for mobile deployment (default: none).
+  - `none`: Skip export (default for faster training iterations)
+  - `torchscript`: Export for PyTorch Mobile runtime (Android/iOS)
+  - `onnx`: Export for ONNX Runtime Mobile (cross-platform)
+- `--export-onnx`: DEPRECATED - Use `--export-format onnx` instead.
 
 During training, the teacher is kept in eval mode and only the student updates. Loss logs appear every `--log-interval` steps.
 
 ## Artifact layout
-After finishing the requested steps, the script writes two files under `--output-dir` (created if missing):
+After finishing the requested steps, the script writes artifacts under `--output-dir` (created if missing):
 
 - `student.pt`: The student weights. Saved with `torch.save` state dict.
-- `metadata.json`: A comprehensive JSON blob with:
-  - `model_type`: Student class name (e.g., `SpikingStudentLM`).
-  - `architecture_version`: Student architecture version string.
-  - `vocab_size`: Teacher tokenizer vocabulary size.
-  - `student_params`: Parameter count for the student.
-  - `architecture`: Student model architecture details (dim, depth, num_heads).
-  - `snn_config`: SNN-specific hyperparameters (num_timesteps, surrogate_type, spike_threshold).
-  - `training_config`: Comprehensive training hyperparameters including:
-    - steps, batch_size, grad_accum_steps
-    - teacher_model name
-    - lr, scheduler, warmup_steps
-    - temperature, dataset, max_length
-  - `config`: Full CLI arguments after parsing.
-  - `training_results`: Training outcomes (steps, avg_loss).
-  - `metadata`: Timestamps and git commit hash for reproducibility.
+- `metadata.json`: A comprehensive JSON blob with model configuration, training hyperparameters, and results.
+- `exports/` (optional): Mobile export artifacts (created when using `--export-format`)
+  - `student_mobile.pt`: TorchScript model for PyTorch Mobile
+  - `student.onnx`: ONNX model for ONNX Runtime Mobile
 
-Example tree (with a custom output directory):
+Example tree (with exports):
 
 ```
 artifacts/snn_student_llama/
 ├── metadata.json
-└── student.pt
+├── student.pt
+└── exports/
+    ├── student_mobile.pt  (TorchScript)
+    └── student.onnx       (ONNX)
 ```
 
 Example metadata.json structure:
@@ -159,7 +155,15 @@ Example metadata.json structure:
   "metadata": {
     "timestamp": "2024-12-08T11:46:46.042Z",
     "git_commit": "4756416a"
-  }
+  },
+  "exports": [
+    {
+      "format": "torchscript",
+      "path": "artifacts/snn_student_llama/exports/student_mobile.pt",
+      "timestamp": "2024-12-08T12:30:15.123Z",
+      "file_size_bytes": 1048576
+    }
+  ]
 }
 ```
 
@@ -212,23 +216,182 @@ The current `SpikingStudentLM` architecture is designed for demonstrations with 
 
 See the TODO comments in `scripts/train_snn_student.py` for specific architecture improvement suggestions.
 
-## Exporting to ONNX
-You can produce an ONNX artifact alongside the PyTorch checkpoint for deployment to lightweight runtimes:
+## Exporting for mobile deployment
 
-- Add `--export-onnx` to the training command to automatically call the exporter and write `student.onnx` next to `student.pt` and `metadata.json`. The flag wraps `scripts/export_snn_to_onnx.py`, which rebuilds the `SpikingStudentLM`, loads `student.pt`, and exports with dynamic sequence length for `input_ids`/`logits`.
-- Or run the exporter manually if you trained earlier:
+The training script supports exporting trained models for mobile deployment using `--export-format`:
 
-  ```bash
-  python scripts/export_snn_to_onnx.py \
-    --model-path artifacts/snn_student_llama/student.pt \
-    --metadata-path artifacts/snn_student_llama/metadata.json \
-    --output-path artifacts/snn_student_llama/student.onnx
-  ```
+### TorchScript Export (PyTorch Mobile)
 
-## Consuming ONNX on mobile
-- Package `student.onnx` with your mobile client (e.g., copy into Android assets or an iOS bundle) and load it with ONNX Runtime Mobile or another ONNX-compatible runtime that supports opset 17. The exported graph expects `input_ids` shaped `[batch, seq_len]` and produces `logits` with a matching dynamic `seq_len` dimension.
-- Reuse the tokenizer configuration from `metadata.json` to ensure the mobile client tokenizes text identically to training. The same vocab size is embedded in the ONNX export, so tokenizer/token-to-id parity is required for correct logits.
-- For on-device deployment, consider using quantized ONNX models (INT8) to meet the <100mW power target and <50ms latency requirements.
+TorchScript provides seamless integration with PyTorch Mobile runtime on Android/iOS:
+
+```bash
+# During training
+python scripts/train_snn_student.py \
+  --teacher-model meta-llama/Llama-3.2-3B \
+  --dataset wikitext-2 \
+  --num-steps 10000 \
+  --export-format torchscript \
+  --output-dir artifacts/snn_student_llama
+
+# Or export separately using src/snn_export.py
+python -c "
+from src.snn_export import load_and_export
+load_and_export('artifacts/snn_student_llama', export_formats=['torchscript'])
+"
+```
+
+**Mobile Integration:**
+
+Android (Java):
+```java
+// Load TorchScript model
+Module module = LiteModuleLoader.load("student_mobile.pt");
+
+// Prepare input (tokenized text)
+long[] inputIds = {101, 2054, 2003, 102};
+Tensor inputTensor = Tensor.fromBlob(inputIds, new long[]{1, 4});
+
+// Run inference
+IValue output = module.forward(IValue.from(inputTensor));
+Tensor logits = output.toTensor();  // [1, 4, vocab_size]
+```
+
+iOS (Swift):
+```swift
+// Load TorchScript model
+guard let module = try? TorchModule(fileAtPath: modelPath) else { return }
+
+// Prepare input
+let inputIds: [Int64] = [101, 2054, 2003, 102]
+let inputTensor = Tensor(shape: [1, 4], data: inputIds)
+
+// Run inference
+guard let outputTensor = module.forward(inputTensor) else { return }
+```
+
+### ONNX Export (Cross-Platform)
+
+ONNX provides broader runtime support including ONNX Runtime Mobile, TensorFlow Lite, and CoreML:
+
+```bash
+# During training
+python scripts/train_snn_student.py \
+  --teacher-model meta-llama/Llama-3.2-3B \
+  --dataset wikitext-2 \
+  --num-steps 10000 \
+  --export-format onnx \
+  --output-dir artifacts/snn_student_llama
+
+# Or export separately
+python -c "
+from src.snn_export import load_and_export
+load_and_export('artifacts/snn_student_llama', export_formats=['onnx'])
+"
+```
+
+**Mobile Integration:**
+
+Android (ONNX Runtime):
+```java
+// Load ONNX model
+OrtEnvironment env = OrtEnvironment.getEnvironment();
+OrtSession session = env.createSession(modelPath);
+
+// Prepare input
+long[] inputIds = {101, 2054, 2003, 102};
+long[] shape = {1, 4};
+OnnxTensor inputTensor = OnnxTensor.createTensor(env, 
+    LongBuffer.wrap(inputIds), shape);
+
+// Run inference
+Map<String, OnnxTensor> inputs = Map.of("input_ids", inputTensor);
+OrtSession.Result output = session.run(inputs);
+float[][][] logits = (float[][][]) output.get(0).getValue();
+```
+
+iOS (ONNX Runtime):
+```swift
+// Load ONNX model
+let env = try ORTEnv(loggingLevel: .warning)
+let session = try ORTSession(env: env, modelPath: modelPath)
+
+// Prepare input
+let inputIds: [Int64] = [101, 2054, 2003, 102]
+let shape = [1, 4]
+let inputTensor = try ORTValue(tensorData: Data(...), 
+                              elementType: .int64, shape: shape)
+
+// Run inference
+let outputs = try session.run(withInputs: ["input_ids": inputTensor])
+let logits = outputs["logits"]
+```
+
+### Export Configuration
+
+The export utilities (`src/snn_export.py`) provide comprehensive validation and error handling:
+
+- **Shape validation**: Ensures input tensors have correct shape [batch, seq_len]
+- **Vocabulary validation**: Checks tokens are within valid range [0, vocab_size)
+- **SNN-specific handling**: Documents timestep dimensions and stateful layer considerations
+- **Defensive errors**: Meaningful error messages for common issues
+
+Example programmatic export:
+```python
+from src.snn_export import export_to_torchscript, export_to_onnx
+import torch
+
+# Create example inputs
+example_inputs = {"input_ids": torch.zeros((1, 4), dtype=torch.long)}
+
+# Export TorchScript
+export_to_torchscript(
+    output_path="artifacts/snn_student/exports/student_mobile.pt",
+    example_inputs=example_inputs
+)
+
+# Export ONNX
+export_to_onnx(
+    output_path="artifacts/snn_student/exports/student.onnx",
+    example_inputs=example_inputs
+)
+```
+
+### Legacy ONNX Export
+
+The old `--export-onnx` flag and `scripts/export_snn_to_onnx.py` are deprecated but still work for backward compatibility:
+
+```bash
+# Deprecated (still works)
+python scripts/train_snn_student.py --export-onnx ...
+
+# Preferred
+python scripts/train_snn_student.py --export-format onnx ...
+```
+
+## Mobile deployment considerations
+
+### Tokenizer Compatibility
+- Package `student.onnx` or `student_mobile.pt` with your mobile client (e.g., copy into Android assets or an iOS bundle).
+- Reuse the tokenizer configuration from `metadata.json` to ensure the mobile client tokenizes text identically to training.
+- The same vocab size is embedded in the exported models, so tokenizer/token-to-id parity is required for correct logits.
+
+### Performance Optimization
+- For on-device deployment, consider using quantized models (INT8) to meet the <100mW power target and <50ms latency requirements.
+- Use batch size of 1 for mobile inference to minimize memory usage.
+- Pre-tokenize inputs on device to match training tokenizer vocab_size.
+
+### SNN-Specific Considerations
+
+1. **Timesteps Dimension**: Current SNN implementation processes sequence-level spikes without explicit timestep dimension. Models operate on [batch, seq_len] inputs, producing [batch, seq_len, vocab_size] outputs.
+
+2. **Stateful Layers**: SpikingActivation uses surrogate gradients (sigmoid, fast_sigmoid, triangular, arctan) which are stateless during inference - no hidden state reset needed between sequences.
+
+3. **Mobile Optimization**: Exported models are in eval mode to remove training-only operations. Consider quantization-aware training for INT8 deployment.
+
+4. **Performance Targets**:
+   - Latency: <50ms per inference on mobile devices
+   - Power: <100mW during active inference
+   - Model size: <5MB (student only, compressed)
 
 ## Best practices
 

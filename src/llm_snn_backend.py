@@ -1,4 +1,51 @@
-"""Backend placeholder for on-device SNN student models."""
+"""Backend placeholder for on-device SNN student models.
+
+This backend loads trained SNN student models from artifacts/snn_student or a custom directory.
+It supports loading both PyTorch checkpoints (.pt) and exported mobile formats (TorchScript, ONNX).
+
+Mobile Export Integration:
+    The trained models can be exported for mobile deployment using src/snn_export.py:
+    
+    1. TorchScript (PyTorch Mobile runtime):
+       - Export: --export-format torchscript during training
+       - Runtime: PyTorch Mobile (Android/iOS)
+       - File: exports/student_mobile.pt
+       - Load: torch.jit.load()
+    
+    2. ONNX (ONNX Runtime Mobile):
+       - Export: --export-format onnx during training
+       - Runtime: ONNX Runtime Mobile (cross-platform)
+       - File: exports/student.onnx
+       - Load: onnxruntime.InferenceSession()
+    
+    For Android/iOS integration, see docs/snn_pipeline.md "Exporting for mobile deployment" section.
+
+Loading Behavior:
+    - By default, loads from artifacts/snn_student/student.pt
+    - Tries TorchScript first (torch.jit.load), then falls back to state dict (torch.load)
+    - Supports loading exported models: SNNLLMBackend(model_path="artifacts/snn_student/exports/student_mobile.pt")
+    - Metadata from metadata.json provides model architecture, SNN config, and tokenizer hints
+
+Example:
+    >>> from src.llm_snn_backend import SNNLLMBackend
+    >>> 
+    >>> # Load from default location
+    >>> backend = SNNLLMBackend()
+    >>> 
+    >>> # Load from custom location
+    >>> backend = SNNLLMBackend(
+    ...     model_path="artifacts/snn_student_llama/student.pt",
+    ...     metadata_path="artifacts/snn_student_llama/metadata.json"
+    ... )
+    >>> 
+    >>> # Load exported TorchScript model
+    >>> backend = SNNLLMBackend(
+    ...     model_path="artifacts/snn_student/exports/student_mobile.pt"
+    ... )
+    >>> 
+    >>> # Generate text
+    >>> response = backend.generate("Hello from glasses", max_tokens=32)
+"""
 
 from __future__ import annotations
 
