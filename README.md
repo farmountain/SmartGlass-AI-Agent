@@ -143,17 +143,39 @@ See [PRIVACY.md](PRIVACY.md) for detailed threat-modeling notes and guidance on 
 
 ## 🧑‍🏫➡️🧠 Teacher–Student SNN Pipeline (Concise)
 
-- **Pipeline:** `scripts/train_snn_student.py` distills a transformer teacher into a spiking-friendly student with temperature-scaled KD and gradient accumulation so it can run in constrained Colab-style environments.【F:scripts/train_snn_student.py†L1-L208】
-- **Artifacts:** Training writes `student.pt` and `metadata.json` under `artifacts/snn_student` by default (override with `--output-dir`).【F:scripts/train_snn_student.py†L224-L236】【F:scripts/train_snn_student.py†L242-L275】
-- **Detailed walkthrough:** See [`docs/snn_pipeline.md`](docs/snn_pipeline.md) for a step-by-step runbook, artifact layout, and how `SNNLLMBackend` consumes the saved files.【F:docs/snn_pipeline.md†L1-L77】
-- **Launch training:**
+- **Pipeline:** `scripts/train_snn_student.py` distills transformer teachers (from tiny GPT-2 to Llama-3.2-3B/Qwen-2.5-3B) into spiking-friendly students with configurable SNN hyperparameters, LR scheduling, and temperature-scaled KD. Designed for both quick Colab demos and production training.
+- **Configuration:** Supports SNN timesteps, surrogate gradients (sigmoid, fast_sigmoid, triangular, arctan), spike thresholds, LR schedulers (constant, cosine, linear), and comprehensive metadata tracking with git commit hashes.
+- **Artifacts:** Training writes `student.pt` and `metadata.json` under `artifacts/snn_student` by default (override with `--output-dir`).
+- **Documentation:**
+  - Step-by-step guide: [`docs/snn_pipeline.md`](docs/snn_pipeline.md)
+  - CLI examples: [`docs/snn_training_examples.md`](docs/snn_training_examples.md)
+- **Launch training (demo):**
 
   ```bash
   python scripts/train_snn_student.py \
     --teacher-model sshleifer/tiny-gpt2 \
+    --dataset synthetic \
     --num-steps 50 \
     --batch-size 4 \
     --output-dir artifacts/snn_student_demo
+  ```
+
+- **Launch training (production with Llama-3.2-3B):**
+
+  ```bash
+  python scripts/train_snn_student.py \
+    --teacher-model meta-llama/Llama-3.2-3B \
+    --dataset wikitext-2 \
+    --num-steps 10000 \
+    --batch-size 4 \
+    --grad-accum-steps 8 \
+    --max-length 512 \
+    --lr 3e-4 \
+    --scheduler cosine \
+    --warmup-steps 500 \
+    --snn-timesteps 8 \
+    --snn-surrogate fast_sigmoid \
+    --output-dir artifacts/snn_student_llama
   ```
 
 - **SNN inference demo:** Load the saved student (or fall back to the stubbed path) via the `SNNLLMBackend` demo module and generate a quick response:
