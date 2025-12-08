@@ -22,7 +22,6 @@ private const val JSON_MEDIA_TYPE = "application/json; charset=utf-8"
 private const val DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 private const val DEFAULT_TIMEOUT_SECONDS = 30L
 private const val DEFAULT_QUERY_TEXT = "Query from SmartGlass"
-private const val AUDIO_QUERY_TEMPLATE = "Audio input received (%d chunks)"
 
 /**
  * HTTP client for the SmartGlass Agent Python backend.
@@ -182,7 +181,7 @@ class SmartGlassClient @JvmOverloads constructor(
         // Build the query text from audio (TODO: integrate actual transcription pipeline)
         // For now, we send a placeholder that indicates audio was received
         val queryText = if (state.audioChunks.isNotEmpty()) {
-            String.format(AUDIO_QUERY_TEMPLATE, state.audioChunks.size)
+            "Audio input received (${state.audioChunks.size} chunks)"
         } else {
             DEFAULT_QUERY_TEXT
         }
@@ -325,7 +324,8 @@ class SmartGlassClient @JvmOverloads constructor(
     private fun throwHttpError(response: Response): Nothing {
         val errorBody = response.body?.string()
         val errorMessage = errorBody?.let { body ->
-            errorAdapter.fromJson(body)?.detail ?: errorAdapter.fromJson(body)?.error
+            val parsed = errorAdapter.fromJson(body)
+            parsed?.detail ?: parsed?.error
         }
         val message = errorMessage ?: errorBody ?: "HTTP ${response.code}"
         throw IOException("SmartGlass server error: ${response.code}: $message")
