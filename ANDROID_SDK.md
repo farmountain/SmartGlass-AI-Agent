@@ -48,7 +48,28 @@ val edgeClient = SmartGlassEdgeClient(baseUrl = "http://192.168.1.50:8765")
    val client = SmartGlassClient(baseUrl = "http://10.0.2.2:8000")
    ```
 
-3. Drive the request flow with `startSession` followed by `answer` calls:
+3. **New Streaming API (Recommended)**: Drive the request flow by accumulating audio and frames, then finalizing the turn:
+   ```kotlin
+   viewModelScope.launch {
+       // Create a new session
+       val session = client.startSession()
+
+       // Send audio chunks as they become available
+       client.sendAudioChunk(session, audioData, System.currentTimeMillis())
+
+       // Send visual frames
+       client.sendFrame(session, jpegBytes, System.currentTimeMillis())
+
+       // Finalize the turn and get the agent's response
+       val result = client.finalizeTurn(session)
+       println("Agent: ${result.response}")
+
+       // Execute any actions returned by the agent
+       ActionExecutor.execute(result.actions, context)
+   }
+   ```
+
+4. **Legacy API (Deprecated)**: Simple request/response pattern:
    ```kotlin
    viewModelScope.launch {
        // Create a new session with optional initial text or image path
