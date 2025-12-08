@@ -63,7 +63,6 @@ def _import_training_modules():
 
 
 @pytest.mark.skipif(not _has_required_dependencies(), reason="Missing required dependencies")
-@pytest.mark.skipif(not _has_required_dependencies(), reason="Missing required dependencies")
 def test_export_to_torchscript_smoke(tmp_path: Path) -> None:
     """Test TorchScript export with minimal model."""
     torch = _import_torch()

@@ -369,7 +369,6 @@ python scripts/train_snn_student.py --export-format onnx ...
 ```
 
 ## Mobile deployment considerations
-## Mobile deployment considerations
 
 ### Tokenizer Compatibility
 - Package `student.onnx` or `student_mobile.pt` with your mobile client (e.g., copy into Android assets or an iOS bundle).
