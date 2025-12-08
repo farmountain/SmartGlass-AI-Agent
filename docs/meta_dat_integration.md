@@ -29,10 +29,10 @@ The Meta Wearables Device Access Toolkit (DAT) enables developers to:
 Based on Meta's announcement and SDK documentation, the Developer Portal contains:
 
 1. **Getting Started**
-   - Create Meta Managed Account
-   - Create Organization and Project
-   - Apply for Developer Preview access
-   - Register your app (bundle ID / package name)
+   - Create Meta Managed Account at [Wearables Developer Center](https://developers.meta.com/wearables)
+   - Create Organization and Project (see Prerequisites section below for detailed steps)
+   - Apply for Developer Preview access via the interest form
+   - Register your app with bundle ID (iOS) or package name (Android)
 
 2. **Platform Setup**
    - Android SDK configuration

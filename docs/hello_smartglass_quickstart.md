@@ -404,8 +404,9 @@ class MainActivity : AppCompatActivity() {
             val response = aiClient.answer(
                 sessionId = sessionId!!,
                 text = "What do you see in this image?",
-                imagePath = null  // We're sending bytes directly
-                // Note: May need to modify SmartGlassClient to accept bytes
+                imagePath = null  // Using text query only
+                // Known limitation: SmartGlassClient.answer() currently expects imagePath
+                // For image processing, consider extending the client or using sendFrame()
             )
             
             // Display response
@@ -661,6 +662,8 @@ class SmartGlassViewModel: ObservableObject {
     private var sessionId: String?
     
     // Update this URL based on your setup
+    // To find your IP: macOS/Linux: `ifconfig | grep inet`, Windows: `ipconfig`
+    // Example: "http://192.168.1.100:8000"
     private let backendURL = "http://YOUR_COMPUTER_IP:8000"
     
     func connect() async {
