@@ -455,7 +455,7 @@ def export_student_model(artifact_dir: Path, export_format: str, max_length: int
         print("Skipping export. Ensure src/snn_export.py is available.")
     except Exception as e:
         print(f"Warning: Model export failed: {e}")
-        print("Training artifacts are still available at {artifact_dir}")
+        print(f"Training artifacts are still available at {artifact_dir}")
 
 
 def export_student_to_onnx_legacy(artifact_dir: Path) -> None:

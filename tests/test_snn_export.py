@@ -1,4 +1,8 @@
-"""Tests for src/snn_export.py - SNN student model export utilities."""
+"""Tests for src/snn_export.py - SNN student model export utilities.
+
+Note: These tests require torch and related dependencies to run.
+When dependencies are missing, tests will be skipped (expected in CI without torch).
+"""
 
 import importlib.util
 import json
@@ -7,66 +11,41 @@ from pathlib import Path
 
 try:
     import pytest
-    HAS_PYTEST = True
 except ImportError:
-    HAS_PYTEST = False
-    # Mock pytest.skip for standalone execution
-    class MockPytest:
-        @staticmethod
-        def skip(msg):
-            pass
-        
-        class mark:
-            @staticmethod
-            def skipif(condition, reason=""):
-                def decorator(func):
-                    return func
-                return decorator
-    
-    pytest = MockPytest()
+    # Tests require pytest - exit gracefully if not available
+    print("pytest not available - these tests should be run with pytest")
+    sys.exit(0)
+
 
 # Check for required dependencies
-REQUIRED_MODULES = ["torch"]
+def _has_torch() -> bool:
+    """Check if torch is available."""
+    return importlib.util.find_spec("torch") is not None
 
 
-def _has_required_dependencies() -> bool:
-    """Check if required dependencies are available."""
-    missing = []
-    for name in REQUIRED_MODULES:
-        if importlib.util.find_spec(name) is None:
-            missing.append(name)
-    
-    # Also check if training script is available
+def _has_training_module() -> bool:
+    """Check if training module can be imported."""
     try:
         from scripts.train_snn_student import SpikingStudentLM, SNNConfig
+        return True
     except ImportError:
-        missing.append("scripts.train_snn_student")
-    
-    if missing:
-        if HAS_PYTEST:
-            pytest.skip(f"Missing dependencies for SNN export tests: {', '.join(missing)}")
         return False
-    return True
 
 
-# Only import torch if available (after dependency check)
-def _import_torch():
-    """Import torch after dependency check."""
-    import torch
-    return torch
+def _skip_if_no_dependencies():
+    """Skip test if required dependencies are missing."""
+    if not _has_torch():
+        pytest.skip("torch not available")
+    if not _has_training_module():
+        pytest.skip("scripts.train_snn_student not available")
 
 
-def _import_training_modules():
-    """Import training modules after dependency check."""
-    from scripts.train_snn_student import SpikingStudentLM, SNNConfig
-    return SpikingStudentLM, SNNConfig
-
-
-@pytest.mark.skipif(not _has_required_dependencies(), reason="Missing required dependencies")
 def test_export_to_torchscript_smoke(tmp_path: Path) -> None:
     """Test TorchScript export with minimal model."""
-    torch = _import_torch()
-    SpikingStudentLM, SNNConfig = _import_training_modules()
+    _skip_if_no_dependencies()
+    
+    import torch
+    from scripts.train_snn_student import SpikingStudentLM, SNNConfig
     from src.snn_export import export_to_torchscript
     
     vocab_size = 100
@@ -119,11 +98,12 @@ def test_export_to_torchscript_smoke(tmp_path: Path) -> None:
     print("✓ TorchScript export test passed")
 
 
-@pytest.mark.skipif(not _has_required_dependencies(), reason="Missing required dependencies")
 def test_export_to_onnx_smoke(tmp_path: Path) -> None:
     """Test ONNX export with minimal model."""
-    torch = _import_torch()
-    SpikingStudentLM, SNNConfig = _import_training_modules()
+    _skip_if_no_dependencies()
+    
+    import torch
+    from scripts.train_snn_student import SpikingStudentLM, SNNConfig
     from src.snn_export import export_to_onnx
     
     vocab_size = 100
@@ -203,11 +183,12 @@ def test_export_to_onnx_smoke(tmp_path: Path) -> None:
     print("✓ ONNX export test passed")
 
 
-@pytest.mark.skipif(not _has_required_dependencies(), reason="Missing required dependencies")
 def test_load_and_export(tmp_path: Path) -> None:
     """Test convenience function that exports both formats."""
-    torch = _import_torch()
-    SpikingStudentLM, SNNConfig = _import_training_modules()
+    _skip_if_no_dependencies()
+    
+    import torch
+    from scripts.train_snn_student import SpikingStudentLM, SNNConfig
     from src.snn_export import load_and_export
     
     vocab_size = 100
@@ -258,11 +239,12 @@ def test_load_and_export(tmp_path: Path) -> None:
     print("✓ load_and_export test passed")
 
 
-@pytest.mark.skipif(not _has_required_dependencies(), reason="Missing required dependencies")
 def test_export_validation_errors(tmp_path: Path) -> None:
     """Test that export validates inputs and raises meaningful errors."""
-    torch = _import_torch()
-    SpikingStudentLM, SNNConfig = _import_training_modules()
+    _skip_if_no_dependencies()
+    
+    import torch
+    from scripts.train_snn_student import SpikingStudentLM, SNNConfig
     from src.snn_export import export_to_torchscript, ExportError
     
     # Test missing metadata
@@ -341,11 +323,12 @@ def test_export_validation_errors(tmp_path: Path) -> None:
     print("✓ Export validation test passed")
 
 
-@pytest.mark.skipif(not _has_required_dependencies(), reason="Missing required dependencies")
 def test_metadata_update(tmp_path: Path) -> None:
     """Test that metadata.json is updated with export information."""
-    torch = _import_torch()
-    SpikingStudentLM, SNNConfig = _import_training_modules()
+    _skip_if_no_dependencies()
+    
+    import torch
+    from scripts.train_snn_student import SpikingStudentLM, SNNConfig
     from src.snn_export import export_to_torchscript
     
     vocab_size = 100
@@ -396,11 +379,8 @@ if __name__ == "__main__":
     # Run tests manually (requires torch to be installed)
     import tempfile
     
-    try:
-        torch = _import_torch()
-        SpikingStudentLM, SNNConfig = _import_training_modules()
-    except (ImportError, ModuleNotFoundError) as e:
-        print(f"⚠ Skipping tests: {e}")
+    if not _has_torch() or not _has_training_module():
+        print("⚠ Skipping tests: torch or training module not available")
         print("Install torch and transformers to run these tests")
         sys.exit(0)
     
