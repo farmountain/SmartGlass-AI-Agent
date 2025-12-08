@@ -161,6 +161,7 @@ class SmartGlassClientTest {
             client.finalizeTurn(invalidSession)
         }
 
+        assertNotNull(error.message)
         assertTrue(error.message!!.contains("Invalid session"))
     }
 
@@ -172,6 +173,7 @@ class SmartGlassClientTest {
             client.sendAudioChunk(invalidSession, byteArrayOf(1, 2, 3), System.currentTimeMillis())
         }
 
+        assertNotNull(error.message)
         assertTrue(error.message!!.contains("Invalid session"))
     }
 
@@ -183,6 +185,7 @@ class SmartGlassClientTest {
             client.sendFrame(invalidSession, byteArrayOf(1, 2, 3), System.currentTimeMillis())
         }
 
+        assertNotNull(error.message)
         assertTrue(error.message!!.contains("Invalid session"))
     }
 
@@ -200,6 +203,7 @@ class SmartGlassClientTest {
             client.finalizeTurn(session)
         }
 
+        assertNotNull(error.message)
         assertTrue(error.message!!.contains("404"))
         assertTrue(error.message!!.contains("Session not found"))
     }

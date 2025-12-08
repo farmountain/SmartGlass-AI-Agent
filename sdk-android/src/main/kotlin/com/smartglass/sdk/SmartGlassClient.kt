@@ -130,8 +130,12 @@ class SmartGlassClient @JvmOverloads constructor(
     /**
      * Send a frame to the session.
      *
-     * Frame data is accumulated in the session state. The backend will process the
-     * most recent frame when [finalizeTurn] is called.
+     * Frame data is accumulated in the session state for future use.
+     *
+     * **Note**: The current backend expects file paths rather than inline image data.
+     * Frame data is accumulated but not yet transmitted to the backend. Future versions
+     * will support frame upload once the backend API is extended to accept base64-encoded
+     * images or a file upload endpoint is added.
      *
      * @param session Session handle from [startSession]
      * @param jpegBytes JPEG-encoded image data
