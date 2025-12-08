@@ -21,6 +21,8 @@ import okhttp3.Response
 private const val JSON_MEDIA_TYPE = "application/json; charset=utf-8"
 private const val DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 private const val DEFAULT_TIMEOUT_SECONDS = 30L
+private const val DEFAULT_QUERY_TEXT = "Query from SmartGlass"
+private const val AUDIO_QUERY_TEMPLATE = "Audio input received (%d chunks)"
 
 /**
  * HTTP client for the SmartGlass Agent Python backend.
@@ -180,9 +182,9 @@ class SmartGlassClient @JvmOverloads constructor(
         // Build the query text from audio (TODO: integrate actual transcription pipeline)
         // For now, we send a placeholder that indicates audio was received
         val queryText = if (state.audioChunks.isNotEmpty()) {
-            "Audio input received (${state.audioChunks.size} chunks)"
+            String.format(AUDIO_QUERY_TEMPLATE, state.audioChunks.size)
         } else {
-            "Query from SmartGlass"
+            DEFAULT_QUERY_TEXT
         }
 
         // TODO: Implement frame upload to backend
@@ -266,12 +268,7 @@ class SmartGlassClient @JvmOverloads constructor(
 
     private fun parseAgentResult(response: Response): AgentResult {
         if (!response.isSuccessful) {
-            val errorBody = response.body?.string()
-            val errorMessage = errorBody?.let { body ->
-                errorAdapter.fromJson(body)?.detail ?: errorAdapter.fromJson(body)?.error
-            }
-            val message = errorMessage ?: errorBody ?: "HTTP ${response.code}"
-            throw IOException("SmartGlass server error: ${response.code}: $message")
+            throwHttpError(response)
         }
 
         val bodyString = response.body?.string() ?: throw IOException("Empty response body")
@@ -282,20 +279,7 @@ class SmartGlassClient @JvmOverloads constructor(
         // Fallback: parse as a generic map and construct AgentResult
         val rawMap = mapAdapter.fromJson(bodyString) ?: emptyMap()
         val responseText = rawMap["response"] as? String ?: ""
-        val actions = (rawMap["actions"] as? List<*>)?.mapNotNull { action ->
-            when (action) {
-                is Map<*, *> -> {
-                    val type = action["type"] as? String ?: return@mapNotNull null
-                    val payload = (action["payload"] as? Map<*, *>)?.mapNotNull {
-                        val key = it.key as? String
-                        val value = it.value
-                        if (key != null) key to value else null
-                    }?.toMap() ?: emptyMap()
-                    Action(type = type, payload = payload)
-                }
-                else -> null
-            }
-        } ?: emptyList()
+        val actions = parseActions(rawMap["actions"])
 
         return AgentResult(
             response = responseText,
@@ -306,18 +290,23 @@ class SmartGlassClient @JvmOverloads constructor(
 
     private fun parseLegacyResponse(response: Response): SmartGlassResponse {
         if (!response.isSuccessful) {
-            val errorBody = response.body?.string()
-            val errorMessage = errorBody?.let { body ->
-                errorAdapter.fromJson(body)?.detail ?: errorAdapter.fromJson(body)?.error
-            }
-            val message = errorMessage ?: errorBody ?: "HTTP ${response.code}"
-            throw IOException("SmartGlass server error: ${response.code}: $message")
+            throwHttpError(response)
         }
 
         val bodyString = response.body?.string() ?: throw IOException("Empty response body")
         val rawMap = mapAdapter.fromJson(bodyString) ?: emptyMap()
         val responseText = rawMap["response"] as? String ?: ""
-        val actions = (rawMap["actions"] as? List<*>)?.mapNotNull { action ->
+        val actions = parseActions(rawMap["actions"])
+
+        return SmartGlassResponse(
+            response = responseText,
+            actions = actions,
+            raw = rawMap,
+        )
+    }
+
+    private fun parseActions(actionsData: Any?): List<Action> {
+        return (actionsData as? List<*>)?.mapNotNull { action ->
             when (action) {
                 is Map<*, *> -> {
                     val type = action["type"] as? String ?: return@mapNotNull null
@@ -331,12 +320,15 @@ class SmartGlassClient @JvmOverloads constructor(
                 else -> null
             }
         } ?: emptyList()
+    }
 
-        return SmartGlassResponse(
-            response = responseText,
-            actions = actions,
-            raw = rawMap,
-        )
+    private fun throwHttpError(response: Response): Nothing {
+        val errorBody = response.body?.string()
+        val errorMessage = errorBody?.let { body ->
+            errorAdapter.fromJson(body)?.detail ?: errorAdapter.fromJson(body)?.error
+        }
+        val message = errorMessage ?: errorBody ?: "HTTP ${response.code}"
+        throw IOException("SmartGlass server error: ${response.code}: $message")
     }
 }
 
