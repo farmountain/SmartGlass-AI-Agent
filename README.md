@@ -36,6 +36,56 @@ Includes an **18-week learning program** with step-by-step **Google Colab worksh
 
 ---
 
+## 🕶️ Meta Ray-Ban Integration with Device Access Toolkit (DAT)
+
+SmartGlass-AI-Agent now includes comprehensive documentation for integrating with the **Meta Wearables Device Access Toolkit (DAT)**, enabling AI-powered experiences on Ray-Ban Meta and Ray-Ban Display glasses.
+
+### 📚 New Integration Guides
+
+- **[Meta DAT Integration Guide](docs/meta_dat_integration.md)** - Complete setup and integration guide
+  - Platform setup (Android & iOS)
+  - Core concepts and runtime flow
+  - Privacy and compliance guidelines
+  - Troubleshooting common issues
+
+- **[Hello SmartGlass Quickstart](docs/hello_smartglass_quickstart.md)** - 30-minute hands-on tutorial
+  - Step-by-step mobile app creation
+  - Backend setup and testing
+  - End-to-end implementation examples
+  - Mock Device testing without hardware
+
+- **[Implementation Plan](docs/meta_dat_implementation_plan.md)** - Detailed technical roadmap
+  - 4-6 week implementation phases
+  - Architecture decisions
+  - Testing strategy
+  - Success criteria
+
+### 🎯 Quick Navigation
+
+**Getting Started**:
+1. Read the [Hello SmartGlass Quickstart](docs/hello_smartglass_quickstart.md) for a hands-on introduction
+2. Review the [Meta DAT Integration Guide](docs/meta_dat_integration.md) for comprehensive documentation
+3. Check the [Implementation Plan](docs/meta_dat_implementation_plan.md) for project planning
+
+**Key Features**:
+- ✅ Camera frame streaming from Ray-Ban Meta glasses
+- ✅ Microphone audio capture and processing
+- ✅ AI-powered scene analysis and response generation
+- ✅ Mock Device support for development without hardware
+- ✅ Privacy-first design with user controls
+- ✅ Cross-platform (Android & iOS)
+
+### 🏗️ Architecture Overview
+
+```
+Ray-Ban Meta Glasses → Mobile App (Edge Sensor Hub) → SmartGlass AI Backend
+     (Camera/Mic)         (DAT SDK + Processing)        (Whisper/CLIP/SNN)
+```
+
+The mobile app acts as an edge sensor hub, streaming multimodal data from the glasses to the SmartGlassAgent backend for AI processing, then displaying responses and executing actions.
+
+---
+
 ### 📦 Legacy Local Installation (Optional)
 
 If you still need to run the project locally, you can follow the classic setup:
@@ -235,6 +285,13 @@ The Android sample still ships with a **`MetaRayBanManager`** façade that mirro
 - `connect(deviceId, transport)` logs a connection attempt and simulates setup while threading the provided `device_id` and transport so they line up with the Python provider’s SDK-backed calls.【F:sdk-android/src/main/kotlin/com/smartglass/sdk/rayban/MetaRayBanManager.kt†L14-L38】
 - `capturePhoto()` returns a packaged placeholder bitmap until the Android SDK surfaces camera streaming, and `startAudioStreaming()` emits a short flow of labeled fake audio chunks.【F:sdk-android/src/main/kotlin/com/smartglass/sdk/rayban/MetaRayBanManager.kt†L40-L73】
 - TODOs remain in place to swap these mocks for the official Android interfaces; the Python side already wires the same fields through to the `metarayban` package and will continue to fall back to deterministic fixtures when the SDK is unavailable or raises.【F:sdk-android/src/main/kotlin/com/smartglass/sdk/rayban/MetaRayBanManager.kt†L20-L52】【F:sdk-android/src/main/kotlin/com/smartglass/sdk/rayban/MetaRayBanManager.kt†L69-L76】
+
+---
+
+**📚 For complete Meta DAT integration with official Device Access Toolkit SDKs, see:**
+- [Meta DAT Integration Guide](docs/meta_dat_integration.md) - Official Device Access Toolkit setup
+- [Hello SmartGlass Quickstart](docs/hello_smartglass_quickstart.md) - Step-by-step tutorial
+- [Implementation Plan](docs/meta_dat_implementation_plan.md) - Technical roadmap
 
 ---
 
