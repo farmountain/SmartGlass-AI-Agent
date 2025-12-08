@@ -59,9 +59,12 @@ class SNNConfig:
     spike_threshold: float = 1.0  # Threshold for spike generation
     
     def __post_init__(self):
-        valid_surrogates = {"sigmoid", "fast_sigmoid", "triangular", "arctan"}
-        if self.surrogate_type not in valid_surrogates:
-            raise ValueError(f"surrogate_type must be one of {valid_surrogates}, got {self.surrogate_type}")
+        if self.surrogate_type not in VALID_SURROGATES:
+            raise ValueError(f"surrogate_type must be one of {VALID_SURROGATES}, got {self.surrogate_type}")
+
+
+# Module-level constant for valid surrogate gradient types
+VALID_SURROGATES = {"sigmoid", "fast_sigmoid", "triangular", "arctan"}
 
 
 @dataclass
@@ -354,13 +357,19 @@ def create_lr_scheduler(optimizer, config: TrainConfig):
     if config.scheduler == "constant":
         return None
     
+    # Validate warmup_steps
+    if config.warmup_steps >= config.num_steps:
+        raise ValueError(
+            f"warmup_steps ({config.warmup_steps}) must be less than num_steps ({config.num_steps})"
+        )
+    
     if config.scheduler == "cosine":
         # Cosine annealing with warmup
         if config.warmup_steps > 0:
             def lr_lambda(step):
                 if step < config.warmup_steps:
                     return step / config.warmup_steps
-                progress = (step - config.warmup_steps) / (config.num_steps - config.warmup_steps)
+                progress = (step - config.warmup_steps) / max(1, config.num_steps - config.warmup_steps)
                 return 0.5 * (1 + math.cos(math.pi * progress))
         else:
             def lr_lambda(step):
@@ -374,7 +383,7 @@ def create_lr_scheduler(optimizer, config: TrainConfig):
             def lr_lambda(step):
                 if step < config.warmup_steps:
                     return step / config.warmup_steps
-                return max(0.0, (config.num_steps - step) / (config.num_steps - config.warmup_steps))
+                return max(0.0, (config.num_steps - step) / max(1, config.num_steps - config.warmup_steps))
         else:
             def lr_lambda(step):
                 return max(0.0, (config.num_steps - step) / config.num_steps)
@@ -507,6 +516,9 @@ def train(config: TrainConfig):
             "dataset": config.dataset,
             "max_length": config.max_length,
         },
+        # Note: Full config is stored for complete reproducibility, though it duplicates
+        # some information from training_config and snn_config. This redundancy ensures
+        # exact reproduction of training runs including all CLI arguments.
         "config": asdict(config),
         "training_results": {
             "steps": global_step,
@@ -656,13 +668,13 @@ Examples:
         "--snn-timesteps",
         type=int,
         default=4,
-        help="Number of simulation timesteps for spiking neurons (default: 4)",
+        help="Number of simulation timesteps for spiking neurons (default: 4, use 8 for production)",
     )
     parser.add_argument(
         "--snn-surrogate",
         type=str,
         default="sigmoid",
-        choices=["sigmoid", "fast_sigmoid", "triangular", "arctan"],
+        choices=list(VALID_SURROGATES),
         help="Surrogate gradient function for SNN training (default: sigmoid)",
     )
     parser.add_argument(

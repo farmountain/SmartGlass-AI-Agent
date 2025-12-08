@@ -245,7 +245,7 @@ python scripts/train_snn_student.py \
 ### Adjusting Timesteps
 
 ```bash
-# Minimal timesteps (faster)
+# Minimal timesteps (faster, less accurate)
 python scripts/train_snn_student.py \
   --teacher-model sshleifer/tiny-gpt2 \
   --dataset synthetic \
@@ -253,7 +253,17 @@ python scripts/train_snn_student.py \
   --snn-timesteps 2 \
   --output-dir artifacts/snn_timesteps_2
 
-# More timesteps (better temporal dynamics)
+# Recommended timesteps for production (good balance)
+python scripts/train_snn_student.py \
+  --teacher-model sshleifer/tiny-gpt2 \
+  --dataset synthetic \
+  --num-steps 100 \
+  --snn-timesteps 8 \
+  --output-dir artifacts/snn_timesteps_8
+
+# Higher timesteps (slower, may not provide proportional benefits)
+# Note: 16 timesteps significantly increases computational overhead.
+# Use with caution and validate benefits for your specific use case.
 python scripts/train_snn_student.py \
   --teacher-model sshleifer/tiny-gpt2 \
   --dataset synthetic \
