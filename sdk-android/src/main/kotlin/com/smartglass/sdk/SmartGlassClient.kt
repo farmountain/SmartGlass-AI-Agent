@@ -173,15 +173,18 @@ class SmartGlassClient @JvmOverloads constructor(
             stateCopy
         }
 
-        // Build the query text from audio (placeholder - in production would transcribe)
+        // Build the query text from audio (TODO: integrate actual transcription pipeline)
+        // For now, we send a placeholder that indicates audio was received
         val queryText = if (state.audioChunks.isNotEmpty()) {
             "Audio input received (${state.audioChunks.size} chunks)"
         } else {
             "Query from SmartGlass"
         }
 
-        // Use the most recent frame if available (placeholder - in production would upload)
-        val imagePath: String? = null // Backend expects a file path, not inline bytes
+        // TODO: Implement frame upload to backend
+        // The current backend expects a file path, not inline bytes.
+        // Options: 1) Extend backend to accept base64 frames, 2) Upload to temp file first
+        val imagePath: String? = null
 
         val payload = answerRequestAdapter.toJson(
             AnswerRequest(sessionId = session.sessionId, text = queryText, imagePath = imagePath),

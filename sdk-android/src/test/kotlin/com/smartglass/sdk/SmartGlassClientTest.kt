@@ -61,7 +61,8 @@ class SmartGlassClientTest {
         client.sendAudioChunk(session, audioData2, timestamp2)
 
         // No network request should be made during sendAudioChunk
-        assertEquals(0, server.requestCount - 1)
+        // Only the initial startSession request should have been made
+        assertEquals(1, server.requestCount)
     }
 
     @Test
@@ -81,7 +82,8 @@ class SmartGlassClientTest {
         client.sendFrame(session, frameData2, timestamp2)
 
         // No network request should be made during sendFrame
-        assertEquals(0, server.requestCount - 1)
+        // Only the initial startSession request should have been made
+        assertEquals(1, server.requestCount)
     }
 
     @Test
