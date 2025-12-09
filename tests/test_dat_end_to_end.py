@@ -42,16 +42,11 @@ from PIL import Image
 # Ensure src is importable
 pytest_plugins = ["tests.test_edge_runtime_server"]
 
-from tests.test_edge_runtime_server import FakeSmartGlassAgent
-
-
-def _encode_silent_wav(duration_seconds: float = 0.1, sample_rate: int = 16000) -> str:
-    """Generate base64-encoded silent WAV file for testing."""
-    samples = int(duration_seconds * sample_rate)
-    audio_array = np.zeros(samples, dtype=np.float32)
-    buffer = io.BytesIO()
-    sf.write(buffer, audio_array, sample_rate, format="WAV")
-    return base64.b64encode(buffer.getvalue()).decode()
+from tests.test_edge_runtime_server import (
+    FakeSmartGlassAgent,
+    _encode_silent_wav,
+    _encode_test_image,
+)
 
 
 def _encode_pcm_s16le(duration_seconds: float = 0.1, sample_rate: int = 16000) -> str:
@@ -63,14 +58,6 @@ def _encode_pcm_s16le(duration_seconds: float = 0.1, sample_rate: int = 16000) -
     # Convert to int16
     audio_int16 = (audio_float * 32767).astype(np.int16)
     return base64.b64encode(audio_int16.tobytes()).decode()
-
-
-def _encode_test_image(size: int = 8, color: tuple[int, int, int] = (255, 0, 0)) -> str:
-    """Generate base64-encoded test image (JPEG format)."""
-    image = Image.new("RGB", (size, size), color=color)
-    buffer = io.BytesIO()
-    image.save(buffer, format="JPEG", quality=85)
-    return base64.b64encode(buffer.getvalue()).decode()
 
 
 @pytest.fixture(name="dat_app")
@@ -371,6 +358,7 @@ class TestDatTurnCompletion:
         # Once implemented, this should validate action structure:
         # for action in result["actions"]:
         #     assert "action_type" in action
+        #     assert "parameters" in action
         #     assert "parameters" in action
 
     def test_turn_complete_without_streaming_data(self, dat_app):

@@ -254,21 +254,21 @@ class DatSmartGlassControllerTest {
 
     @Test
     fun completeMultimodalDatWorkflow() = runTest {
-        """
-        End-to-end test simulating complete DAT session workflow:
-        1. Initialize controller with fake MetaRayBanManager
-        2. Start streaming (connects, begins audio/video capture)
-        3. Verify data is forwarded to SmartGlassClient via DAT protocol
-        4. Finalize turn and verify agent response with actions
-        
-        This test validates the complete integration between:
-        - DatSmartGlassController state machine
-        - MetaRayBanManager facade (mocked)
-        - SmartGlassClient DAT API calls
-        
-        For testing with real Ray-Ban Meta glasses, see:
-        docs/meta_dat_implementation_plan.md - "Testing with Real Hardware" section
-        """
+        /**
+         * End-to-end test simulating complete DAT session workflow:
+         * 1. Initialize controller with fake MetaRayBanManager
+         * 2. Start streaming (connects, begins audio/video capture)
+         * 3. Verify data is forwarded to SmartGlassClient via DAT protocol
+         * 4. Finalize turn and verify agent response with actions
+         *
+         * This test validates the complete integration between:
+         * - DatSmartGlassController state machine
+         * - MetaRayBanManager facade (mocked)
+         * - SmartGlassClient DAT API calls
+         *
+         * For testing with real Ray-Ban Meta glasses, see:
+         * docs/meta_dat_implementation_plan.md - "Testing with Real Hardware" section
+         */
         val mockFacade = MockSdkFacade(frameDelayMs = 100L)
         val mockRayBan = MetaRayBanManager(
             context = ApplicationProvider.getApplicationContext(),
@@ -334,10 +334,10 @@ class DatSmartGlassControllerTest {
 
     @Test
     fun datWorkflowHandlesMultipleTurns() = runTest {
-        """
-        Test that controller can handle multiple turn completions in a single session.
-        This validates that finalizeTurn() doesn't break the streaming state.
-        """
+        /**
+         * Test that controller can handle multiple turn completions in a single session.
+         * This validates that finalizeTurn() doesn't break the streaming state.
+         */
         val mockFacade = MockSdkFacade()
         val mockRayBan = MetaRayBanManager(
             context = ApplicationProvider.getApplicationContext(),
@@ -374,11 +374,11 @@ class DatSmartGlassControllerTest {
 
     @Test
     fun datWorkflowWithMinimalDataTransfer() = runTest {
-        """
-        Test DAT workflow with very short streaming window.
-        This validates that the system handles edge cases where minimal
-        audio/frame data is collected before turn completion.
-        """
+        /**
+         * Test DAT workflow with very short streaming window.
+         * This validates that the system handles edge cases where minimal
+         * audio/frame data is collected before turn completion.
+         */
         val mockFacade = MockSdkFacade()
         val mockRayBan = MetaRayBanManager(
             context = ApplicationProvider.getApplicationContext(),
