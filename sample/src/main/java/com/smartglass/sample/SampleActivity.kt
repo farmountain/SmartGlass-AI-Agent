@@ -1,5 +1,6 @@
 package com.smartglass.sample
 
+import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Bundle
 import android.util.Log
@@ -11,6 +12,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.smartglass.sdk.ActionExecutor
 import com.smartglass.sdk.DatSmartGlassController
+import com.smartglass.sdk.PrivacyPreferences
 import com.smartglass.sdk.SmartGlassClient
 import com.smartglass.sdk.rayban.MetaRayBanManager
 import java.io.File
@@ -66,6 +68,10 @@ class SampleActivity : AppCompatActivity() {
             stopAudioStreaming()
         }
         
+        findViewById<Button>(R.id.privacySettingsButton).setOnClickListener {
+            openPrivacySettings()
+        }
+        
         // DatSmartGlassController demo buttons (if they exist in layout)
         findViewById<Button>(R.id.startControllerButton)?.setOnClickListener {
             startControllerStreaming()
@@ -86,6 +92,11 @@ class SampleActivity : AppCompatActivity() {
         stopControllerStreaming()
         rayBanManager.disconnect()
     }
+    
+    private fun openPrivacySettings() {
+        val intent = Intent(this, PrivacySettingsActivity::class.java)
+        startActivity(intent)
+    }
 
     private fun sendPrompt() {
         val prompt = promptInput.text.toString()
@@ -97,18 +108,23 @@ class SampleActivity : AppCompatActivity() {
         lifecycleScope.launch {
             setStatus(getString(R.string.starting_session))
             try {
-                val sessionId = client.startSession(text = prompt)
-                lastSessionId = sessionId
-                val response = client.answer(sessionId = sessionId, text = prompt)
-                actionExecutor.execute(response.actions, this@SampleActivity)
+                // Load privacy preferences
+                val privacyPrefs = PrivacyPreferences.load(this@SampleActivity)
+                
+                // Start session with privacy preferences
+                val session = client.startSession(privacyPrefs)
+                lastSessionId = session.sessionId
+                
+                val result = client.finalizeTurn(session)
+                actionExecutor.execute(result.actions, this@SampleActivity)
 
-                val actionsSummary = response.actions.takeIf { it.isNotEmpty() }
+                val actionsSummary = result.actions.takeIf { it.isNotEmpty() }
                     ?.joinToString(prefix = "\nActions:\n", separator = "\n") { action ->
                         "• ${action.type}: ${action.payload}"
                     } ?: ""
 
                 val responseSummary = buildString {
-                    append(getString(R.string.response_prefix, response.response))
+                    append(getString(R.string.response_prefix, result.response))
                     if (actionsSummary.isNotBlank()) append(actionsSummary)
                 }
 
