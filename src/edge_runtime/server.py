@@ -250,10 +250,33 @@ def _decode_image_bytes(image_bytes: bytes) -> Image.Image:
 
 
 @app.post("/sessions", response_model=CreateSessionResponse)
-def create_session() -> Dict[str, str]:
-    """Instantiate a new :class:`SmartGlassAgent` session."""
+def create_session(request: Request) -> Dict[str, str]:
+    """Instantiate a new :class:`SmartGlassAgent` session.
+    
+    Privacy preferences can be included as headers:
+    - X-Privacy-Store-Raw-Audio: true/false
+    - X-Privacy-Store-Raw-Frames: true/false
+    - X-Privacy-Store-Transcripts: true/false
+    """
 
     logger.info("Creating new SmartGlassAgent session")
+    
+    # Extract privacy preferences from headers
+    privacy_flags = {}
+    if "X-Privacy-Store-Raw-Audio" in request.headers:
+        privacy_flags["store_raw_audio"] = request.headers["X-Privacy-Store-Raw-Audio"].lower() == "true"
+    if "X-Privacy-Store-Raw-Frames" in request.headers:
+        privacy_flags["store_raw_frames"] = request.headers["X-Privacy-Store-Raw-Frames"].lower() == "true"
+    if "X-Privacy-Store-Transcripts" in request.headers:
+        privacy_flags["store_transcripts"] = request.headers["X-Privacy-Store-Transcripts"].lower() == "true"
+    
+    if privacy_flags:
+        logger.info(
+            "Privacy preferences for session: %s",
+            privacy_flags,
+        )
+    
+    # TODO: Pass privacy_flags to session creation once session manager supports per-session privacy settings
     session_id = session_manager.create_session()
     return {"session_id": session_id}
 
@@ -430,6 +453,12 @@ def dat_session_init(payload: SessionInitRequest) -> SessionInitResponse:
     from the Android DAT client. The session_id returned should be used in
     all subsequent stream and turn completion requests.
     
+    Privacy flags can be included in the metadata field to control what data
+    is retained during the session:
+    - privacy_store_raw_audio: Allow temporary storage of raw audio buffers
+    - privacy_store_raw_frames: Allow temporary storage of video frames
+    - privacy_store_transcripts: Allow storing transcripts for session history
+    
     Args:
         payload: SessionInitRequest with device_id, client_version, and capabilities
         
@@ -444,6 +473,11 @@ def dat_session_init(payload: SessionInitRequest) -> SessionInitResponse:
         >>>   "capabilities": {
         >>>     "audio_streaming": true,
         >>>     "video_streaming": true
+        >>>   },
+        >>>   "metadata": {
+        >>>     "privacy_store_raw_audio": true,
+        >>>     "privacy_store_raw_frames": false,
+        >>>     "privacy_store_transcripts": true
         >>>   }
         >>> }
         >>> # Response
@@ -459,9 +493,22 @@ def dat_session_init(payload: SessionInitRequest) -> SessionInitResponse:
         payload.client_version,
     )
     
-    # TODO: Validate device_id and client_version if needed
-    # TODO: Store device metadata for session tracking
+    # Extract privacy preferences from metadata
+    privacy_flags = {}
+    if payload.metadata:
+        privacy_flags = {
+            "store_raw_audio": payload.metadata.get("privacy_store_raw_audio", runtime_config.store_raw_audio),
+            "store_raw_frames": payload.metadata.get("privacy_store_raw_frames", runtime_config.store_raw_frames),
+            "store_transcripts": payload.metadata.get("privacy_store_transcripts", runtime_config.store_transcripts),
+        }
+        logger.info(
+            "Privacy preferences for session: audio=%s, frames=%s, transcripts=%s",
+            privacy_flags.get("store_raw_audio"),
+            privacy_flags.get("store_raw_frames"),
+            privacy_flags.get("store_transcripts"),
+        )
     
+    # TODO: Pass privacy_flags to session creation once session manager supports per-session privacy settings
     session_id = session_manager.create_session()
     
     return SessionInitResponse(

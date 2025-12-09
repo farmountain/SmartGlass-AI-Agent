@@ -67,6 +67,14 @@
         android:text="@string/send_prompt"
         android:textAllCaps="false" />
 
+    <Button
+        android:id="@+id/privacySettingsButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="@string/privacy_settings"
+        android:textAllCaps="false" />
+
     <TextView
         android:id="@+id/responseText"
         android:layout_width="match_parent"

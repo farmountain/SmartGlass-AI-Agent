@@ -1,5 +1,6 @@
 package com.smartglass.sample
 
+import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Bundle
 import android.util.Log
@@ -11,6 +12,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.smartglass.sdk.ActionExecutor
 import com.smartglass.sdk.DatSmartGlassController
+import com.smartglass.sdk.PrivacyPreferences
 import com.smartglass.sdk.SmartGlassClient
 import com.smartglass.sdk.rayban.MetaRayBanManager
 import java.io.File
@@ -66,6 +68,10 @@ class SampleActivity : AppCompatActivity() {
             stopAudioStreaming()
         }
         
+        findViewById<Button>(R.id.privacySettingsButton).setOnClickListener {
+            openPrivacySettings()
+        }
+        
         // DatSmartGlassController demo buttons (if they exist in layout)
         findViewById<Button>(R.id.startControllerButton)?.setOnClickListener {
             startControllerStreaming()
@@ -86,6 +92,11 @@ class SampleActivity : AppCompatActivity() {
         stopControllerStreaming()
         rayBanManager.disconnect()
     }
+    
+    private fun openPrivacySettings() {
+        val intent = Intent(this, PrivacySettingsActivity::class.java)
+        startActivity(intent)
+    }
 
     private fun sendPrompt() {
         val prompt = promptInput.text.toString()
@@ -97,8 +108,17 @@ class SampleActivity : AppCompatActivity() {
         lifecycleScope.launch {
             setStatus(getString(R.string.starting_session))
             try {
-                val sessionId = client.startSession(text = prompt)
+                // Load privacy preferences and start session
+                val privacyPrefs = PrivacyPreferences.load(this@SampleActivity)
+                
+                // Start session with privacy preferences
+                // Note: Using deprecated API for simple text prompts; new streaming API
+                // is better suited for audio/video streaming use cases
+                @Suppress("DEPRECATION")
+                val sessionId = client.startSession(privacyPrefs, text = prompt)
                 lastSessionId = sessionId
+                
+                @Suppress("DEPRECATION")
                 val response = client.answer(sessionId = sessionId, text = prompt)
                 actionExecutor.execute(response.actions, this@SampleActivity)
 

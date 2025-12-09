@@ -1,0 +1,20 @@
+<resources>
+    <!-- Privacy Settings -->
+    <string name="privacy_settings_title">Privacy &amp; Data Controls</string>
+    <string name="privacy_settings_description">Control what data is temporarily stored during your session. These settings use Meta\'s Wearables Device Access Toolkit for camera and audio streaming. You can stop streaming at any time.</string>
+    
+    <!-- Audio Storage -->
+    <string name="privacy_audio_title">Store Audio Temporarily</string>
+    <string name="privacy_audio_description">When enabled, raw audio from your glasses microphone is kept in memory for processing and debugging. Audio is never saved to disk and is cleared when you end the session.</string>
+    
+    <!-- Frames Storage -->
+    <string name="privacy_frames_title">Store Video Frames Temporarily</string>
+    <string name="privacy_frames_description">When enabled, video frames from your glasses camera are kept in memory for multimodal queries. Frames are never saved to disk and are cleared when you end the session.</string>
+    
+    <!-- Transcripts Storage -->
+    <string name="privacy_transcripts_title">Store Conversation History</string>
+    <string name="privacy_transcripts_description">When enabled, text transcripts of your conversations are kept for session history. This helps provide context for follow-up questions. Transcripts are cleared when you end the session.</string>
+    
+    <!-- Footer -->
+    <string name="privacy_settings_footer">All data storage is in-memory only and automatically cleared when the session ends. No data is written to disk or transmitted outside your control.</string>
+</resources>

@@ -88,15 +88,25 @@ class SmartGlassClient @JvmOverloads constructor(
      * Creates a new session on the backend and returns a [SessionHandle] that can be used
      * to send audio chunks, frames, and finalize the turn.
      *
+     * @param privacyPreferences Optional privacy preferences controlling data storage
      * @return SessionHandle for subsequent API calls
      * @throws IOException if the network request fails or returns an error
      */
-    suspend fun startSession(): SessionHandle {
+    suspend fun startSession(privacyPreferences: PrivacyPreferences? = null): SessionHandle {
         val payload = ingestRequestAdapter.toJson(IngestRequest(text = ""))
-        val request = Request.Builder()
+        val requestBuilder = Request.Builder()
             .url("$resolvedBaseUrl/ingest")
             .post(payload.toRequestBody(jsonMediaType))
-            .build()
+        
+        // Add privacy preferences as headers
+        privacyPreferences?.let { prefs ->
+            requestBuilder
+                .addHeader("X-Privacy-Store-Raw-Audio", prefs.storeRawAudio.toString())
+                .addHeader("X-Privacy-Store-Raw-Frames", prefs.storeRawFrames.toString())
+                .addHeader("X-Privacy-Store-Transcripts", prefs.storeTranscripts.toString())
+        }
+        
+        val request = requestBuilder.build()
 
         val response = execute(request)
         val sessionId = response.use { parseBody(it, ingestResponseAdapter).sessionId }
@@ -211,11 +221,34 @@ class SmartGlassClient @JvmOverloads constructor(
      */
     @Deprecated("Use startSession() without parameters", ReplaceWith("startSession()"))
     suspend fun startSession(text: String? = null, imagePath: String? = null): String {
+        return startSession(privacyPreferences = null, text = text, imagePath = imagePath)
+    }
+
+    /**
+     * Legacy method: Start a new SmartGlass session with privacy preferences.
+     *
+     * @deprecated Use [startSession] without parameters and the new streaming API instead
+     */
+    @Deprecated("Use startSession() without parameters", ReplaceWith("startSession(privacyPreferences)"))
+    suspend fun startSession(
+        privacyPreferences: PrivacyPreferences?,
+        text: String? = null,
+        imagePath: String? = null
+    ): String {
         val payload = ingestRequestAdapter.toJson(IngestRequest(text = text, imagePath = imagePath))
-        val request = Request.Builder()
+        val requestBuilder = Request.Builder()
             .url("$resolvedBaseUrl/ingest")
             .post(payload.toRequestBody(jsonMediaType))
-            .build()
+
+        // Add privacy preferences as headers
+        privacyPreferences?.let { prefs ->
+            requestBuilder
+                .addHeader("X-Privacy-Store-Raw-Audio", prefs.storeRawAudio.toString())
+                .addHeader("X-Privacy-Store-Raw-Frames", prefs.storeRawFrames.toString())
+                .addHeader("X-Privacy-Store-Transcripts", prefs.storeTranscripts.toString())
+        }
+
+        val request = requestBuilder.build()
 
         val response = execute(request)
         return response.use { parseBody(it, ingestResponseAdapter).sessionId }

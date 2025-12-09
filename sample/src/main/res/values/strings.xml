@@ -24,4 +24,5 @@
     <string name="stream_stopped">Audio stream stopped.</string>
     <string name="device_id_hint">Meta Ray-Ban device ID</string>
     <string name="default_device_id">rayban-demo-device</string>
+    <string name="privacy_settings">Privacy Settings</string>
 </resources>
