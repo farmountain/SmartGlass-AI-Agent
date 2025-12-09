@@ -45,9 +45,10 @@ private const val DEFAULT_KEYFRAME_INTERVAL_MS = 500L // Send keyframes every 50
  *             keyframeIntervalMs = 500L
  *         )
  *
- *         // Observe state changes
+ *         // Monitor state changes
  *         lifecycleScope.launch {
- *             controller.state.collect { state ->
+ *             while (true) {
+ *                 val state = controller.state
  *                 Log.d("MyActivity", "Controller state: $state")
  *                 when (state) {
  *                     DatSmartGlassController.State.STREAMING -> {
@@ -58,6 +59,8 @@ private const val DEFAULT_KEYFRAME_INTERVAL_MS = 500L // Send keyframes every 50
  *                     }
  *                     else -> { /* handle other states */ }
  *                 }
+ *                 delay(1000) // Poll every second
+ *                 if (state == DatSmartGlassController.State.IDLE) break
  *             }
  *         }
  *
@@ -206,13 +209,12 @@ class DatSmartGlassController(
                 Log.i(TAG, "Successfully transitioned to STREAMING state")
             }
 
-            // For now, we return a placeholder result. In a real implementation,
-            // you might want to run a background loop that periodically finalizes turns
-            // or finalize on-demand via a separate method.
+            // Return initial status. Use finalizeTurn() to get actual agent responses
+            // after accumulating audio/video data.
             return AgentResult(
                 response = "Streaming started successfully",
                 actions = emptyList(),
-                raw = mapOf("status" to "streaming")
+                raw = mapOf("status" to "streaming", "sessionId" to sessionHandle?.sessionId)
             )
 
         } catch (e: Exception) {
@@ -330,14 +332,14 @@ class DatSmartGlassController(
             rayBanManager.startStreaming { frame, timestamp ->
                 // Apply keyframe rate limiting
                 if (shouldSendKeyframe(timestamp)) {
-                    scope.launch {
-                        try {
-                            smartGlassClient.sendFrame(handle, frame, timestamp)
-                            Log.v(TAG, "Sent keyframe: ${frame.size} bytes at $timestamp")
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Error sending frame", e)
-                            transitionToError()
-                        }
+                    // Process frame directly in the streaming coroutine context
+                    // to avoid creating a new coroutine for each frame
+                    try {
+                        smartGlassClient.sendFrame(handle, frame, timestamp)
+                        Log.v(TAG, "Sent keyframe: ${frame.size} bytes at $timestamp")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error sending frame", e)
+                        transitionToError()
                     }
                 }
             }
