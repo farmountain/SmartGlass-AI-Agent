@@ -1,11 +1,24 @@
 """Ray-Ban aware provider and deterministic SDK simulation hooks.
 
-This module introduces the ``MetaRayBanProvider`` which mirrors the
-expected Meta Ray-Ban SDK surface area while keeping CI friendly by
-emitting deterministic mock data whenever the SDK or its native
-dependencies are not available. The individual driver classes embed
-Ray-Ban-flavoured metadata so downstream code can validate payload
-shapes without needing hardware.
+This module introduces the ``MetaRayBanProvider`` which abstracts the
+concept of a Meta Ray-Ban data source in the SmartGlass-AI-Agent architecture.
+
+**New Architecture (Meta DAT Integration)**:
+- The provider no longer talks directly to hardware via local SDK calls.
+- Instead, it expects inputs from the mobile companion app using the Meta
+  Wearables Device Access Toolkit (DAT SDK).
+- The Android app streams camera frames and audio to the Python backend via HTTP.
+- This provider exposes methods to access the latest buffered data from those streams.
+
+**Backward Compatibility**:
+- The provider keeps CI-friendly mock data generators for testing.
+- Mock fixtures emit deterministic Ray-Ban-shaped payloads when no live data is available.
+- This ensures tests work without physical hardware or active DAT connections.
+
+See Also:
+    - docs/meta_dat_integration.md: Complete Meta DAT integration guide
+    - docs/hello_smartglass_quickstart.md: Quickstart tutorial
+    - sdk-android/README_DAT_INTEGRATION.md: Android SDK integration
 """
 
 from __future__ import annotations
@@ -15,6 +28,7 @@ import asyncio
 import importlib
 import itertools
 import logging
+import threading
 from typing import Awaitable, Callable, Iterator, Mapping, Optional
 
 import numpy as np
@@ -48,6 +62,130 @@ def _normalize_payload(payload: object) -> dict[str, object]:
     if hasattr(payload, "__dict__"):
         return dict(vars(payload))
     return {"frame": payload}
+
+
+class MetaDatRegistry:
+    """Thread-safe registry tracking latest DAT payloads per session.
+    
+    This registry maintains the most recent camera frame and audio buffer
+    for each active session, as received from the mobile companion app via
+    the Meta Wearables Device Access Toolkit (DAT).
+    
+    The HTTP ingestion layer should update this registry when new data arrives:
+    
+    Example:
+        >>> registry = MetaDatRegistry()
+        >>> # In your HTTP handler:
+        >>> registry.set_frame("session-123", frame_array, metadata)
+        >>> registry.set_audio("session-123", audio_buffer, metadata)
+        >>> # Later, the provider can retrieve:
+        >>> frame, meta = registry.get_latest_frame("session-123")
+    
+    Thread Safety:
+        All methods use an internal lock for safe concurrent access from
+        asyncio tasks and threading contexts.
+    
+    See Also:
+        - docs/meta_dat_integration.md: Details on DAT payload formats
+        - src/edge_runtime/server.py: HTTP endpoints that should use this registry
+    """
+    
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._frames: dict[str, tuple[np.ndarray, dict[str, object]]] = {}
+        self._audio: dict[str, tuple[np.ndarray, dict[str, object]]] = {}
+    
+    def set_frame(
+        self, 
+        session_id: str, 
+        frame: np.ndarray, 
+        metadata: Optional[dict[str, object]] = None
+    ) -> None:
+        """Store the latest camera frame for a session.
+        
+        Args:
+            session_id: Unique session identifier from the mobile app
+            frame: RGB or grayscale frame as numpy array
+            metadata: Optional dict with timestamp_ms, device_id, format, etc.
+        """
+        with self._lock:
+            self._frames[session_id] = (frame, metadata or {})
+    
+    def get_latest_frame(
+        self, 
+        session_id: str
+    ) -> tuple[Optional[np.ndarray], dict[str, object]]:
+        """Retrieve the most recent frame for a session.
+        
+        Args:
+            session_id: Unique session identifier
+            
+        Returns:
+            Tuple of (frame_array, metadata_dict). Returns (None, {}) if no frame.
+        """
+        with self._lock:
+            if session_id not in self._frames:
+                return (None, {})
+            return self._frames[session_id]
+    
+    def set_audio(
+        self,
+        session_id: str,
+        audio_buffer: np.ndarray,
+        metadata: Optional[dict[str, object]] = None
+    ) -> None:
+        """Store the latest audio buffer for a session.
+        
+        Args:
+            session_id: Unique session identifier from the mobile app
+            audio_buffer: PCM audio samples as numpy array
+            metadata: Optional dict with sample_rate_hz, channels, timestamp_ms, etc.
+        """
+        with self._lock:
+            self._audio[session_id] = (audio_buffer, metadata or {})
+    
+    def get_latest_audio_buffer(
+        self,
+        session_id: str
+    ) -> tuple[Optional[np.ndarray], dict[str, object]]:
+        """Retrieve the most recent audio buffer for a session.
+        
+        Args:
+            session_id: Unique session identifier
+            
+        Returns:
+            Tuple of (audio_array, metadata_dict). Returns (None, {}) if no audio.
+        """
+        with self._lock:
+            if session_id not in self._audio:
+                return (None, {})
+            return self._audio[session_id]
+    
+    def clear_session(self, session_id: str) -> None:
+        """Remove all data for a session (called on session cleanup).
+        
+        Args:
+            session_id: Session to clear
+        """
+        with self._lock:
+            self._frames.pop(session_id, None)
+            self._audio.pop(session_id, None)
+    
+    def list_sessions(self) -> list[str]:
+        """Return all active session IDs with buffered data.
+        
+        Returns:
+            List of session IDs that have frame or audio data
+        """
+        with self._lock:
+            return list(self._frames.keys() | self._audio.keys())
+
+
+# Global registry instance for DAT payloads
+# TODO: This should be updated by HTTP handlers in src/edge_runtime/server.py
+# when mobile app sends frames/audio via POST /sessions/{session_id}/frame
+# or POST /sessions/{session_id}/audio endpoints.
+_DAT_REGISTRY = MetaDatRegistry()
 
 
 class MetaRayBanCameraIn(CameraIn):
@@ -493,7 +631,27 @@ class MetaRayBanPermissions(Permissions):
 
 
 class MetaRayBanProvider(ProviderBase):
-    """Aggregate Meta Ray-Ban drivers that gracefully mock absent SDK calls."""
+    """Aggregate Meta Ray-Ban drivers that gracefully mock absent SDK calls.
+    
+    **New Architecture**:
+    This provider now supports both the legacy direct SDK mode (for backward 
+    compatibility) and the new DAT-based streaming mode where the mobile app
+    sends frames and audio via HTTP to the backend.
+    
+    **Usage with Meta DAT**:
+        >>> provider = MetaRayBanProvider(session_id="session-123")
+        >>> # Mobile app updates the registry via HTTP handlers
+        >>> frame = provider.get_latest_frame()
+        >>> audio = provider.get_latest_audio_buffer()
+    
+    **Mock Mode**:
+    When no session_id is provided or no DAT data is available, the provider
+    falls back to deterministic mock data for testing.
+    
+    See Also:
+        - MetaDatRegistry: Stores per-session frames and audio
+        - docs/meta_dat_integration.md: DAT integration architecture
+    """
 
     def __init__(
         self,
@@ -507,6 +665,7 @@ class MetaRayBanProvider(ProviderBase):
         microphone_sample_rate_hz: int = 16000,
         microphone_frame_size: int = 400,
         microphone_channels: int = 1,
+        session_id: str | None = None,
         **kwargs,
     ) -> None:
         self._api_key = api_key
@@ -518,6 +677,7 @@ class MetaRayBanProvider(ProviderBase):
         self._microphone_sample_rate_hz = microphone_sample_rate_hz
         self._microphone_frame_size = microphone_frame_size
         self._microphone_channels = microphone_channels
+        self._session_id = session_id  # For DAT streaming mode
         super().__init__(**kwargs)
 
     def _create_camera(self) -> CameraIn | None:
@@ -567,6 +727,112 @@ class MetaRayBanProvider(ProviderBase):
         return MetaRayBanPermissions(
             device_id=self._device_id, transport=self._transport, use_sdk=self._use_sdk, sdk=_META_SDK
         )
+    
+    # DAT Integration Methods -----------------------------------------------
+    
+    def has_display(self) -> bool:
+        """Check if the provider has display capabilities.
+        
+        Meta Ray-Ban glasses currently do not have a built-in display.
+        This returns False to indicate no display surface is available.
+        
+        Returns:
+            False, as Ray-Ban Meta glasses lack a display
+        """
+        # Meta Ray-Ban glasses don't have a display (unlike Ray-Ban Display glasses)
+        # Overlay methods are for future compatibility or mock testing
+        return False
+    
+    def get_latest_frame(self) -> Optional[np.ndarray]:
+        """Retrieve the most recent camera frame from DAT streaming.
+        
+        This method reads from the shared buffer populated by the HTTP ingestion
+        layer when the mobile app sends frames via Meta DAT SDK.
+        
+        Returns:
+            The latest RGB frame as numpy array, or None if no frame available
+            
+        Example:
+            >>> provider = MetaRayBanProvider(session_id="my-session")
+            >>> frame = provider.get_latest_frame()
+            >>> if frame is not None:
+            ...     print(f"Frame shape: {frame.shape}")
+        
+        Note:
+            - Falls back to mock data if session_id is None or no frame exists
+            - HTTP handlers should update _DAT_REGISTRY when receiving frames
+        """
+        if self._session_id is None:
+            # No session ID, return None (mock mode or legacy usage)
+            return None
+        
+        frame, metadata = _DAT_REGISTRY.get_latest_frame(self._session_id)
+        return frame
+    
+    def get_latest_audio_buffer(self) -> Optional[np.ndarray]:
+        """Retrieve the most recent audio buffer from DAT streaming.
+        
+        This method reads from the shared buffer populated by the HTTP ingestion
+        layer when the mobile app sends audio via Meta DAT SDK.
+        
+        Returns:
+            The latest PCM audio buffer as numpy array, or None if unavailable
+            
+        Example:
+            >>> provider = MetaRayBanProvider(session_id="my-session")
+            >>> audio = provider.get_latest_audio_buffer()
+            >>> if audio is not None:
+            ...     print(f"Audio samples: {audio.shape}")
+        
+        Note:
+            - Falls back to None if session_id is None or no audio exists
+            - HTTP handlers should update _DAT_REGISTRY when receiving audio
+        """
+        if self._session_id is None:
+            # No session ID, return None (mock mode or legacy usage)
+            return None
+        
+        audio, metadata = _DAT_REGISTRY.get_latest_audio_buffer(self._session_id)
+        return audio
+
+
+# TODO: HTTP Handler Integration
+# ================================
+# The following shows how HTTP handlers in src/edge_runtime/server.py should
+# update the MetaDatRegistry when receiving DAT payloads from the mobile app.
+#
+# Example integration in server.py:
+#
+# ```python
+# from drivers.providers.meta import _DAT_REGISTRY
+#
+# @app.post("/sessions/{session_id}/dat/frame")
+# def post_dat_frame(session_id: str, payload: DatFramePayload):
+#     \"\"\"Receive camera frame from Meta DAT SDK.\"\"\"
+#     frame = _decode_image_payload(payload.image_base64)
+#     frame_array = np.array(frame)
+#     metadata = {
+#         "timestamp_ms": payload.timestamp_ms,
+#         "device_id": payload.device_id,
+#         "format": "rgb888",
+#     }
+#     _DAT_REGISTRY.set_frame(session_id, frame_array, metadata)
+#     return {"status": "ok", "session_id": session_id}
+#
+# @app.post("/sessions/{session_id}/dat/audio")
+# def post_dat_audio(session_id: str, payload: DatAudioPayload):
+#     \"\"\"Receive audio chunk from Meta DAT SDK.\"\"\"
+#     audio_array, sample_rate = _decode_audio_payload(payload.audio_base64)
+#     metadata = {
+#         "timestamp_ms": payload.timestamp_ms,
+#         "sample_rate_hz": sample_rate,
+#         "device_id": payload.device_id,
+#     }
+#     _DAT_REGISTRY.set_audio(session_id, audio_array, metadata)
+#     return {"status": "ok", "session_id": session_id}
+# ```
+#
+# See docs/meta_dat_integration.md for complete payload schemas and examples.
 
 
 class _AsyncioTimerHandle(TimerHandle):
@@ -771,6 +1037,7 @@ __all__ = [
     "MetaRayBanMicIn",
     "MetaRayBanPermissions",
     "MetaRayBanProvider",
+    "MetaDatRegistry",
     "AsyncioAsyncDriver",
     "AsyncioTimerDriver",
     "MetaRayBanRuntime",
