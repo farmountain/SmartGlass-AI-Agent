@@ -55,6 +55,12 @@ dependencies {
     implementation("com.squareup.moshi:moshi-kotlin:1.15.1")
     implementation("com.squareup.moshi:moshi-adapters:1.15.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    
+    // Meta Wearables Device Access Toolkit (DAT) SDK
+    // Dependencies are optional at compile-time to support builds without GitHub credentials
+    compileOnly("com.meta.wearable:mwdat-core:0.2.1")
+    compileOnly("com.meta.wearable:mwdat-camera:0.2.1")
+    compileOnly("com.meta.wearable:mwdat-mockdevice:0.2.1")
 
     // Always compile against ONNX Runtime so inference wrappers are available while
     // still allowing the dependency to be optional at runtime for lightweight builds.
