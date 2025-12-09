@@ -10,6 +10,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.smartglass.sdk.ActionExecutor
+import com.smartglass.sdk.DatSmartGlassController
 import com.smartglass.sdk.SmartGlassClient
 import com.smartglass.sdk.rayban.MetaRayBanManager
 import java.io.File
@@ -32,6 +33,9 @@ class SampleActivity : AppCompatActivity() {
     private val client = SmartGlassClient()
     private var audioStreamJob: Job? = null
     private var lastSessionId: String? = null
+    
+    // End-to-end controller for streaming glasses data to backend
+    private var datController: DatSmartGlassController? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,11 +65,25 @@ class SampleActivity : AppCompatActivity() {
         findViewById<Button>(R.id.stopAudioButton).setOnClickListener {
             stopAudioStreaming()
         }
+        
+        // DatSmartGlassController demo buttons (if they exist in layout)
+        findViewById<Button>(R.id.startControllerButton)?.setOnClickListener {
+            startControllerStreaming()
+        }
+        
+        findViewById<Button>(R.id.stopControllerButton)?.setOnClickListener {
+            stopControllerStreaming()
+        }
+        
+        findViewById<Button>(R.id.finalizeControllerButton)?.setOnClickListener {
+            finalizeControllerTurn()
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         stopAudioStreaming()
+        stopControllerStreaming()
         rayBanManager.disconnect()
     }
 
@@ -195,6 +213,126 @@ class SampleActivity : AppCompatActivity() {
         withContext(Dispatchers.Main) {
             responseText.text = message
             Toast.makeText(this@SampleActivity, message, Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    // ========================================================================
+    // DatSmartGlassController Example Usage
+    // ========================================================================
+    
+    /**
+     * Start end-to-end streaming using DatSmartGlassController.
+     * 
+     * This method demonstrates the simplified API for connecting glasses
+     * and streaming audio/video to the backend in one call.
+     */
+    private fun startControllerStreaming() {
+        val deviceId = resolveDeviceId()
+        
+        lifecycleScope.launch {
+            setStatus("Starting end-to-end streaming with DatSmartGlassController...")
+            
+            try {
+                // Create controller if not already created
+                if (datController == null) {
+                    datController = DatSmartGlassController(
+                        rayBanManager = rayBanManager,
+                        smartGlassClient = client,
+                        keyframeIntervalMs = 500L // Send keyframes every 500ms
+                    )
+                }
+                
+                // Monitor state changes
+                launch {
+                    val controller = datController ?: return@launch
+                    while (true) {
+                        val state = controller.state
+                        Log.d("SampleActivity", "Controller state: $state")
+                        when (state) {
+                            DatSmartGlassController.State.STREAMING -> {
+                                setStatus("🎥 Streaming audio and video to backend...")
+                            }
+                            DatSmartGlassController.State.CONNECTING -> {
+                                setStatus("🔌 Connecting to glasses and backend...")
+                            }
+                            DatSmartGlassController.State.ERROR -> {
+                                setStatus("❌ Controller error - please stop and restart")
+                                return@launch
+                            }
+                            DatSmartGlassController.State.IDLE -> {
+                                // Stopped
+                                return@launch
+                            }
+                        }
+                        kotlinx.coroutines.delay(1000)
+                    }
+                }
+                
+                // Start streaming
+                val result = datController!!.start(
+                    deviceId = deviceId,
+                    transport = MetaRayBanManager.Transport.WIFI
+                )
+                
+                Log.d("SampleActivity", "Controller started: ${result.response}")
+                
+            } catch (exc: Exception) {
+                Log.e("SampleActivity", "Failed to start controller", exc)
+                setStatus("Controller error: ${exc.message}")
+            }
+        }
+    }
+    
+    /**
+     * Stop end-to-end streaming and clean up resources.
+     */
+    private fun stopControllerStreaming() {
+        datController?.stop()
+        datController = null
+        lifecycleScope.launch {
+            setStatus("Controller streaming stopped")
+        }
+    }
+    
+    /**
+     * Finalize the current turn and get agent response.
+     * 
+     * This sends all accumulated audio and video frames to the backend
+     * and receives the agent's response with recommended actions.
+     */
+    private fun finalizeControllerTurn() {
+        lifecycleScope.launch {
+            try {
+                setStatus("Finalizing turn...")
+                
+                val controller = datController
+                if (controller == null || controller.state != DatSmartGlassController.State.STREAMING) {
+                    setStatus("Controller not streaming - start streaming first")
+                    return@launch
+                }
+                
+                val result = controller.finalizeTurn()
+                
+                // Execute any recommended actions
+                actionExecutor.execute(result.actions, this@SampleActivity)
+                
+                // Display response
+                val actionsSummary = result.actions.takeIf { it.isNotEmpty() }
+                    ?.joinToString(prefix = "\nActions:\n", separator = "\n") { action ->
+                        "• ${action.type}: ${action.payload}"
+                    } ?: ""
+                
+                val responseSummary = buildString {
+                    append("Agent Response: ${result.response}")
+                    if (actionsSummary.isNotBlank()) append(actionsSummary)
+                }
+                
+                setStatus(responseSummary)
+                
+            } catch (exc: Exception) {
+                Log.e("SampleActivity", "Failed to finalize turn", exc)
+                setStatus("Finalize error: ${exc.message}")
+            }
         }
     }
 }
