@@ -25,22 +25,22 @@ To run smoke tests with actual hardware:
 Note: Hardware tests are not run in CI and require physical devices.
 """
 
+# Ensure pytest plugins are loaded before other imports
+pytest_plugins = ["tests.test_edge_runtime_server"]
+
 import base64
 import io
 import sys
 import types
 from pathlib import Path
 from typing import Optional
-from uuid import uuid4
+from uuid import uuid4, UUID
 
 import numpy as np
 import pytest
 import soundfile as sf
 from fastapi.testclient import TestClient
 from PIL import Image
-
-# Ensure src is importable
-pytest_plugins = ["tests.test_edge_runtime_server"]
 
 from tests.test_edge_runtime_server import (
     FakeSmartGlassAgent,
@@ -146,8 +146,10 @@ class TestDatSessionLifecycle:
 
         # Session ID should be a valid UUID format
         session_id = result["session_id"]
-        assert len(session_id) == 36  # Standard UUID length with hyphens
-        assert session_id.count("-") == 4
+        try:
+            UUID(session_id)  # Will raise ValueError if invalid
+        except ValueError:
+            pytest.fail(f"Session ID is not a valid UUID: {session_id}")
 
     def test_dat_session_init_with_privacy_metadata(self, dat_app):
         """Test DAT session initialization with privacy preferences in metadata."""
@@ -359,6 +361,7 @@ class TestDatTurnCompletion:
         # for action in result["actions"]:
         #     assert "action_type" in action
         #     assert "parameters" in action
+        #     assert "priority" in action
         #     assert "parameters" in action
 
     def test_turn_complete_without_streaming_data(self, dat_app):
