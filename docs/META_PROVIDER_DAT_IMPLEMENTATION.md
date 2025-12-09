@@ -145,19 +145,19 @@ All changes are **fully backward compatible**:
 
 Created comprehensive test suites:
 
-### 1. `tests/test_meta_dat_registry.py` (337 lines)
+### 1. `tests/test_meta_dat_registry.py` (257 lines)
 - Thread-safety tests with concurrent readers/writers
 - Session isolation tests
 - CRUD operations for frames and audio
 - Edge cases (missing sessions, overwrites, etc.)
 
-### 2. `tests/test_meta_provider_dat_methods.py` (193 lines)
+### 2. `tests/test_meta_provider_dat_methods.py` (199 lines)
 - Provider method tests (has_display, get_latest_frame, get_latest_audio_buffer)
 - Session-based data retrieval
 - Backward compatibility verification
 - Integration with existing provider methods
 
-### 3. `tests/test_meta_validation.py` (126 lines)
+### 3. `tests/test_meta_validation.py` (113 lines)
 - Structural validation (classes, methods exist)
 - Export verification
 - Documentation presence checks
@@ -229,7 +229,7 @@ def post_dat_audio(session_id: str, payload: DatAudioPayload):
 - **New Classes**: 1 (MetaDatRegistry)
 - **New Methods**: 3 (has_display, get_latest_frame, get_latest_audio_buffer)
 - **Test Files Created**: 3
-- **Total Test Lines**: 656
+- **Total Test Lines**: 569
 
 ## Summary
 
