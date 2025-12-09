@@ -65,6 +65,10 @@ dependencies {
     // Always compile against ONNX Runtime so inference wrappers are available while
     // still allowing the dependency to be optional at runtime for lightweight builds.
     compileOnly("com.microsoft.onnxruntime:onnxruntime-android:1.18.0")
+    
+    // PyTorch Mobile for on-device inference (optional at runtime)
+    compileOnly("org.pytorch:pytorch_android_lite:1.13.1")
+    compileOnly("org.pytorch:pytorch_android_torchvision_lite:1.13.1")
 
     if (useAndroidOrt) {
         implementation("com.microsoft.onnxruntime:onnxruntime-android:1.18.0")
