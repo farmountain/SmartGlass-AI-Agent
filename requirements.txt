@@ -31,6 +31,7 @@ uvicorn[standard]        # ASGI server for FastAPI-based endpoints
 
 # Validation & schema tooling
 jsonschema>=4.21.1
+pydantic>=2.0.0           # Wire protocol models and FastAPI integration
 
 # Colab-specific (auto-installed in Colab but listed for local testing)
 ipython

@@ -1,0 +1,376 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DAT Wire Protocol",
+  "description": "Wire protocol schema for Android DAT client ↔ Python SmartGlass-AI-Agent backend communication. Defines session management, streaming data chunks, and turn completion for Ray-Ban glasses integration.",
+  "definitions": {
+    "SessionInitRequest": {
+      "type": "object",
+      "description": "Request to initialize a new DAT streaming session",
+      "properties": {
+        "device_id": {
+          "type": "string",
+          "description": "Unique identifier for the Ray-Ban glasses device"
+        },
+        "client_version": {
+          "type": "string",
+          "description": "Version of the Android client application",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "capabilities": {
+          "type": "object",
+          "description": "Client capabilities and supported features",
+          "properties": {
+            "audio_streaming": {
+              "type": "boolean",
+              "default": true
+            },
+            "video_streaming": {
+              "type": "boolean",
+              "default": true
+            },
+            "imu_streaming": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Optional client metadata",
+          "additionalProperties": true
+        }
+      },
+      "required": ["device_id", "client_version"],
+      "additionalProperties": false
+    },
+    "SessionInitResponse": {
+      "type": "object",
+      "description": "Response containing the new session identifier",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "description": "Unique session identifier (UUID format)",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "server_version": {
+          "type": "string",
+          "description": "Version of the SmartGlass backend",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "max_chunk_size_bytes": {
+          "type": "integer",
+          "description": "Maximum size for stream chunk payloads in bytes",
+          "minimum": 1024,
+          "default": 1048576
+        },
+        "capabilities": {
+          "type": "object",
+          "description": "Server capabilities",
+          "properties": {
+            "multimodal_queries": {
+              "type": "boolean",
+              "default": true
+            },
+            "streaming_transcription": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": ["session_id", "server_version"],
+      "additionalProperties": false
+    },
+    "StreamChunk": {
+      "type": "object",
+      "description": "Envelope for streaming audio/video/sensor data chunks",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "description": "Session identifier from SessionInitResponse",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "chunk_type": {
+          "type": "string",
+          "description": "Type of data in this chunk",
+          "enum": ["audio", "frame", "imu"]
+        },
+        "sequence_number": {
+          "type": "integer",
+          "description": "Monotonically increasing sequence number for ordering",
+          "minimum": 0
+        },
+        "timestamp_ms": {
+          "type": "integer",
+          "description": "Client-side timestamp in milliseconds since epoch",
+          "minimum": 0
+        },
+        "payload": {
+          "type": "string",
+          "description": "Base64-encoded binary data (audio samples, JPEG frame, or IMU data)",
+          "contentEncoding": "base64"
+        },
+        "meta": {
+          "type": "object",
+          "description": "Type-specific metadata",
+          "oneOf": [
+            {
+              "title": "AudioMeta",
+              "properties": {
+                "sample_rate": {
+                  "type": "integer",
+                  "description": "Audio sample rate in Hz",
+                  "enum": [8000, 16000, 22050, 44100, 48000]
+                },
+                "channels": {
+                  "type": "integer",
+                  "description": "Number of audio channels",
+                  "enum": [1, 2],
+                  "default": 1
+                },
+                "format": {
+                  "type": "string",
+                  "description": "Audio encoding format",
+                  "enum": ["pcm_s16le", "pcm_f32le", "opus"],
+                  "default": "pcm_s16le"
+                },
+                "duration_ms": {
+                  "type": "integer",
+                  "description": "Duration of audio chunk in milliseconds",
+                  "minimum": 0
+                }
+              },
+              "required": ["sample_rate"]
+            },
+            {
+              "title": "FrameMeta",
+              "properties": {
+                "width": {
+                  "type": "integer",
+                  "description": "Frame width in pixels",
+                  "minimum": 1
+                },
+                "height": {
+                  "type": "integer",
+                  "description": "Frame height in pixels",
+                  "minimum": 1
+                },
+                "format": {
+                  "type": "string",
+                  "description": "Image encoding format",
+                  "enum": ["jpeg", "png", "yuv420", "i420"],
+                  "default": "jpeg"
+                },
+                "quality": {
+                  "type": "integer",
+                  "description": "JPEG quality (0-100) if applicable",
+                  "minimum": 0,
+                  "maximum": 100
+                },
+                "is_keyframe": {
+                  "type": "boolean",
+                  "description": "Whether this is a keyframe in the stream",
+                  "default": true
+                }
+              },
+              "required": ["width", "height", "format"]
+            },
+            {
+              "title": "ImuMeta",
+              "properties": {
+                "sensor_type": {
+                  "type": "string",
+                  "description": "Type of IMU sensor data",
+                  "enum": ["accelerometer", "gyroscope", "magnetometer"]
+                },
+                "sample_count": {
+                  "type": "integer",
+                  "description": "Number of samples in this chunk",
+                  "minimum": 1
+                }
+              },
+              "required": ["sensor_type"]
+            }
+          ]
+        }
+      },
+      "required": ["session_id", "chunk_type", "sequence_number", "timestamp_ms", "payload"],
+      "additionalProperties": false
+    },
+    "StreamChunkResponse": {
+      "type": "object",
+      "description": "Acknowledgment response for stream chunks",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "description": "Session identifier"
+        },
+        "sequence_number": {
+          "type": "integer",
+          "description": "Acknowledged sequence number",
+          "minimum": 0
+        },
+        "status": {
+          "type": "string",
+          "description": "Processing status",
+          "enum": ["accepted", "buffered", "error"]
+        },
+        "message": {
+          "type": "string",
+          "description": "Optional status message"
+        }
+      },
+      "required": ["session_id", "sequence_number", "status"],
+      "additionalProperties": false
+    },
+    "TurnCompleteRequest": {
+      "type": "object",
+      "description": "Request to finalize a turn and receive agent response",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "description": "Session identifier",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "turn_id": {
+          "type": "string",
+          "description": "Unique identifier for this turn (client-generated)",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "query_text": {
+          "type": "string",
+          "description": "Optional explicit text query (if not using audio transcription)"
+        },
+        "language": {
+          "type": "string",
+          "description": "Optional language code for query (ISO 639-1)",
+          "pattern": "^[a-z]{2}(-[A-Z]{2})?$"
+        },
+        "cloud_offload": {
+          "type": "boolean",
+          "description": "Whether to offload processing to cloud (may redact PII)",
+          "default": false
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Optional turn metadata",
+          "additionalProperties": true
+        }
+      },
+      "required": ["session_id", "turn_id"],
+      "additionalProperties": false
+    },
+    "Action": {
+      "type": "object",
+      "description": "Agent-generated action to execute on client",
+      "properties": {
+        "action_type": {
+          "type": "string",
+          "description": "Type of action to perform",
+          "enum": [
+            "NAVIGATE",
+            "SHOW_TEXT",
+            "PLAY_AUDIO",
+            "SHOW_IMAGE",
+            "VIBRATE",
+            "NOTIFICATION",
+            "OPEN_APP",
+            "SEARCH",
+            "CUSTOM"
+          ]
+        },
+        "parameters": {
+          "type": "object",
+          "description": "Action-specific parameters",
+          "additionalProperties": true
+        },
+        "priority": {
+          "type": "string",
+          "description": "Action priority level",
+          "enum": ["low", "normal", "high", "urgent"],
+          "default": "normal"
+        }
+      },
+      "required": ["action_type", "parameters"],
+      "additionalProperties": false
+    },
+    "TurnCompleteResponse": {
+      "type": "object",
+      "description": "Agent response with NLG result and actions",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "description": "Session identifier"
+        },
+        "turn_id": {
+          "type": "string",
+          "description": "Turn identifier from request"
+        },
+        "response": {
+          "type": "string",
+          "description": "Natural language response from agent"
+        },
+        "transcript": {
+          "type": "string",
+          "description": "Transcribed audio query (if audio was provided)"
+        },
+        "actions": {
+          "type": "array",
+          "description": "List of actions for client to execute",
+          "items": {
+            "$ref": "#/definitions/Action"
+          }
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Response metadata (timing, model info, etc.)",
+          "properties": {
+            "processing_time_ms": {
+              "type": "integer",
+              "description": "Total processing time in milliseconds",
+              "minimum": 0
+            },
+            "model_version": {
+              "type": "string",
+              "description": "Version of the AI model used"
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "required": ["session_id", "turn_id", "response"],
+      "additionalProperties": false
+    },
+    "ErrorResponse": {
+      "type": "object",
+      "description": "Standard error response format",
+      "properties": {
+        "error": {
+          "type": "string",
+          "description": "Error code or type",
+          "enum": [
+            "INVALID_SESSION",
+            "INVALID_CHUNK",
+            "BUFFER_OVERFLOW",
+            "INVALID_REQUEST",
+            "INTERNAL_ERROR",
+            "UNAUTHORIZED"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable error message"
+        },
+        "details": {
+          "type": "object",
+          "description": "Additional error details",
+          "additionalProperties": true
+        }
+      },
+      "required": ["error", "message"],
+      "additionalProperties": false
+    }
+  }
+}

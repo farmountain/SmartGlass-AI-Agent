@@ -20,6 +20,19 @@ from uvicorn.config import LOGGING_CONFIG
 from .config import EdgeRuntimeConfig, load_config_from_env
 from .session_manager import BufferLimitExceeded, SessionManager
 from src.utils.metrics import get_metrics_snapshot
+from src.wire.dat_protocol import (
+    SessionInitRequest,
+    SessionInitResponse,
+    StreamChunk,
+    StreamChunkResponse,
+    TurnCompleteRequest,
+    TurnCompleteResponse,
+    ChunkStatus,
+    ChunkType,
+    ErrorCode,
+    ErrorResponse,
+)
+from drivers.providers.meta import _DAT_REGISTRY
 
 logger = logging.getLogger(__name__)
 
@@ -379,6 +392,275 @@ async def websocket_frame(session_id: str, websocket: WebSocket) -> None:
             logger.debug("Session %s already cleaned up", session_id)
         request_id_ctx.reset(request_id_token)
         session_id_ctx.reset(session_id_token)
+
+
+# DAT Wire Protocol Endpoints
+
+
+@app.post("/dat/session", response_model=SessionInitResponse)
+def dat_session_init(payload: SessionInitRequest) -> SessionInitResponse:
+    """Initialize a new DAT streaming session.
+    
+    This endpoint creates a new session for streaming audio/video/sensor data
+    from the Android DAT client. The session_id returned should be used in
+    all subsequent stream and turn completion requests.
+    
+    Args:
+        payload: SessionInitRequest with device_id, client_version, and capabilities
+        
+    Returns:
+        SessionInitResponse with session_id and server capabilities
+        
+    Example:
+        >>> # Request
+        >>> {
+        >>>   "device_id": "rayban-meta-12345",
+        >>>   "client_version": "1.0.0",
+        >>>   "capabilities": {
+        >>>     "audio_streaming": true,
+        >>>     "video_streaming": true
+        >>>   }
+        >>> }
+        >>> # Response
+        >>> {
+        >>>   "session_id": "550e8400-e29b-41d4-a716-446655440000",
+        >>>   "server_version": "0.1.0",
+        >>>   "max_chunk_size_bytes": 1048576
+        >>> }
+    """
+    logger.info(
+        "Initializing DAT session for device_id=%s, client_version=%s",
+        payload.device_id,
+        payload.client_version,
+    )
+    
+    # TODO: Validate device_id and client_version if needed
+    # TODO: Store device metadata for session tracking
+    
+    session_id = session_manager.create_session()
+    
+    return SessionInitResponse(
+        session_id=session_id,
+        server_version="0.1.0",  # TODO: Get from config or package metadata
+        max_chunk_size_bytes=1048576,  # 1MB default
+    )
+
+
+@app.post("/dat/stream", response_model=StreamChunkResponse)
+def dat_stream_chunk(payload: StreamChunk) -> StreamChunkResponse:
+    """Receive and buffer a stream chunk (audio/frame/IMU).
+    
+    This endpoint receives data chunks from the mobile app and stores them
+    in the session-specific DAT registry. The chunks are later processed
+    when the client calls the turn completion endpoint.
+    
+    Args:
+        payload: StreamChunk with session_id, chunk_type, payload, and metadata
+        
+    Returns:
+        StreamChunkResponse acknowledging receipt and processing status
+        
+    Raises:
+        HTTPException: 404 if session not found, 413 if buffer limit exceeded
+        
+    Example:
+        >>> # Audio chunk request
+        >>> {
+        >>>   "session_id": "550e8400-e29b-41d4-a716-446655440000",
+        >>>   "chunk_type": "audio",
+        >>>   "sequence_number": 0,
+        >>>   "timestamp_ms": 1702080000000,
+        >>>   "payload": "base64_encoded_audio_data...",
+        >>>   "meta": {
+        >>>     "sample_rate": 16000,
+        >>>     "channels": 1,
+        >>>     "format": "pcm_s16le"
+        >>>   }
+        >>> }
+    """
+    logger.debug(
+        "Received stream chunk: session_id=%s, chunk_type=%s, sequence_number=%d",
+        payload.session_id,
+        payload.chunk_type,
+        payload.sequence_number,
+    )
+    
+    # Verify session exists
+    try:
+        session_manager.get_summary(payload.session_id)
+    except KeyError as exc:
+        logger.warning("Unknown session_id=%s for stream chunk", payload.session_id)
+        raise HTTPException(
+            status_code=404,
+            detail=f"Session not found: {payload.session_id}",
+        ) from exc
+    
+    try:
+        # Decode base64 payload
+        data_bytes = base64.b64decode(payload.payload)
+        
+        if payload.chunk_type == ChunkType.AUDIO:
+            # TODO: Validate audio metadata and convert if needed
+            # For now, store raw audio bytes with metadata
+            # In production, decode based on format (pcm_s16le, opus, etc.)
+            audio_meta = {
+                "sequence_number": payload.sequence_number,
+                "timestamp_ms": payload.timestamp_ms,
+                "format": payload.meta.format if payload.meta else "unknown",
+                "sample_rate": payload.meta.sample_rate if payload.meta else 16000,
+            }
+            
+            # Convert bytes to audio array for compatibility with existing system
+            # Assume pcm_s16le for now
+            if payload.meta and payload.meta.format == "pcm_s16le":
+                audio_array = np.frombuffer(data_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+            else:
+                # For other formats, decode using soundfile
+                audio_array, sample_rate = _decode_audio_bytes(data_bytes)
+                audio_meta["sample_rate"] = sample_rate
+            
+            _DAT_REGISTRY.set_audio(payload.session_id, audio_array, audio_meta)
+            
+        elif payload.chunk_type == ChunkType.FRAME:
+            # Decode image from JPEG/PNG bytes
+            frame = _decode_image_bytes(data_bytes)
+            frame_array = np.array(frame)
+            
+            frame_meta = {
+                "sequence_number": payload.sequence_number,
+                "timestamp_ms": payload.timestamp_ms,
+                "width": payload.meta.width if payload.meta else frame_array.shape[1],
+                "height": payload.meta.height if payload.meta else frame_array.shape[0],
+                "format": payload.meta.format if payload.meta else "jpeg",
+            }
+            
+            _DAT_REGISTRY.set_frame(payload.session_id, frame_array, frame_meta)
+            
+        elif payload.chunk_type == ChunkType.IMU:
+            # TODO: Implement IMU data handling
+            # For now, just acknowledge receipt
+            logger.info(
+                "IMU chunk received but not yet implemented: session_id=%s",
+                payload.session_id,
+            )
+            
+        return StreamChunkResponse(
+            session_id=payload.session_id,
+            sequence_number=payload.sequence_number,
+            status=ChunkStatus.BUFFERED,
+            message="Chunk buffered successfully",
+        )
+        
+    except (ValueError, Exception) as exc:  # pylint: disable=broad-except
+        logger.error(
+            "Error processing stream chunk: session_id=%s, error=%s",
+            payload.session_id,
+            str(exc),
+        )
+        return StreamChunkResponse(
+            session_id=payload.session_id,
+            sequence_number=payload.sequence_number,
+            status=ChunkStatus.ERROR,
+            message=f"Error processing chunk: {str(exc)}",
+        )
+
+
+@app.post("/dat/turn/complete", response_model=TurnCompleteResponse)
+def dat_turn_complete(payload: TurnCompleteRequest) -> TurnCompleteResponse:
+    """Finalize a turn and receive agent response with actions.
+    
+    This endpoint processes all buffered stream chunks for the session,
+    runs the SmartGlass agent to generate a response, and returns
+    the natural language response along with any actions to execute.
+    
+    Args:
+        payload: TurnCompleteRequest with session_id, turn_id, and optional query
+        
+    Returns:
+        TurnCompleteResponse with agent response, transcript, and actions
+        
+    Raises:
+        HTTPException: 404 if session not found
+        
+    Example:
+        >>> # Request
+        >>> {
+        >>>   "session_id": "550e8400-e29b-41d4-a716-446655440000",
+        >>>   "turn_id": "660e8400-e29b-41d4-a716-446655440001",
+        >>>   "language": "en",
+        >>>   "cloud_offload": false
+        >>> }
+        >>> # Response
+        >>> {
+        >>>   "session_id": "550e8400-e29b-41d4-a716-446655440000",
+        >>>   "turn_id": "660e8400-e29b-41d4-a716-446655440001",
+        >>>   "response": "I can see you're looking at a coffee shop. Would you like directions?",
+        >>>   "transcript": "What am I looking at?",
+        >>>   "actions": [
+        >>>     {
+        >>>       "action_type": "NAVIGATE",
+        >>>       "parameters": {"destination": "Nearest Coffee Shop"},
+        >>>       "priority": "normal"
+        >>>     }
+        >>>   ]
+        >>> }
+    """
+    logger.info(
+        "Turn completion requested: session_id=%s, turn_id=%s",
+        payload.session_id,
+        payload.turn_id,
+    )
+    
+    # Verify session exists
+    try:
+        session_manager.get_summary(payload.session_id)
+    except KeyError as exc:
+        logger.warning("Unknown session_id=%s for turn completion", payload.session_id)
+        raise HTTPException(
+            status_code=404,
+            detail=f"Session not found: {payload.session_id}",
+        ) from exc
+    
+    # TODO: Implement full turn completion logic
+    # 1. Retrieve buffered audio/frames from _DAT_REGISTRY
+    # 2. Run agent query with multimodal inputs
+    # 3. Parse agent response and extract actions
+    # 4. Clear buffers after processing
+    
+    # For now, return a placeholder response
+    logger.warning(
+        "Turn completion not fully implemented yet. Returning placeholder response."
+    )
+    
+    # Get transcript from audio if available (simplified)
+    transcript = None
+    if payload.query_text:
+        transcript = payload.query_text
+    else:
+        # TODO: Process buffered audio to get transcript
+        # audio, meta = _DAT_REGISTRY.get_latest_audio_buffer(payload.session_id)
+        # if audio is not None:
+        #     transcript = session_manager.ingest_audio(...)
+        pass
+    
+    # TODO: Process buffered frames and run multimodal query
+    # frame, meta = _DAT_REGISTRY.get_latest_frame(payload.session_id)
+    # if frame is not None:
+    #     result = session_manager.run_query(
+    #         payload.session_id,
+    #         text_query=transcript,
+    #         image_input=frame,
+    #         ...
+    #     )
+    
+    return TurnCompleteResponse(
+        session_id=payload.session_id,
+        turn_id=payload.turn_id,
+        response="Turn completion endpoint is under development. Full implementation coming soon.",
+        transcript=transcript,
+        actions=[],
+        metadata=None,
+    )
 
 
 def main() -> None:
