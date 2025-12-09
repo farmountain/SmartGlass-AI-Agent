@@ -5,8 +5,19 @@ import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 private const val TAG = "LocalSnnEngine"
+
+/**
+ * Maximum age for cached model files before they are refreshed from assets.
+ */
+private const val MODEL_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000L  // 7 days
+
+/**
+ * Number of tokens to return from mock backend for testing.
+ */
+private const val MOCK_BACKEND_TOKEN_LIMIT = 5
 
 /**
  * Local SNN engine that runs a TorchScript or ONNX SNN student model fully on device.
@@ -165,8 +176,7 @@ class LocalSnnEngine(
         } else {
             // File already exists, validate it's not too old (prevent stale cache)
             val fileAge = System.currentTimeMillis() - outputFile.lastModified()
-            val maxAge = 7 * 24 * 60 * 60 * 1000L  // 7 days in milliseconds
-            if (fileAge > maxAge) {
+            if (fileAge > MODEL_CACHE_MAX_AGE_MS) {
                 Log.d(TAG, "Cached model file is old, refreshing from assets")
                 outputFile.delete()
                 context.assets.open(assetPath).use { input ->
@@ -305,6 +315,6 @@ private class OnnxModelBackend(context: Context, modelAssetPath: String) : Model
 private class MockModelBackend : ModelBackend {
     override fun forward(inputIds: LongArray): LongArray {
         // Simple mock: return first few non-zero tokens
-        return inputIds.filter { it != 0L }.take(5).toLongArray()
+        return inputIds.filter { it != 0L }.take(MOCK_BACKEND_TOKEN_LIMIT).toLongArray()
     }
 }

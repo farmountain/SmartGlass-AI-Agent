@@ -7,7 +7,15 @@ import java.io.File
 import java.util.Locale
 import kotlin.math.absoluteValue
 
+/**
+ * Size of hash space for fallback tokenization. Using 2^15 to keep token IDs manageable
+ * while providing reasonable distribution for vocabulary-less tokenization.
+ */
 private const val TOKEN_SPACE = 32768L
+
+/**
+ * Token ID used for unknown or padding tokens in fallback mode.
+ */
 private const val UNKNOWN_TOKEN_ID = 0L
 
 /**
@@ -138,7 +146,7 @@ class LocalTokenizer(
             
             // Use runCatching with use block to ensure stream is closed even on exception
             val metadata = runCatching {
-                context.assets?.open(candidate)?.use { stream ->
+                context.assets.open(candidate).use { stream ->
                     val contents = stream.bufferedReader().readText()
                     parseMetadata(contents)
                 }
