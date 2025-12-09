@@ -108,23 +108,27 @@ class SampleActivity : AppCompatActivity() {
         lifecycleScope.launch {
             setStatus(getString(R.string.starting_session))
             try {
-                // Load privacy preferences
+                // Load privacy preferences and start session
                 val privacyPrefs = PrivacyPreferences.load(this@SampleActivity)
                 
                 // Start session with privacy preferences
-                val session = client.startSession(privacyPrefs)
-                lastSessionId = session.sessionId
+                // Note: Using deprecated API for simple text prompts; new streaming API
+                // is better suited for audio/video streaming use cases
+                @Suppress("DEPRECATION")
+                val sessionId = client.startSession(privacyPrefs, text = prompt)
+                lastSessionId = sessionId
                 
-                val result = client.finalizeTurn(session)
-                actionExecutor.execute(result.actions, this@SampleActivity)
+                @Suppress("DEPRECATION")
+                val response = client.answer(sessionId = sessionId, text = prompt)
+                actionExecutor.execute(response.actions, this@SampleActivity)
 
-                val actionsSummary = result.actions.takeIf { it.isNotEmpty() }
+                val actionsSummary = response.actions.takeIf { it.isNotEmpty() }
                     ?.joinToString(prefix = "\nActions:\n", separator = "\n") { action ->
                         "• ${action.type}: ${action.payload}"
                     } ?: ""
 
                 val responseSummary = buildString {
-                    append(getString(R.string.response_prefix, result.response))
+                    append(getString(R.string.response_prefix, response.response))
                     if (actionsSummary.isNotBlank()) append(actionsSummary)
                 }
 

@@ -497,9 +497,9 @@ def dat_session_init(payload: SessionInitRequest) -> SessionInitResponse:
     privacy_flags = {}
     if payload.metadata:
         privacy_flags = {
-            "store_raw_audio": payload.metadata.get("privacy_store_raw_audio", config.store_raw_audio),
-            "store_raw_frames": payload.metadata.get("privacy_store_raw_frames", config.store_raw_frames),
-            "store_transcripts": payload.metadata.get("privacy_store_transcripts", config.store_transcripts),
+            "store_raw_audio": payload.metadata.get("privacy_store_raw_audio", runtime_config.store_raw_audio),
+            "store_raw_frames": payload.metadata.get("privacy_store_raw_frames", runtime_config.store_raw_frames),
+            "store_transcripts": payload.metadata.get("privacy_store_transcripts", runtime_config.store_transcripts),
         }
         logger.info(
             "Privacy preferences for session: audio=%s, frames=%s, transcripts=%s",

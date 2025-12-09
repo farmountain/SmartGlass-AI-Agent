@@ -8,6 +8,7 @@ import android.widget.Switch
 import android.widget.TextView
 import androidx.fragment.app.Fragment
 import com.smartglass.sdk.PrivacyPreferences
+import rayskillkit.core.R
 
 /**
  * Privacy settings screen for SmartGlass data storage controls.
