@@ -136,9 +136,17 @@ class LocalTokenizer(
                 return runCatching { parseMetadata(file.readText()) }.getOrElse { TokenizerMetadata() }
             }
             
-            val stream = runCatching { context.assets?.open(candidate) }.getOrNull() ?: continue
-            val contents = stream.bufferedReader().use { it.readText() }
-            return runCatching { parseMetadata(contents) }.getOrElse { TokenizerMetadata() }
+            // Use runCatching with use block to ensure stream is closed even on exception
+            val metadata = runCatching {
+                context.assets?.open(candidate)?.use { stream ->
+                    val contents = stream.bufferedReader().readText()
+                    parseMetadata(contents)
+                }
+            }.getOrNull()
+            
+            if (metadata != null) {
+                return metadata
+            }
         }
         return TokenizerMetadata()
     }

@@ -137,14 +137,46 @@ class LocalSnnEngine(
     }
     
     private fun copyAssetToFile(assetPath: String): File {
-        val outputFile = File(context.filesDir, assetPath.replace("/", "_"))
+        // Sanitize path to prevent directory traversal
+        val sanitizedName = assetPath
+            .replace(Regex("[^a-zA-Z0-9._-]"), "_")
+            .take(255)  // Limit filename length
+        
+        if (sanitizedName.isEmpty()) {
+            throw IllegalArgumentException("Invalid asset path: $assetPath")
+        }
+        
+        val outputFile = File(context.filesDir, sanitizedName)
+        
+        // Validate the output file is within the app's files directory
+        val canonicalOutputPath = outputFile.canonicalPath
+        val canonicalFilesDir = context.filesDir.canonicalPath
+        if (!canonicalOutputPath.startsWith(canonicalFilesDir)) {
+            throw SecurityException("Asset path attempts directory traversal: $assetPath")
+        }
+        
+        // Only copy if file doesn't exist or validate if it exists
         if (!outputFile.exists()) {
             context.assets.open(assetPath).use { input ->
                 outputFile.outputStream().use { output ->
                     input.copyTo(output)
                 }
             }
+        } else {
+            // File already exists, validate it's not too old (prevent stale cache)
+            val fileAge = System.currentTimeMillis() - outputFile.lastModified()
+            val maxAge = 7 * 24 * 60 * 60 * 1000L  // 7 days in milliseconds
+            if (fileAge > maxAge) {
+                Log.d(TAG, "Cached model file is old, refreshing from assets")
+                outputFile.delete()
+                context.assets.open(assetPath).use { input ->
+                    outputFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            }
         }
+        
         return outputFile
     }
     
