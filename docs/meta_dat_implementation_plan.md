@@ -546,6 +546,262 @@ def test_multimodal_query():
 3. **Preview Access**: Meta DAT still in developer preview
 4. **Platform Support**: Android and iOS only (no web)
 
+---
+
+## 🧪 Testing Strategy
+
+### Automated Tests (CI-Friendly)
+
+The project includes comprehensive test suites that run without hardware:
+
+#### Python Backend Tests
+
+**Location**: `tests/test_dat_end_to_end.py`
+
+Run all DAT E2E tests:
+```bash
+cd /path/to/SmartGlass-AI-Agent
+python3 -m pytest tests/test_dat_end_to_end.py -v
+```
+
+**Test Coverage**:
+- ✅ DAT session initialization with device capabilities
+- ✅ Audio chunk streaming and buffering
+- ✅ Video frame streaming with rate limiting
+- ✅ Turn completion and agent response generation
+- ✅ Metrics tracking for DAT operations
+- ✅ Privacy metadata handling
+- ✅ Error handling (unknown session, malformed payloads)
+
+All tests use the `mock` provider and don't require real glasses or network connectivity.
+
+#### Android SDK Tests
+
+**Location**: `sdk-android/src/test/kotlin/com/smartglass/sdk/DatSmartGlassControllerTest.kt`
+
+Run Android unit tests:
+```bash
+cd /path/to/SmartGlass-AI-Agent
+./gradlew :sdk-android:test
+```
+
+**Test Coverage**:
+- ✅ State machine transitions (IDLE → CONNECTING → STREAMING → ERROR)
+- ✅ Audio and frame forwarding to backend
+- ✅ Turn completion with agent responses
+- ✅ Multiple turns in single session
+- ✅ Error recovery and cleanup
+- ✅ Rate-limited keyframe transmission
+
+All tests use `MockSdkFacade` and `MockSmartGlassClient` for offline testing.
+
+### Manual Smoke Tests with Real Hardware
+
+**⚠️ Prerequisites**:
+- Ray-Ban Meta glasses (Developer Edition recommended)
+- Meta View app installed and paired
+- Android device with Meta DAT SDK support
+- Backend server running and accessible from mobile device
+
+#### Setup Steps
+
+1. **Prepare Backend Server**:
+   ```bash
+   cd /path/to/SmartGlass-AI-Agent
+   export PROVIDER=meta  # Use Meta provider for DAT
+   python -m src.edge_runtime.server
+   # Note: Server should be accessible from mobile (not localhost)
+   ```
+
+2. **Configure Sample App**:
+   - Open `sample/src/main/res/values/config.xml`
+   - Set backend URL (e.g., `http://192.168.1.100:8000`)
+   - Build and install: `./gradlew sample:installDebug`
+
+3. **Pair Glasses**:
+   - Open Meta View app
+   - Connect Ray-Ban Meta glasses via Bluetooth
+   - Verify connection status shows "Connected"
+
+#### Smoke Test Scenarios
+
+**Test 1: Basic Session Initialization**
+```
+Steps:
+1. Open SmartGlass sample app
+2. Navigate to "DAT Integration" screen
+3. Tap "Connect to Glasses"
+4. Verify status shows "Connected"
+5. Verify backend logs show session creation
+
+Expected:
+- Green status indicator
+- Session ID displayed
+- No error messages
+```
+
+**Test 2: Audio Streaming + Transcription**
+```
+Steps:
+1. Ensure glasses are connected
+2. Tap "Start Streaming"
+3. Speak clearly: "What time is it?"
+4. Wait for transcription to appear
+5. Tap "Stop Streaming"
+
+Expected:
+- Transcript appears within 2 seconds
+- Text matches spoken query
+- Backend logs show audio chunks received
+```
+
+**Test 3: Multimodal Query (Audio + Vision)**
+```
+Steps:
+1. Point glasses at a recognizable object (e.g., coffee cup)
+2. Tap "Start Streaming"
+3. Speak: "What am I looking at?"
+4. Wait for response
+5. Verify agent response mentions the object
+
+Expected:
+- Response appears within 3-5 seconds
+- Response references visual context
+- Actions list may include relevant suggestions
+```
+
+**Test 4: Multiple Turn Conversation**
+```
+Steps:
+1. Complete Test 3 first
+2. Without disconnecting, ask a follow-up: "What else can you tell me?"
+3. Verify response builds on previous context
+4. Tap "Finalize Turn"
+5. Ask another unrelated question
+
+Expected:
+- Each turn gets a response
+- Session remains connected
+- No memory leaks or connection drops
+```
+
+**Test 5: Error Recovery**
+```
+Steps:
+1. Start streaming
+2. Disable WiFi on mobile device
+3. Speak a query
+4. Re-enable WiFi
+5. Verify error message and retry option
+
+Expected:
+- Graceful error handling
+- User-friendly error message
+- Ability to retry without restarting app
+```
+
+#### Performance Benchmarks
+
+**Latency Targets**:
+- Audio chunk ingestion: < 100ms
+- Frame ingestion: < 100ms
+- End-to-end turn latency: < 2000ms (2 seconds)
+
+Check metrics via backend:
+```bash
+curl http://192.168.1.100:8000/metrics/summary
+```
+
+**Expected Output**:
+```json
+{
+  "health": "ok",
+  "dat_metrics": {
+    "ingest_audio": {"count": 10, "avg_ms": 45, "max_ms": 98},
+    "ingest_frame": {"count": 3, "avg_ms": 67, "max_ms": 89},
+    "end_to_end_turn": {"count": 1, "avg_ms": 1450, "max_ms": 1450}
+  }
+}
+```
+
+#### Debugging Tips
+
+**Glasses Not Connecting**:
+- Check Bluetooth is enabled
+- Verify Meta View app shows "Connected"
+- Try unpairing and re-pairing in Meta View
+- Check Android logs: `adb logcat | grep MetaRayBan`
+
+**No Audio Received**:
+- Verify microphone permissions granted
+- Check glasses battery level (> 20%)
+- Test microphone in Meta View app first
+- Review backend logs for audio chunk errors
+
+**Slow Responses**:
+- Check network latency: `ping <backend-ip>`
+- Verify backend is not throttled (CPU/memory)
+- Reduce keyframe interval in DatSmartGlassController
+- Check `/metrics/summary` for bottlenecks
+
+**Session Drops**:
+- Increase HTTP timeout in SmartGlassClient
+- Check mobile power saving settings
+- Verify backend session cleanup logic
+- Monitor for memory leaks: `adb shell dumpsys meminfo <package>`
+
+### Continuous Integration
+
+**Current CI Coverage**:
+- ✅ Python unit tests (pytest)
+- ✅ Python DAT E2E tests (mock provider)
+- ✅ Android unit tests (Robolectric)
+- ❌ Android instrumentation tests (no hardware in CI)
+- ❌ Hardware smoke tests (manual only)
+
+**CI Configuration**:
+```yaml
+# .github/workflows/test.yml (example)
+name: Test Suite
+on: [push, pull_request]
+
+jobs:
+  python-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - run: pip install -r requirements.txt
+      - run: pytest tests/test_dat_end_to_end.py -v
+  
+  android-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+      - run: ./gradlew :sdk-android:test
+```
+
+### Integration Test Checklist
+
+Use this checklist before merging DAT-related changes:
+
+- [ ] All Python tests pass: `pytest tests/test_dat_end_to_end.py`
+- [ ] All Android tests pass: `./gradlew :sdk-android:test`
+- [ ] Manual smoke test with real glasses completed
+- [ ] Latency benchmarks meet targets (< 2s E2E)
+- [ ] No memory leaks detected (check metrics after 10+ turns)
+- [ ] Error handling tested (network drop, session timeout)
+- [ ] Privacy flags respected (check backend logs)
+- [ ] Documentation updated (if API changed)
+- [ ] CHANGELOG.md updated with user-facing changes
+
+---
+
 ### Future Enhancements
 
 1. **On-Device AI**: Run SNN models on mobile for lower latency

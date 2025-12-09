@@ -1,5 +1,50 @@
 package com.smartglass.sdk
 
+/*
+ * Unit tests for DatSmartGlassController using mock implementations.
+ * 
+ * These tests validate the complete DAT (Device Access Toolkit) workflow
+ * without requiring real Ray-Ban Meta hardware or network connectivity.
+ * 
+ * Test Coverage:
+ * - State machine transitions (IDLE -> CONNECTING -> STREAMING -> ERROR)
+ * - Audio and frame chunk forwarding to SmartGlassClient
+ * - Turn completion and agent response handling
+ * - Error handling and recovery
+ * - Multiple turn completions in single session
+ * 
+ * Running these tests:
+ *   ./gradlew test
+ *   # or for a specific test:
+ *   ./gradlew test --tests "DatSmartGlassControllerTest.completeMultimodalDatWorkflow"
+ * 
+ * Smoke Tests with Real Hardware:
+ * ================================
+ * For integration testing with actual Ray-Ban Meta glasses:
+ * 
+ * 1. Setup:
+ *    - Connect Ray-Ban Meta glasses via Meta View app
+ *    - Pair with Android device
+ *    - Ensure backend server is running and accessible
+ *    - Configure backend URL in sample app
+ * 
+ * 2. Run Manual Smoke Tests:
+ *    a) Install sample app: ./gradlew sample:installDebug
+ *    b) Open app and navigate to DAT integration screen
+ *    c) Tap "Connect to Glasses" and verify connection
+ *    d) Speak a query while looking at something
+ *    e) Verify agent response appears on screen
+ *    f) Verify actions (if any) are executed
+ * 
+ * 3. Automated Hardware Tests:
+ *    - Mark tests with @RequiresDevice annotation
+ *    - Run: ./gradlew connectedAndroidTest
+ *    - Requires connected device with paired glasses
+ *    - See: docs/meta_dat_implementation_plan.md for details
+ * 
+ * Note: Hardware tests are not run in CI due to device requirements.
+ */
+
 import android.graphics.Bitmap
 import androidx.test.core.app.ApplicationProvider
 import com.smartglass.sdk.rayban.MetaRayBanManager
@@ -205,6 +250,155 @@ class DatSmartGlassControllerTest {
         
         assertEquals(DatSmartGlassController.State.IDLE, controller.state)
         assertTrue(mockFacade.disconnected)
+    }
+
+    @Test
+    fun completeMultimodalDatWorkflow() = runTest {
+        /**
+         * End-to-end test simulating complete DAT session workflow:
+         * 1. Initialize controller with fake MetaRayBanManager
+         * 2. Start streaming (connects, begins audio/video capture)
+         * 3. Verify data is forwarded to SmartGlassClient via DAT protocol
+         * 4. Finalize turn and verify agent response with actions
+         *
+         * This test validates the complete integration between:
+         * - DatSmartGlassController state machine
+         * - MetaRayBanManager facade (mocked)
+         * - SmartGlassClient DAT API calls
+         *
+         * For testing with real Ray-Ban Meta glasses, see:
+         * docs/meta_dat_implementation_plan.md - "Testing with Real Hardware" section
+         */
+        val mockFacade = MockSdkFacade(frameDelayMs = 100L)
+        val mockRayBan = MetaRayBanManager(
+            context = ApplicationProvider.getApplicationContext(),
+            sdkFacade = mockFacade
+        )
+        val mockClient = MockSmartGlassClient()
+        val controller = DatSmartGlassController(
+            rayBanManager = mockRayBan,
+            smartGlassClient = mockClient,
+            keyframeIntervalMs = 200L
+        )
+
+        // Step 1: Verify initial state
+        assertEquals(DatSmartGlassController.State.IDLE, controller.state)
+
+        // Step 2: Start streaming session
+        val sessionHandle = controller.start(deviceId = "rayban-meta-e2e-test")
+        
+        // Should transition to STREAMING state
+        assertEquals(DatSmartGlassController.State.STREAMING, controller.state)
+        assertNotNull(sessionHandle)
+        
+        // Verify SmartGlassClient session was initialized
+        assertTrue(mockClient.sessionStarted)
+        assertEquals("mock-session-123", sessionHandle.sessionId)
+        
+        // Verify MetaRayBanManager connected to device
+        assertTrue(mockFacade.connected)
+
+        // Step 3: Allow data streaming for a period (simulate ~500ms of operation)
+        delay(500)
+        
+        // Verify audio chunks were forwarded to backend
+        assertTrue(mockClient.audioChunksReceived.isNotEmpty(), 
+            "Expected audio chunks to be forwarded to SmartGlassClient")
+        
+        // Verify frames were forwarded (rate-limited by keyframeIntervalMs)
+        assertTrue(mockClient.framesReceived.isNotEmpty(),
+            "Expected frame chunks to be forwarded to SmartGlassClient")
+        
+        // Frames should be rate-limited (expect ~2-3 frames for 500ms with 200ms interval)
+        assertTrue(mockClient.framesReceived.size <= 5,
+            "Frame rate limiting should be active")
+
+        // Step 4: Finalize turn and get agent response
+        val agentResult = controller.finalizeTurn()
+        
+        // Verify agent response structure
+        assertNotNull(agentResult)
+        assertEquals("Mock response", agentResult.response)
+        assertNotNull(agentResult.actions)
+        assertTrue(agentResult.actions is List<*>)
+        
+        // In production, actions would have specific structure like:
+        // { action_type: "NAVIGATE", parameters: {...}, priority: "normal" }
+        // This validates the protocol contract is maintained
+
+        // Step 5: Clean up
+        controller.stop()
+        assertEquals(DatSmartGlassController.State.IDLE, controller.state)
+        assertTrue(mockFacade.disconnected)
+    }
+
+    @Test
+    fun datWorkflowHandlesMultipleTurns() = runTest {
+        /**
+         * Test that controller can handle multiple turn completions in a single session.
+         * This validates that finalizeTurn() doesn't break the streaming state.
+         */
+        val mockFacade = MockSdkFacade()
+        val mockRayBan = MetaRayBanManager(
+            context = ApplicationProvider.getApplicationContext(),
+            sdkFacade = mockFacade
+        )
+        val mockClient = MockSmartGlassClient()
+        val controller = DatSmartGlassController(mockRayBan, mockClient)
+
+        // Start streaming
+        controller.start(deviceId = "test-device")
+        delay(100)
+        
+        // Complete first turn
+        val result1 = controller.finalizeTurn()
+        assertNotNull(result1)
+        assertEquals("Mock response", result1.response)
+        
+        // Controller should still be in STREAMING state
+        assertEquals(DatSmartGlassController.State.STREAMING, controller.state)
+        
+        // Allow more data to accumulate
+        delay(100)
+        
+        // Complete second turn
+        val result2 = controller.finalizeTurn()
+        assertNotNull(result2)
+        assertEquals("Mock response", result2.response)
+        
+        // Still streaming
+        assertEquals(DatSmartGlassController.State.STREAMING, controller.state)
+        
+        controller.stop()
+    }
+
+    @Test
+    fun datWorkflowWithMinimalDataTransfer() = runTest {
+        /**
+         * Test DAT workflow with very short streaming window.
+         * This validates that the system handles edge cases where minimal
+         * audio/frame data is collected before turn completion.
+         */
+        val mockFacade = MockSdkFacade()
+        val mockRayBan = MetaRayBanManager(
+            context = ApplicationProvider.getApplicationContext(),
+            sdkFacade = mockFacade
+        )
+        val mockClient = MockSmartGlassClient()
+        val controller = DatSmartGlassController(mockRayBan, mockClient)
+
+        // Start and immediately finalize (minimal data collection)
+        controller.start(deviceId = "test-device")
+        
+        // Very short delay - may have minimal or no data collected
+        delay(10)
+        
+        // Should still return a result even with minimal data
+        val result = controller.finalizeTurn()
+        assertNotNull(result)
+        assertNotNull(result.response)
+        
+        controller.stop()
     }
 
     private fun createController(): DatSmartGlassController {
