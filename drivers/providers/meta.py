@@ -178,7 +178,7 @@ class MetaDatRegistry:
             List of session IDs that have frame or audio data
         """
         with self._lock:
-            return list(set(self._frames.keys()) | set(self._audio.keys()))
+            return list(self._frames.keys() | self._audio.keys())
 
 
 # Global registry instance for DAT payloads

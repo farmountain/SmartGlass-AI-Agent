@@ -73,7 +73,13 @@ def test_module_imports():
             for target in node.targets:
                 if isinstance(target, ast.Name) and target.id == "__all__":
                     if isinstance(node.value, ast.List):
-                        all_exports = [elt.value for elt in node.value.elts if isinstance(elt, ast.Constant)]
+                        # Handle both ast.Constant (Python 3.8+) and ast.Str (Python < 3.8)
+                        all_exports = []
+                        for elt in node.value.elts:
+                            if isinstance(elt, ast.Constant):
+                                all_exports.append(elt.value)
+                            elif hasattr(ast, 'Str') and isinstance(elt, ast.Str):
+                                all_exports.append(elt.s)
     
     assert all_exports is not None, "__all__ should be defined"
     assert "MetaDatRegistry" in all_exports, "MetaDatRegistry should be exported"
