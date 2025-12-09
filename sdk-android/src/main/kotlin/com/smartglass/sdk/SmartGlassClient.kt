@@ -80,6 +80,7 @@ class SmartGlassClient @JvmOverloads constructor(
     private val agentResultAdapter: JsonAdapter<AgentResult> = moshi.adapter(AgentResult::class.java)
     private val mapAdapter: JsonAdapter<Map<String, Any>> = moshi.adapter(mapType)
     private val errorAdapter: JsonAdapter<ErrorResponse> = moshi.adapter(ErrorResponse::class.java)
+    private val metricsSummaryAdapter: JsonAdapter<MetricsSummary> = moshi.adapter(MetricsSummary::class.java)
 
     /**
      * Start a new SmartGlass session.
@@ -321,6 +322,48 @@ class SmartGlassClient @JvmOverloads constructor(
         } ?: emptyList()
     }
 
+    /**
+     * Get metrics summary from the backend.
+     *
+     * This function retrieves a compact metrics summary from the backend's
+     * `/metrics/summary` endpoint, including DAT-specific latencies and
+     * overall system health. Useful for debugging and monitoring.
+     *
+     * @return MetricsSummary containing health state and performance metrics
+     * @throws IOException if the network request fails or returns an error
+     */
+    suspend fun getMetricsSummary(): MetricsSummary {
+        val request = Request.Builder()
+            .url("$resolvedBaseUrl/metrics/summary")
+            .get()
+            .build()
+
+        val response = execute(request)
+        return response.use { parseBody(it, metricsSummaryAdapter) }
+    }
+
+    /**
+     * Get metrics summary and log it via Android Log.d().
+     *
+     * This is a convenience helper that fetches metrics and logs a one-line summary
+     * for debugging purposes.
+     *
+     * @param tag Log tag (default: "SmartGlassMetrics")
+     * @return MetricsSummary containing health state and performance metrics
+     * @throws IOException if the network request fails or returns an error
+     */
+    suspend fun logMetricsSummary(tag: String = "SmartGlassMetrics"): MetricsSummary {
+        val summary = getMetricsSummary()
+        android.util.Log.d(
+            tag,
+            "Health: ${summary.health} | Sessions: ${summary.summary.activeSessions}/${summary.summary.totalSessions} | " +
+                "Audio: ${summary.datMetrics.ingestAudio.avgMs}ms | " +
+                "Frame: ${summary.datMetrics.ingestFrame.avgMs}ms | " +
+                "E2E: ${summary.datMetrics.endToEndTurn.avgMs}ms"
+        )
+        return summary
+    }
+
     private fun throwHttpError(response: Response): Nothing {
         val errorBody = response.body?.string()
         val errorMessage = errorBody?.let { body ->
@@ -372,6 +415,61 @@ data class AgentResult(
 data class Action(
     val type: String,
     val payload: Map<String, Any> = emptyMap(),
+)
+
+/**
+ * Compact metrics summary from the backend.
+ *
+ * Contains DAT-specific latency metrics and overall system health. Designed for
+ * lightweight polling from Android/iOS apps.
+ *
+ * @property health Overall system health state ("ok" or "degraded")
+ * @property datMetrics DAT-specific latency measurements
+ * @property summary High-level session and query statistics
+ */
+data class MetricsSummary(
+    val health: String,
+    @Json(name = "dat_metrics") val datMetrics: DatMetrics,
+    val summary: MetricsSummaryData,
+)
+
+/**
+ * DAT-specific latency metrics.
+ *
+ * @property ingestAudio Audio ingestion latency statistics
+ * @property ingestFrame Frame ingestion latency statistics
+ * @property endToEndTurn End-to-end turn processing latency statistics
+ */
+data class DatMetrics(
+    @Json(name = "ingest_audio") val ingestAudio: LatencyStats,
+    @Json(name = "ingest_frame") val ingestFrame: LatencyStats,
+    @Json(name = "end_to_end_turn") val endToEndTurn: LatencyStats,
+)
+
+/**
+ * Latency statistics for a specific metric.
+ *
+ * @property count Number of measurements
+ * @property avgMs Average latency in milliseconds
+ * @property maxMs Maximum latency in milliseconds
+ */
+data class LatencyStats(
+    val count: Int,
+    @Json(name = "avg_ms") val avgMs: Double,
+    @Json(name = "max_ms") val maxMs: Double,
+)
+
+/**
+ * High-level session and query statistics.
+ *
+ * @property totalSessions Total number of sessions created
+ * @property activeSessions Number of currently active sessions
+ * @property totalQueries Total number of queries processed
+ */
+data class MetricsSummaryData(
+    @Json(name = "total_sessions") val totalSessions: Int,
+    @Json(name = "active_sessions") val activeSessions: Int,
+    @Json(name = "total_queries") val totalQueries: Int,
 )
 
 /**

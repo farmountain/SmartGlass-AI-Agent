@@ -123,12 +123,71 @@ def get_metrics_snapshot(*, display_available: bool | None = None) -> Dict[str, 
     return metrics.snapshot(display_available=display_available)
 
 
+def get_metrics_summary() -> Dict[str, object]:
+    """Return a compact metrics summary with health state for mobile clients.
+    
+    This endpoint provides a simplified view of system health suitable for
+    Android/iOS applications and operator dashboards. It includes:
+    - DAT-specific latency metrics (audio/frame ingestion, end-to-end turns)
+    - Overall health state based on latency thresholds
+    - Key statistics (avg, max latency)
+    
+    Health states:
+    - "ok": All latencies within acceptable thresholds
+    - "degraded": Some latencies exceed thresholds but system is functional
+    
+    Returns:
+        Dict with keys: health, dat_metrics, summary
+    """
+    snapshot = metrics.snapshot()
+    latencies = snapshot.get("latencies", {})
+    
+    # Extract DAT-specific metrics
+    dat_audio = latencies.get("dat_ingest_audio_latency_ms", {})
+    dat_frame = latencies.get("dat_ingest_frame_latency_ms", {})
+    dat_e2e = latencies.get("end_to_end_turn_latency_ms", {})
+    
+    # Convert seconds to milliseconds for display
+    def _to_ms(stats: Dict[str, float]) -> Dict[str, float]:
+        return {
+            "count": stats.get("count", 0),
+            "avg_ms": stats.get("avg", 0.0) * 1000,
+            "max_ms": stats.get("max", 0.0) * 1000,
+        }
+    
+    # Determine health state based on thresholds
+    # Thresholds: audio/frame <100ms, e2e turn <2000ms
+    health = "ok"
+    
+    if dat_audio.get("avg", 0.0) > 0.1:  # 100ms
+        health = "degraded"
+    if dat_frame.get("avg", 0.0) > 0.1:  # 100ms
+        health = "degraded"
+    if dat_e2e.get("avg", 0.0) > 2.0:  # 2000ms
+        health = "degraded"
+    
+    return {
+        "health": health,
+        "dat_metrics": {
+            "ingest_audio": _to_ms(dat_audio),
+            "ingest_frame": _to_ms(dat_frame),
+            "end_to_end_turn": _to_ms(dat_e2e),
+        },
+        "summary": {
+            "total_sessions": snapshot.get("sessions", {}).get("created", 0),
+            "active_sessions": snapshot.get("sessions", {}).get("active", 0),
+            "total_queries": snapshot.get("queries", {}).get("total", 0),
+        },
+    }
+
+
 metrics = MetricsRegistry()
 
 __all__ = [
     "metrics",
     "record_latency",
     "get_metrics_snapshot",
+    "get_metrics_summary",
     "MetricsRegistry",
     "RollingStats",
 ]

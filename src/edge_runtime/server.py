@@ -19,7 +19,7 @@ from uvicorn.config import LOGGING_CONFIG
 
 from .config import EdgeRuntimeConfig, load_config_from_env
 from .session_manager import BufferLimitExceeded, SessionManager
-from src.utils.metrics import get_metrics_snapshot
+from src.utils.metrics import get_metrics_snapshot, get_metrics_summary, record_latency
 from src.wire.dat_protocol import (
     SessionInitRequest,
     SessionInitResponse,
@@ -195,6 +195,31 @@ def metrics() -> Dict[str, object]:
 
     display_available = session_manager.display_available()
     return get_metrics_snapshot(display_available=display_available)
+
+
+@app.get("/metrics/summary")
+def metrics_summary() -> Dict[str, object]:
+    """Expose a compact metrics summary for mobile clients.
+    
+    Returns a lightweight JSON response optimized for Android/iOS apps,
+    including DAT-specific latencies and overall health state.
+    
+    Example response:
+        {
+            "health": "ok",
+            "dat_metrics": {
+                "ingest_audio": {"count": 42, "avg_ms": 15.3, "max_ms": 32.1},
+                "ingest_frame": {"count": 38, "avg_ms": 22.7, "max_ms": 45.2},
+                "end_to_end_turn": {"count": 12, "avg_ms": 850.4, "max_ms": 1203.5}
+            },
+            "summary": {
+                "total_sessions": 12,
+                "active_sessions": 3,
+                "total_queries": 45
+            }
+        }
+    """
+    return get_metrics_summary()
 
 
 def _decode_audio_payload(audio_base64: str) -> tuple[np.ndarray, int]:
@@ -508,38 +533,40 @@ def dat_stream_chunk(payload: StreamChunk) -> StreamChunkResponse:
             # TODO: Validate audio metadata and convert if needed
             # For now, store raw audio bytes with metadata
             # In production, decode based on format (pcm_s16le, opus, etc.)
-            audio_meta = {
-                "sequence_number": payload.sequence_number,
-                "timestamp_ms": payload.timestamp_ms,
-                "format": payload.meta.format if payload.meta else "unknown",
-                "sample_rate": payload.meta.sample_rate if payload.meta else 16000,
-            }
-            
-            # Convert bytes to audio array for compatibility with existing system
-            # Assume pcm_s16le for now
-            if payload.meta and payload.meta.format == "pcm_s16le":
-                audio_array = np.frombuffer(data_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-            else:
-                # For other formats, decode using soundfile
-                audio_array, sample_rate = _decode_audio_bytes(data_bytes)
-                audio_meta["sample_rate"] = sample_rate
-            
-            _DAT_REGISTRY.set_audio(payload.session_id, audio_array, audio_meta)
+            with record_latency("dat_ingest_audio_latency_ms"):
+                audio_meta = {
+                    "sequence_number": payload.sequence_number,
+                    "timestamp_ms": payload.timestamp_ms,
+                    "format": payload.meta.format if payload.meta else "unknown",
+                    "sample_rate": payload.meta.sample_rate if payload.meta else 16000,
+                }
+                
+                # Convert bytes to audio array for compatibility with existing system
+                # Assume pcm_s16le for now
+                if payload.meta and payload.meta.format == "pcm_s16le":
+                    audio_array = np.frombuffer(data_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+                else:
+                    # For other formats, decode using soundfile
+                    audio_array, sample_rate = _decode_audio_bytes(data_bytes)
+                    audio_meta["sample_rate"] = sample_rate
+                
+                _DAT_REGISTRY.set_audio(payload.session_id, audio_array, audio_meta)
             
         elif payload.chunk_type == ChunkType.FRAME:
             # Decode image from JPEG/PNG bytes
-            frame = _decode_image_bytes(data_bytes)
-            frame_array = np.array(frame)
-            
-            frame_meta = {
-                "sequence_number": payload.sequence_number,
-                "timestamp_ms": payload.timestamp_ms,
-                "width": payload.meta.width if payload.meta else frame_array.shape[1],
-                "height": payload.meta.height if payload.meta else frame_array.shape[0],
-                "format": payload.meta.format if payload.meta else "jpeg",
-            }
-            
-            _DAT_REGISTRY.set_frame(payload.session_id, frame_array, frame_meta)
+            with record_latency("dat_ingest_frame_latency_ms"):
+                frame = _decode_image_bytes(data_bytes)
+                frame_array = np.array(frame)
+                
+                frame_meta = {
+                    "sequence_number": payload.sequence_number,
+                    "timestamp_ms": payload.timestamp_ms,
+                    "width": payload.meta.width if payload.meta else frame_array.shape[1],
+                    "height": payload.meta.height if payload.meta else frame_array.shape[0],
+                    "format": payload.meta.format if payload.meta else "jpeg",
+                }
+                
+                _DAT_REGISTRY.set_frame(payload.session_id, frame_array, frame_meta)
             
         elif payload.chunk_type == ChunkType.IMU:
             # TODO: Implement IMU data handling
@@ -610,57 +637,58 @@ def dat_turn_complete(payload: TurnCompleteRequest) -> TurnCompleteResponse:
         >>>   ]
         >>> }
     """
-    logger.info(
-        "Turn completion requested: session_id=%s, turn_id=%s",
-        payload.session_id,
-        payload.turn_id,
-    )
-    
-    # Verify session exists
-    try:
-        session_manager.get_summary(payload.session_id)
-    except KeyError as exc:
-        logger.warning("Unknown session_id=%s for turn completion", payload.session_id)
-        raise HTTPException(
-            status_code=404,
-            detail=f"Session not found: {payload.session_id}",
-        ) from exc
-    
-    # TODO: Implement full turn completion logic
-    # 1. Retrieve buffered audio/frames from _DAT_REGISTRY
-    # 2. Run agent query with multimodal inputs
-    # 3. Parse agent response and extract actions
-    # 4. Clear buffers after processing
-    
-    # For now, return a placeholder response
-    logger.warning(
-        "Turn completion not fully implemented yet. Returning placeholder response."
-    )
-    
-    # Get transcript from audio if available (simplified)
-    transcript = None
-    if payload.query_text:
-        transcript = payload.query_text
-    else:
-        # TODO: Process buffered audio to get transcript
-        # audio, meta = _DAT_REGISTRY.get_latest_audio_buffer(payload.session_id)
-        # if audio is not None:
-        #     transcript = session_manager.ingest_audio(...)
-        pass
-    
-    # TODO: Process buffered frames and run multimodal query
-    # frame, meta = _DAT_REGISTRY.get_latest_frame(payload.session_id)
-    # if frame is not None:
-    #     result = session_manager.run_query(
-    #         payload.session_id,
-    #         text_query=transcript,
-    #         image_input=frame,
-    #         ...
-    #     )
-    
-    return TurnCompleteResponse(
-        session_id=payload.session_id,
-        turn_id=payload.turn_id,
+    with record_latency("end_to_end_turn_latency_ms"):
+        logger.info(
+            "Turn completion requested: session_id=%s, turn_id=%s",
+            payload.session_id,
+            payload.turn_id,
+        )
+        
+        # Verify session exists
+        try:
+            session_manager.get_summary(payload.session_id)
+        except KeyError as exc:
+            logger.warning("Unknown session_id=%s for turn completion", payload.session_id)
+            raise HTTPException(
+                status_code=404,
+                detail=f"Session not found: {payload.session_id}",
+            ) from exc
+        
+        # TODO: Implement full turn completion logic
+        # 1. Retrieve buffered audio/frames from _DAT_REGISTRY
+        # 2. Run agent query with multimodal inputs
+        # 3. Parse agent response and extract actions
+        # 4. Clear buffers after processing
+        
+        # For now, return a placeholder response
+        logger.warning(
+            "Turn completion not fully implemented yet. Returning placeholder response."
+        )
+        
+        # Get transcript from audio if available (simplified)
+        transcript = None
+        if payload.query_text:
+            transcript = payload.query_text
+        else:
+            # TODO: Process buffered audio to get transcript
+            # audio, meta = _DAT_REGISTRY.get_latest_audio_buffer(payload.session_id)
+            # if audio is not None:
+            #     transcript = session_manager.ingest_audio(...)
+            pass
+        
+        # TODO: Process buffered frames and run multimodal query
+        # frame, meta = _DAT_REGISTRY.get_latest_frame(payload.session_id)
+        # if frame is not None:
+        #     result = session_manager.run_query(
+        #         payload.session_id,
+        #         text_query=transcript,
+        #         image_input=frame,
+        #         ...
+        #     )
+        
+        return TurnCompleteResponse(
+            session_id=payload.session_id,
+            turn_id=payload.turn_id,
         response="Turn completion endpoint is under development. Full implementation coming soon.",
         transcript=transcript,
         actions=[],
