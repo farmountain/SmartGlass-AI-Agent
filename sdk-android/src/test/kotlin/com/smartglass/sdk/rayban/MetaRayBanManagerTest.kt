@@ -83,6 +83,51 @@ class MetaRayBanManagerTest {
         assertNotNull(bitmap)
     }
 
+    @Test
+    fun videoStreamingDelegatesToSdkFacade() = runTest {
+        val facade = RecordingSdkFacade()
+        val manager = MetaRayBanManager(
+            context = ApplicationProvider.getApplicationContext(),
+            sdkFacade = facade,
+        )
+
+        var receivedFrame: ByteArray? = null
+        var receivedTimestamp: Long? = null
+        manager.startStreaming { frame, timestamp ->
+            receivedFrame = frame
+            receivedTimestamp = timestamp
+        }
+
+        assertEquals(1, facade.startStreamingCount.get())
+        assertNotNull(facade.lastFrameCallback)
+
+        // Simulate receiving a frame
+        facade.lastFrameCallback?.invoke(byteArrayOf(1, 2, 3, 4), 12345L)
+        assertEquals(4, receivedFrame?.size)
+        assertEquals(12345L, receivedTimestamp)
+
+        manager.stopStreaming()
+        assertEquals(1, facade.stopStreamingCount.get())
+    }
+
+    @Test
+    fun fallbackVideoStreamingProducesMockFrames() = runTest {
+        val manager = MetaRayBanManager(ApplicationProvider.getApplicationContext())
+        val frames = mutableListOf<Pair<ByteArray, Long>>()
+
+        manager.startStreaming { frame, timestamp ->
+            frames.add(Pair(frame, timestamp))
+        }
+
+        // Give mock streaming time to produce frames
+        kotlinx.coroutines.delay(1500)
+        manager.stopStreaming()
+
+        // Should have received some mock frames
+        assertEquals(MetaRayBanManager.FAKE_VIDEO_FRAME_COUNT, frames.size)
+        assertEquals("fake-video-frame-0", frames.first().first.decodeToString())
+    }
+
     private class RecordingSdkFacade(
         private val photo: Bitmap? = null,
         private val audioFlow: Flow<ByteArray> = flowOf(byteArrayOf(0)),
@@ -91,6 +136,9 @@ class MetaRayBanManagerTest {
         var connectedTransport: String? = null
         val captureCount = AtomicInteger(0)
         val stopAudioCount = AtomicInteger(0)
+        val startStreamingCount = AtomicInteger(0)
+        val stopStreamingCount = AtomicInteger(0)
+        var lastFrameCallback: ((frame: ByteArray, timestampMs: Long) -> Unit)? = null
 
         override suspend fun connect(deviceId: String, transportHint: String) {
             connectedDeviceId = deviceId
@@ -102,6 +150,15 @@ class MetaRayBanManagerTest {
         override suspend fun capturePhoto(): Bitmap? {
             captureCount.incrementAndGet()
             return photo
+        }
+
+        override suspend fun startStreaming(onFrame: (frame: ByteArray, timestampMs: Long) -> Unit) {
+            startStreamingCount.incrementAndGet()
+            lastFrameCallback = onFrame
+        }
+
+        override fun stopStreaming() {
+            stopStreamingCount.incrementAndGet()
         }
 
         override fun startAudioStreaming(): Flow<ByteArray> = audioFlow
