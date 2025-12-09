@@ -20,7 +20,7 @@ See Also:
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Dict, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -325,7 +325,7 @@ class TurnCompleteResponse(BaseModel):
     transcript: Optional[str] = Field(
         None, description="Transcribed audio query (if audio was provided)"
     )
-    actions: list[Action] = Field(
+    actions: List[Action] = Field(
         default_factory=list, description="List of actions for client to execute"
     )
     metadata: Optional[ResponseMetadata] = Field(

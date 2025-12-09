@@ -1,4 +1,19 @@
-"""Tests for DAT wire protocol Pydantic models and validation."""
+"""Tests for DAT wire protocol Pydantic models and validation.
+
+Note on import pattern:
+This test uses importlib to load the wire protocol module directly, bypassing
+src/__init__.py which imports heavy dependencies (whisper, torch, etc.).
+This allows these lightweight tests to run without those dependencies installed,
+which is important for CI/CD environments and fast test execution.
+
+Alternative approaches considered:
+- Lazy imports in src/__init__.py (rejected: too invasive)
+- Separate package for wire protocol (rejected: over-engineering)
+- Mock heavy imports (rejected: fragile and complex)
+
+This pattern is specific to testing modules that don't actually need the heavy
+dependencies but are located in the src/ package.
+"""
 
 import importlib.util
 import sys
@@ -37,7 +52,7 @@ TurnCompleteResponse = dat_protocol.TurnCompleteResponse
 # Rebuild Pydantic models to resolve forward references with proper namespace
 # Include the module's namespace so typing annotations can be resolved
 import typing
-from typing import Optional, Union, Any, Dict
+from typing import Optional, Union, Any, Dict, List
 namespace = {
     'ClientCapabilities': ClientCapabilities,
     'ServerCapabilities': ServerCapabilities,
@@ -55,6 +70,7 @@ namespace = {
     'Union': Union,
     'Any': Any,
     'Dict': Dict,
+    'List': List,
     'list': list,
 }
 

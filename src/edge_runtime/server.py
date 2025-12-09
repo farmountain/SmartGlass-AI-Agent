@@ -499,6 +499,11 @@ def dat_stream_chunk(payload: StreamChunk) -> StreamChunkResponse:
         # Decode base64 payload
         data_bytes = base64.b64decode(payload.payload)
         
+        # Validate payload size to prevent memory exhaustion
+        max_size = 10 * 1024 * 1024  # 10MB hard limit
+        if len(data_bytes) > max_size:
+            raise ValueError(f"Payload size {len(data_bytes)} exceeds maximum {max_size} bytes")
+        
         if payload.chunk_type == ChunkType.AUDIO:
             # TODO: Validate audio metadata and convert if needed
             # For now, store raw audio bytes with metadata
@@ -551,7 +556,7 @@ def dat_stream_chunk(payload: StreamChunk) -> StreamChunkResponse:
             message="Chunk buffered successfully",
         )
         
-    except (ValueError, Exception) as exc:  # pylint: disable=broad-except
+    except Exception as exc:  # pylint: disable=broad-except
         logger.error(
             "Error processing stream chunk: session_id=%s, error=%s",
             payload.session_id,
