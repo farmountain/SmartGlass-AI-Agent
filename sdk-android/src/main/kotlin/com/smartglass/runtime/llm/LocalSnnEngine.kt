@@ -68,12 +68,12 @@ class LocalSnnEngine(
             // Pad to expected sequence length
             val paddedIds = tokenizer.pad(inputIds, tokenizer.maxSequenceLength)
             
-            // Run inference
+            // Run inference (convert IntArray to LongArray for backend compatibility)
             val backend = modelBackend ?: throw IllegalStateException("Model not initialized")
-            val outputIds = backend.forward(paddedIds)
+            val outputIds = backend.forward(paddedIds.map { it.toLong() }.toLongArray())
             
-            // Decode output tokens to text
-            val result = tokenizer.decode(outputIds)
+            // Decode output tokens to text (convert LongArray back to IntArray)
+            val result = tokenizer.decode(outputIds.map { it.toInt() }.toIntArray())
             
             // Return result or fallback
             if (result.isNotBlank()) result else getFallbackResponse()

@@ -1,22 +1,25 @@
 package com.smartglass.runtime.llm
 
 import android.content.Context
+import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.util.Locale
 import kotlin.math.absoluteValue
 
+private const val TAG = "LocalTokenizer"
+
 /**
  * Size of hash space for fallback tokenization. Using 2^15 to keep token IDs manageable
  * while providing reasonable distribution for vocabulary-less tokenization.
  */
-private const val TOKEN_SPACE = 32768L
+private const val TOKEN_SPACE = 32768
 
 /**
  * Token ID used for unknown or padding tokens in fallback mode.
  */
-private const val UNKNOWN_TOKEN_ID = 0L
+private const val UNKNOWN_TOKEN_ID = 0
 
 /**
  * Lightweight tokenizer for on-device SNN models.
@@ -37,14 +40,14 @@ class LocalTokenizer(
      * @param maxLength Maximum number of tokens to generate
      * @return Array of token IDs
      */
-    fun encode(text: String, maxLength: Int = 64): LongArray {
+    fun encode(text: String, maxLength: Int = 64): IntArray {
         val sanitized = text.trim()
         if (sanitized.isEmpty()) {
-            return longArrayOf(metadata.unkTokenId)
+            return intArrayOf(metadata.unkTokenId)
         }
         
         if (metadata.vocab.isNotEmpty()) {
-            val vocabIndex = metadata.vocab.withIndex().associate { (idx, token) -> token to idx.toLong() }
+            val vocabIndex = metadata.vocab.withIndex().associate { (idx, token) -> token to idx }
             val tokens = sanitized
                 .split(Regex("\\s+"))
                 .filter { it.isNotEmpty() }
@@ -54,19 +57,20 @@ class LocalTokenizer(
                     vocabIndex[normalized] ?: metadata.unkTokenId
                 }
             
-            return if (tokens.isNotEmpty()) tokens.toLongArray() else longArrayOf(metadata.unkTokenId)
+            return if (tokens.isNotEmpty()) tokens.toIntArray() else intArrayOf(metadata.unkTokenId)
         }
         
         // Fallback to hash-based tokenization
+        Log.w(TAG, "Vocab not found, using fallback hash-based tokenization")
         val tokens = sanitized
             .split(Regex("\\s+"))
             .filter { it.isNotEmpty() }
             .take(maxLength)
             .map { word ->
-                (normalizeToken(word).hashCode().toLong().absoluteValue % TOKEN_SPACE) + 1
+                ((normalizeToken(word).hashCode().absoluteValue % TOKEN_SPACE) + 1)
             }
         
-        return if (tokens.isNotEmpty()) tokens.toLongArray() else longArrayOf(UNKNOWN_TOKEN_ID)
+        return if (tokens.isNotEmpty()) tokens.toIntArray() else intArrayOf(UNKNOWN_TOKEN_ID)
     }
     
     /**
@@ -75,7 +79,7 @@ class LocalTokenizer(
      * @param tokenIds Array of token IDs
      * @return Decoded text string
      */
-    fun decode(tokenIds: LongArray): String {
+    fun decode(tokenIds: IntArray): String {
         if (tokenIds.isEmpty()) {
             return ""
         }
@@ -83,8 +87,7 @@ class LocalTokenizer(
         val decoded = if (metadata.vocab.isNotEmpty()) {
             tokenIds
                 .mapNotNull { tokenId ->
-                    val idx = tokenId.toInt()
-                    metadata.vocab.getOrNull(idx)
+                    metadata.vocab.getOrNull(tokenId)
                         ?.takeIf { tokenId != metadata.padTokenId }
                 }
                 .filter { it.isNotEmpty() }
@@ -107,12 +110,12 @@ class LocalTokenizer(
      * @param length Desired length
      * @return Padded or truncated token array
      */
-    fun pad(tokenIds: LongArray, length: Int): LongArray {
+    fun pad(tokenIds: IntArray, length: Int): IntArray {
         if (tokenIds.size >= length) {
             return tokenIds.copyOf(length)
         }
         
-        val padded = LongArray(length) { metadata.padTokenId }
+        val padded = IntArray(length) { metadata.padTokenId }
         tokenIds.copyInto(padded)
         return padded
     }
@@ -126,7 +129,7 @@ class LocalTokenizer(
     /**
      * Get the padding token ID.
      */
-    val padTokenId: Long
+    val padTokenId: Int
         get() = metadata.padTokenId
     
     private fun normalizeToken(raw: String): String =
@@ -134,6 +137,7 @@ class LocalTokenizer(
     
     private fun loadMetadata(context: Context, modelAssetPath: String?): TokenizerMetadata {
         if (modelAssetPath == null) {
+            Log.w(TAG, "No model asset path provided, using fallback tokenization")
             return TokenizerMetadata()
         }
         
@@ -156,6 +160,7 @@ class LocalTokenizer(
                 return metadata
             }
         }
+        Log.w(TAG, "Metadata not found for model $modelAssetPath, using fallback tokenization")
         return TokenizerMetadata()
     }
     
@@ -176,8 +181,8 @@ class LocalTokenizer(
         val tokenizer = json.optJSONObject("tokenizer") ?: json.optJSONObject("tokenizer_config")
         val vocab = tokenizer?.optJSONArray("vocab")?.toStringList() ?: emptyList()
         val lowercase = tokenizer?.optBoolean("lowercase", true) ?: true
-        val padTokenId = tokenizer?.optLong("pad_token_id", 0L) ?: 0L
-        val unkTokenId = tokenizer?.optLong("unk_token_id", UNKNOWN_TOKEN_ID) ?: UNKNOWN_TOKEN_ID
+        val padTokenId = tokenizer?.optInt("pad_token_id", 0) ?: 0
+        val unkTokenId = tokenizer?.optInt("unk_token_id", UNKNOWN_TOKEN_ID) ?: UNKNOWN_TOKEN_ID
         val maxSequenceLength = tokenizer?.optIntOrNull("max_length")
         
         return TokenizerMetadata(
@@ -193,8 +198,8 @@ class LocalTokenizer(
 private data class TokenizerMetadata(
     val vocab: List<String> = emptyList(),
     val lowercase: Boolean = true,
-    val padTokenId: Long = 0L,
-    val unkTokenId: Long = UNKNOWN_TOKEN_ID,
+    val padTokenId: Int = 0,
+    val unkTokenId: Int = UNKNOWN_TOKEN_ID,
     val maxSequenceLength: Int? = null
 )
 

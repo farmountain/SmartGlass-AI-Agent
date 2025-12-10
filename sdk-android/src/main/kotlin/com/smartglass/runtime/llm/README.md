@@ -99,13 +99,13 @@ The `LocalTokenizer` class handles text encoding and decoding:
 val tokenizer = LocalTokenizer(context, modelAssetPath = "model.pt")
 
 // Encode text to token IDs
-val tokens: LongArray = tokenizer.encode("Hello world", maxLength = 64)
+val tokens: IntArray = tokenizer.encode("Hello world", maxLength = 64)
 
 // Decode token IDs back to text
 val text: String = tokenizer.decode(tokens)
 
 // Pad or truncate tokens
-val padded: LongArray = tokenizer.pad(tokens, length = 128)
+val padded: IntArray = tokenizer.pad(tokens, length = 128)
 
 // Access metadata
 val maxLen = tokenizer.maxSequenceLength
