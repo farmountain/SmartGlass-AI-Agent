@@ -32,6 +32,7 @@ class ActionDispatcher(
         private const val NOTES_PREFS_NAME = "smartglass_notes"
         private const val NOTES_KEY = "notes_list"
         private const val NOTES_DELIMITER = "\n---\n"
+        private const val DEFAULT_DESTINATION_LABEL = "Location"
     }
 
     init {
@@ -103,7 +104,7 @@ class ActionDispatcher(
             .build()
 
         // Use unique ID based on content to avoid duplicate notifications
-        val notificationId = (action.title + action.body).hashCode()
+        val notificationId = java.util.Objects.hash(action.title, action.body)
         notificationManager.notify(notificationId, notification)
 
         Log.d(TAG, "ShowText notification displayed: ${action.title}")
@@ -144,7 +145,7 @@ class ActionDispatcher(
         val geoUri = when {
             action.latitude != null && action.longitude != null -> {
                 // Have coordinates
-                val label = action.destinationLabel ?: "Destination"
+                val label = action.destinationLabel ?: DEFAULT_DESTINATION_LABEL
                 Uri.parse("geo:${action.latitude},${action.longitude}?q=${Uri.encode(label)}")
             }
             action.destinationLabel != null -> {

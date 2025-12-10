@@ -53,6 +53,21 @@ class ActionDispatcherTest {
         dispatcher = ActionDispatcher(context, mockTts)
     }
 
+    /**
+     * Helper method to register an intent handler with the mock PackageManager.
+     */
+    private fun registerIntentHandler(intent: Intent, packageName: String) {
+        shadowOf(context.packageManager).addResolveInfoForIntent(
+            intent,
+            ResolveInfo().apply {
+                activityInfo = ActivityInfo().apply {
+                    this.packageName = packageName
+                    name = "MainActivity"
+                }
+            }
+        )
+    }
+
     @Test
     fun `dispatch executes all actions in sequence`() {
         val actions = listOf(
@@ -133,15 +148,7 @@ class ActionDispatcherTest {
 
         // Setup intent handler
         val geoIntent = Intent(Intent.ACTION_VIEW, Uri.parse("geo:37.7749,-122.4194?q=Coffee%20Shop"))
-        shadowOf(context.packageManager).addResolveInfoForIntent(
-            geoIntent,
-            ResolveInfo().apply {
-                activityInfo = ActivityInfo().apply {
-                    packageName = "com.google.android.apps.maps"
-                    name = "MapsActivity"
-                }
-            }
-        )
+        registerIntentHandler(geoIntent, "com.google.android.apps.maps")
 
         dispatcher.dispatch(listOf(action))
 
@@ -163,15 +170,7 @@ class ActionDispatcherTest {
 
         // Setup intent handler
         val geoIntent = Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=Central%20Park"))
-        shadowOf(context.packageManager).addResolveInfoForIntent(
-            geoIntent,
-            ResolveInfo().apply {
-                activityInfo = ActivityInfo().apply {
-                    packageName = "com.google.android.apps.maps"
-                    name = "MapsActivity"
-                }
-            }
-        )
+        registerIntentHandler(geoIntent, "com.google.android.apps.maps")
 
         dispatcher.dispatch(listOf(action))
 
