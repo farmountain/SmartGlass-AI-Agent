@@ -4,6 +4,7 @@ import android.util.Log
 import com.smartglass.actions.ActionDispatcher
 import com.smartglass.actions.SmartGlassAction
 import com.smartglass.runtime.llm.LocalSnnEngine
+import com.smartglass.runtime.llm.SnnPromptBuilder
 import com.smartglass.sdk.rayban.MetaRayBanManager
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicReference
@@ -304,24 +305,11 @@ class DatSmartGlassController(
     }
     
     /**
-     * Build a prompt string from text query and visual context.
+     * Build a structured prompt string from text query and visual context.
+     * Uses SnnPromptBuilder to create prompts optimized for JSON output.
      */
     private fun buildPrompt(textQuery: String?, visualContext: String?): String {
-        val parts = mutableListOf<String>()
-        
-        if (!textQuery.isNullOrBlank()) {
-            parts.add("User: $textQuery")
-        }
-        
-        if (!visualContext.isNullOrBlank()) {
-            parts.add("[Visual Context: $visualContext]")
-        }
-        
-        if (parts.isEmpty()) {
-            parts.add("User: Hello")
-        }
-        
-        return parts.joinToString("\n")
+        return SnnPromptBuilder.buildStructuredPrompt(textQuery, visualContext)
     }
     
     /**
