@@ -1,21 +1,44 @@
 package com.smartglass.sdk.examples
 
 import android.content.Context
+import android.speech.tts.TextToSpeech
+import com.smartglass.actions.ActionDispatcher
 import com.smartglass.actions.SmartGlassAction
+import java.util.Locale
 
 /**
  * Example demonstrating how to use the SmartGlassAction sealed class
- * for type-safe action parsing and execution.
+ * and ActionDispatcher for type-safe action parsing and execution.
  */
 object SmartGlassActionExample {
     
     /**
-     * Parse actions from a JSON response and execute them with type safety.
+     * Parse actions from a JSON response and execute them using ActionDispatcher.
+     *
+     * @param jsonResponse JSON array string from the agent
+     * @param context Android context for executing actions
+     * @param textToSpeech Optional TextToSpeech instance for TTS actions
+     */
+    fun parseAndExecuteActions(
+        jsonResponse: String,
+        context: Context,
+        textToSpeech: TextToSpeech? = null
+    ) {
+        // Parse JSON into strongly-typed actions
+        val actions = SmartGlassAction.fromJsonArray(jsonResponse)
+        
+        // Execute actions using ActionDispatcher
+        val dispatcher = ActionDispatcher(context, textToSpeech)
+        dispatcher.dispatch(actions)
+    }
+    
+    /**
+     * Alternative: Parse actions and handle them manually with type safety.
      *
      * @param jsonResponse JSON array string from the agent
      * @param context Android context for executing actions
      */
-    fun parseAndExecuteActions(jsonResponse: String, context: Context) {
+    fun parseAndExecuteActionsManually(jsonResponse: String, context: Context) {
         // Parse JSON into strongly-typed actions
         val actions = SmartGlassAction.fromJsonArray(jsonResponse)
         
@@ -25,13 +48,12 @@ object SmartGlassActionExample {
                 is SmartGlassAction.ShowText -> {
                     // Type-safe access to title and body
                     println("Showing text: ${action.title} - ${action.body}")
-                    // TODO: Display in UI
+                    // Use ActionDispatcher for actual execution
                 }
                 
                 is SmartGlassAction.TtsSpeak -> {
                     // Type-safe access to text
                     println("Speaking: ${action.text}")
-                    // TODO: Use Android TTS
                 }
                 
                 is SmartGlassAction.Navigate -> {
@@ -41,25 +63,38 @@ object SmartGlassActionExample {
                     } else if (action.latitude != null && action.longitude != null) {
                         println("Navigating to coordinates: ${action.latitude}, ${action.longitude}")
                     }
-                    // TODO: Launch navigation intent
                 }
                 
                 is SmartGlassAction.RememberNote -> {
                     // Type-safe access to note
                     println("Remembering note: ${action.note}")
-                    // TODO: Store in local database
                 }
                 
                 is SmartGlassAction.OpenApp -> {
                     // Type-safe access to package name
                     println("Opening app: ${action.packageName}")
-                    // TODO: Launch app with intent
                 }
                 
                 is SmartGlassAction.SystemHint -> {
                     // Type-safe access to hint
                     println("System hint: ${action.hint}")
-                    // TODO: Show subtle UI hint
+                }
+            }
+        }
+    }
+    
+    /**
+     * Example showing how to initialize TextToSpeech for use with ActionDispatcher.
+     */
+    fun createTextToSpeechInstance(
+        context: Context,
+        onInitialized: (TextToSpeech) -> Unit
+    ) {
+        val tts = TextToSpeech(context) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                val result = tts.setLanguage(Locale.US)
+                if (result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED) {
+                    onInitialized(tts)
                 }
             }
         }
