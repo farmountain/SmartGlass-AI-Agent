@@ -274,7 +274,8 @@ def main():
         print(f"\nStatistics:")
         print(f"  Total scenarios: {len(training_data)}")
         print(f"  Total actions: {total_actions}")
-        print(f"  Average actions per scenario: {total_actions / len(training_data):.1f}")
+        if len(training_data) > 0:
+            print(f"  Average actions per scenario: {total_actions / len(training_data):.1f}")
         
         # Show sample entry
         if training_data:

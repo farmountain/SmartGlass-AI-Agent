@@ -17,10 +17,21 @@ from types import ModuleType
 def _install_stub_modules() -> None:
     """Install stub modules for testing without full dependencies."""
     
-    # Stub numpy
+    # Stub numpy with proper 3D array support
     dummy_numpy = ModuleType("numpy")
     dummy_numpy.ndarray = type("ndarray", (), {})
-    dummy_numpy.zeros = lambda shape, dtype: [[0 for _ in range(shape[1])] for _ in range(shape[0])]
+    
+    def zeros_stub(shape, dtype=None):
+        """Stub for numpy.zeros that handles 3D arrays."""
+        if isinstance(shape, tuple) and len(shape) == 3:
+            # Return a nested list structure for 3D arrays
+            return [[[0 for _ in range(shape[2])] for _ in range(shape[1])] for _ in range(shape[0])]
+        elif isinstance(shape, tuple) and len(shape) == 2:
+            return [[0 for _ in range(shape[1])] for _ in range(shape[0])]
+        else:
+            return [0 for _ in range(shape)]
+    
+    dummy_numpy.zeros = zeros_stub
     dummy_numpy.uint8 = None
     sys.modules.setdefault("numpy", dummy_numpy)
     
