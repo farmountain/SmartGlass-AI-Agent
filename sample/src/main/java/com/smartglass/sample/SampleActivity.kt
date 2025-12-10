@@ -39,8 +39,12 @@ class SampleActivity : AppCompatActivity() {
     private var audioStreamJob: Job? = null
     private var lastSessionId: String? = null
     
-    // End-to-end controller for streaming glasses data to backend
+    // End-to-end controller for streaming glasses data to local processing
     private var datController: DatSmartGlassController? = null
+    
+    companion object {
+        private const val SNN_MODEL_ASSET_PATH = "snn_student_ts.pt"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -259,8 +263,8 @@ class SampleActivity : AppCompatActivity() {
                 // Create controller if not already created
                 if (datController == null) {
                     // Initialize LocalSnnEngine and ActionDispatcher for on-device processing
-                    val tokenizer = LocalTokenizer(applicationContext, "snn_student_ts.pt")
-                    val snnEngine = LocalSnnEngine(applicationContext, "snn_student_ts.pt", tokenizer)
+                    val tokenizer = LocalTokenizer(applicationContext, SNN_MODEL_ASSET_PATH)
+                    val snnEngine = LocalSnnEngine(applicationContext, SNN_MODEL_ASSET_PATH, tokenizer)
                     val actionDispatcher = ActionDispatcher(applicationContext)
                     
                     datController = DatSmartGlassController(

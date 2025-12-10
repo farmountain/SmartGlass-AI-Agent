@@ -46,7 +46,6 @@ package com.smartglass.sdk
  * Note: Hardware tests are not run in CI due to device requirements.
  */
 
-import android.content.Context
 import android.graphics.Bitmap
 import androidx.test.core.app.ApplicationProvider
 import com.smartglass.actions.ActionDispatcher

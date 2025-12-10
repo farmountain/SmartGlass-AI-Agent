@@ -23,6 +23,7 @@ import org.json.JSONObject
 
 private const val TAG = "DatSmartGlassController"
 private const val DEFAULT_KEYFRAME_INTERVAL_MS = 500L // Send keyframes every 500ms
+private const val MAX_RESPONSE_LENGTH = 200 // Maximum length for response text display
 
 /**
  * End-to-end controller that bridges Meta Ray-Ban DAT SDK with on-device SNN inference.
@@ -343,14 +344,15 @@ class DatSmartGlassController(
             val actionsArray = json.optJSONArray("actions")
             
             val actions = if (actionsArray != null) {
-                SmartGlassAction.fromJsonArray(actionsArray.toString())
+                // Parse actions directly from JSONArray without string conversion
+                parseActionsFromJson(actionsArray)
             } else {
                 emptyList()
             }
             
             // If no response text found, use the raw response as fallback
             val finalText = if (responseText.isBlank()) {
-                rawResponse.take(200) // Limit to reasonable length
+                rawResponse.take(MAX_RESPONSE_LENGTH)
             } else {
                 responseText
             }
@@ -360,8 +362,65 @@ class DatSmartGlassController(
         } catch (e: Exception) {
             Log.w(TAG, "Failed to parse JSON response, using raw text", e)
             // If not valid JSON, treat entire response as text
-            Pair(rawResponse.take(200), emptyList())
+            Pair(rawResponse.take(MAX_RESPONSE_LENGTH), emptyList())
         }
+    }
+    
+    /**
+     * Parse actions from JSONArray without intermediate string conversion.
+     */
+    private fun parseActionsFromJson(jsonArray: org.json.JSONArray): List<SmartGlassAction> {
+        val actions = mutableListOf<SmartGlassAction>()
+        for (i in 0 until jsonArray.length()) {
+            val actionObj = jsonArray.optJSONObject(i) ?: continue
+            val type = actionObj.optString("type", "").uppercase()
+            val payload = actionObj.optJSONObject("payload")
+            
+            if (type.isBlank() || payload == null) continue
+            
+            val action = when (type) {
+                "SHOW_TEXT" -> {
+                    val title = payload.optString("title", "")
+                    val body = payload.optString("body", "")
+                    if (title.isNotBlank() && body.isNotBlank()) {
+                        SmartGlassAction.ShowText(title, body)
+                    } else null
+                }
+                "TTS_SPEAK" -> {
+                    val text = payload.optString("text", "")
+                    if (text.isNotBlank()) SmartGlassAction.TtsSpeak(text) else null
+                }
+                "NAVIGATE" -> {
+                    val destinationLabel = payload.optString("destinationLabel", null)
+                    val latitude = if (payload.has("latitude")) payload.optDouble("latitude") else null
+                    val longitude = if (payload.has("longitude")) payload.optDouble("longitude") else null
+                    if (destinationLabel != null || (latitude != null && longitude != null)) {
+                        SmartGlassAction.Navigate(destinationLabel, latitude, longitude)
+                    } else null
+                }
+                "REMEMBER_NOTE" -> {
+                    val note = payload.optString("note", "")
+                    if (note.isNotBlank()) SmartGlassAction.RememberNote(note) else null
+                }
+                "OPEN_APP" -> {
+                    val packageName = payload.optString("packageName", "")
+                    if (packageName.isNotBlank()) SmartGlassAction.OpenApp(packageName) else null
+                }
+                "SYSTEM_HINT" -> {
+                    val hint = payload.optString("hint", "")
+                    if (hint.isNotBlank()) SmartGlassAction.SystemHint(hint) else null
+                }
+                else -> {
+                    Log.w(TAG, "Unknown action type: $type")
+                    null
+                }
+            }
+            
+            if (action != null) {
+                actions.add(action)
+            }
+        }
+        return actions
     }
 
     private fun startAudioStreaming() {
