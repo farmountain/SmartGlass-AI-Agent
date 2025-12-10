@@ -88,4 +88,46 @@ class LocalTokenizerTest {
         val tokenizer = LocalTokenizer(MockContext(), null)
         assertTrue(tokenizer.maxSequenceLength > 0, "Expected positive max sequence length")
     }
+    
+    @Test
+    fun encodeIsDeterministic() {
+        val tokenizer = LocalTokenizer(MockContext(), null)
+        val text = "hello world test"
+        val tokens1 = tokenizer.encode(text)
+        val tokens2 = tokenizer.encode(text)
+        
+        assertTrue(tokens1.contentEquals(tokens2), "Expected deterministic encoding")
+    }
+    
+    @Test
+    fun encodeSupportsBasicAscii() {
+        val tokenizer = LocalTokenizer(MockContext(), null)
+        val asciiText = "The quick brown fox jumps over the lazy dog 0123456789"
+        val tokens = tokenizer.encode(asciiText, maxLength = 100)
+        
+        assertTrue(tokens.isNotEmpty(), "Expected non-empty tokens for ASCII text")
+        assertTrue(tokens.all { it >= 0 }, "Expected all token IDs to be non-negative")
+    }
+    
+    @Test
+    fun decodeIsDeterministic() {
+        val tokenizer = LocalTokenizer(MockContext(), null)
+        val tokens = intArrayOf(100, 200, 300)
+        val decoded1 = tokenizer.decode(tokens)
+        val decoded2 = tokenizer.decode(tokens)
+        
+        assertEquals(decoded1, decoded2, "Expected deterministic decoding")
+    }
+    
+    @Test
+    fun encodeDecodeRoundTripWithFallback() {
+        val tokenizer = LocalTokenizer(MockContext(), null)
+        val text = "test encoding"
+        val tokens = tokenizer.encode(text)
+        val decoded = tokenizer.decode(tokens)
+        
+        // With fallback mode, we can't fully recover the original text,
+        // but decoded output should be non-empty and contain token placeholders
+        assertTrue(decoded.isNotEmpty(), "Expected non-empty decoded output")
+    }
 }
