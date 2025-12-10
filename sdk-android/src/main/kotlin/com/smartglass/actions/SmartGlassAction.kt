@@ -174,8 +174,14 @@ sealed class SmartGlassAction {
                     val latitude = (payload["latitude"] as? Number)?.toDouble()
                     val longitude = (payload["longitude"] as? Number)?.toDouble()
                     
-                    // At least one form of destination should be provided
-                    if (destinationLabel != null || (latitude != null && longitude != null)) {
+                    // At least one form of destination should be provided:
+                    // - destinationLabel alone, OR
+                    // - both latitude AND longitude together, OR
+                    // - all three fields
+                    val hasLabel = destinationLabel != null
+                    val hasCoordinates = latitude != null && longitude != null
+                    
+                    if (hasLabel || hasCoordinates) {
                         Navigate(destinationLabel, latitude, longitude)
                     } else {
                         Log.w(TAG, "NAVIGATE action missing destination information: $payload")
