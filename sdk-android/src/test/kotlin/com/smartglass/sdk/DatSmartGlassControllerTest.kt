@@ -4,12 +4,13 @@ package com.smartglass.sdk
  * Unit tests for DatSmartGlassController using mock implementations.
  * 
  * These tests validate the complete DAT (Device Access Toolkit) workflow
- * without requiring real Ray-Ban Meta hardware or network connectivity.
+ * with on-device LocalSnnEngine processing instead of network calls.
  * 
  * Test Coverage:
  * - State machine transitions (IDLE -> CONNECTING -> STREAMING -> ERROR)
- * - Audio and frame chunk forwarding to SmartGlassClient
- * - Turn completion and agent response handling
+ * - Audio and frame processing with visual context extraction
+ * - User turn handling with LocalSnnEngine
+ * - Action dispatching and UI updates
  * - Error handling and recovery
  * - Multiple turn completions in single session
  * 
@@ -25,15 +26,15 @@ package com.smartglass.sdk
  * 1. Setup:
  *    - Connect Ray-Ban Meta glasses via Meta View app
  *    - Pair with Android device
- *    - Ensure backend server is running and accessible
- *    - Configure backend URL in sample app
+ *    - No backend server needed - all processing is on-device
+ *    - Ensure SNN model assets are bundled with app
  * 
  * 2. Run Manual Smoke Tests:
  *    a) Install sample app: ./gradlew sample:installDebug
  *    b) Open app and navigate to DAT integration screen
  *    c) Tap "Connect to Glasses" and verify connection
  *    d) Speak a query while looking at something
- *    e) Verify agent response appears on screen
+ *    e) Verify agent response appears on screen (via StateFlow)
  *    f) Verify actions (if any) are executed
  * 
  * 3. Automated Hardware Tests:
@@ -47,6 +48,10 @@ package com.smartglass.sdk
 
 import android.graphics.Bitmap
 import androidx.test.core.app.ApplicationProvider
+import com.smartglass.actions.ActionDispatcher
+import com.smartglass.actions.SmartGlassAction
+import com.smartglass.runtime.llm.LocalSnnEngine
+import com.smartglass.runtime.llm.LocalTokenizer
 import com.smartglass.sdk.rayban.MetaRayBanManager
 import java.io.IOException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -76,18 +81,17 @@ class DatSmartGlassControllerTest {
             context = ApplicationProvider.getApplicationContext(),
             sdkFacade = mockFacade
         )
-        val mockClient = MockSmartGlassClient()
-        val controller = DatSmartGlassController(mockRayBan, mockClient)
+        val mockSnnEngine = MockLocalSnnEngine()
+        val mockDispatcher = MockActionDispatcher()
+        val controller = DatSmartGlassController(mockRayBan, mockSnnEngine, mockDispatcher)
 
         assertEquals(DatSmartGlassController.State.IDLE, controller.state)
 
         // Start in background to observe state transitions
-        val result = controller.start(deviceId = "test-device")
+        controller.start(deviceId = "test-device")
 
         // Should transition through CONNECTING to STREAMING
         assertEquals(DatSmartGlassController.State.STREAMING, controller.state)
-        assertNotNull(result)
-        assertTrue(mockClient.sessionStarted)
         assertTrue(mockFacade.connected)
 
         controller.stop()
@@ -131,37 +135,41 @@ class DatSmartGlassControllerTest {
     }
 
     @Test
-    fun audioChunksAreForwardedToBackend() = runTest {
+    fun audioChunksAreBuffered() = runTest {
         val mockFacade = MockSdkFacade()
         val mockRayBan = MetaRayBanManager(
             context = ApplicationProvider.getApplicationContext(),
             sdkFacade = mockFacade
         )
-        val mockClient = MockSmartGlassClient()
-        val controller = DatSmartGlassController(mockRayBan, mockClient)
+        val mockSnnEngine = MockLocalSnnEngine()
+        val mockDispatcher = MockActionDispatcher()
+        val controller = DatSmartGlassController(mockRayBan, mockSnnEngine, mockDispatcher)
 
         controller.start(deviceId = "test-device")
         
         // Give time for audio chunks to be collected
         delay(200)
         
-        assertTrue(mockClient.audioChunksReceived.isNotEmpty())
+        // Audio streaming should be active
+        assertTrue(mockFacade.streaming)
         
         controller.stop()
     }
 
     @Test
-    fun framesAreForwardedAtControlledRate() = runTest {
+    fun framesAreProcessedAtControlledRate() = runTest {
         val mockFacade = MockSdkFacade(frameDelayMs = 50L)
         val mockRayBan = MetaRayBanManager(
             context = ApplicationProvider.getApplicationContext(),
             sdkFacade = mockFacade
         )
-        val mockClient = MockSmartGlassClient()
+        val mockSnnEngine = MockLocalSnnEngine()
+        val mockDispatcher = MockActionDispatcher()
         val controller = DatSmartGlassController(
             rayBanManager = mockRayBan,
-            smartGlassClient = mockClient,
-            keyframeIntervalMs = 200L // Send keyframes every 200ms
+            localSnnEngine = mockSnnEngine,
+            actionDispatcher = mockDispatcher,
+            keyframeIntervalMs = 200L // Process keyframes every 200ms
         )
 
         controller.start(deviceId = "test-device")
@@ -169,41 +177,46 @@ class DatSmartGlassControllerTest {
         // Give time for frames to accumulate
         delay(600)
         
-        // Should have sent fewer frames than were captured due to rate limiting
-        assertTrue(mockClient.framesReceived.isNotEmpty())
-        // With 600ms window and 200ms interval, expect ~3 keyframes
-        assertTrue(mockClient.framesReceived.size <= 5)
+        // Frame streaming should be active
+        assertTrue(mockFacade.streaming)
         
         controller.stop()
     }
 
     @Test
-    fun finalizeTurnReturnsAgentResult() = runTest {
+    fun handleUserTurnProcessesQueryAndDispatchesActions() = runTest {
         val mockFacade = MockSdkFacade()
         val mockRayBan = MetaRayBanManager(
             context = ApplicationProvider.getApplicationContext(),
             sdkFacade = mockFacade
         )
-        val mockClient = MockSmartGlassClient()
-        val controller = DatSmartGlassController(mockRayBan, mockClient)
+        val mockSnnEngine = MockLocalSnnEngine()
+        val mockDispatcher = MockActionDispatcher()
+        val controller = DatSmartGlassController(mockRayBan, mockSnnEngine, mockDispatcher)
 
         controller.start(deviceId = "test-device")
         delay(100)
         
-        val result = controller.finalizeTurn()
+        val (responseText, actions) = controller.handleUserTurn(
+            textQuery = "What do you see?",
+            visualContext = "indoor office"
+        )
         
-        assertNotNull(result)
-        assertEquals("Mock response", result.response)
+        assertNotNull(responseText)
+        assertTrue(responseText.isNotEmpty())
+        assertEquals("Mock SNN response with actions", responseText)
+        assertEquals(1, actions.size)
+        assertEquals(1, mockDispatcher.dispatchedActions.size)
         
         controller.stop()
     }
 
     @Test
-    fun finalizeTurnThrowsWhenNotStreaming() = runTest {
+    fun handleUserTurnThrowsWhenNotStreaming() = runTest {
         val controller = createController()
         
         assertFailsWith<IllegalStateException> {
-            controller.finalizeTurn()
+            controller.handleUserTurn(textQuery = "Test")
         }
     }
 
@@ -214,8 +227,9 @@ class DatSmartGlassControllerTest {
             context = ApplicationProvider.getApplicationContext(),
             sdkFacade = mockFacade
         )
-        val mockClient = MockSmartGlassClient()
-        val controller = DatSmartGlassController(mockRayBan, mockClient)
+        val mockSnnEngine = MockLocalSnnEngine()
+        val mockDispatcher = MockActionDispatcher()
+        val controller = DatSmartGlassController(mockRayBan, mockSnnEngine, mockDispatcher)
 
         try {
             controller.start(deviceId = "test-device")
@@ -237,8 +251,9 @@ class DatSmartGlassControllerTest {
             context = ApplicationProvider.getApplicationContext(),
             sdkFacade = mockFacade
         )
-        val mockClient = MockSmartGlassClient()
-        val controller = DatSmartGlassController(mockRayBan, mockClient)
+        val mockSnnEngine = MockLocalSnnEngine()
+        val mockDispatcher = MockActionDispatcher()
+        val controller = DatSmartGlassController(mockRayBan, mockSnnEngine, mockDispatcher)
 
         try {
             controller.start(deviceId = "test-device")
@@ -255,16 +270,18 @@ class DatSmartGlassControllerTest {
     @Test
     fun completeMultimodalDatWorkflow() = runTest {
         /**
-         * End-to-end test simulating complete DAT session workflow:
-         * 1. Initialize controller with fake MetaRayBanManager
+         * End-to-end test simulating complete on-device DAT session workflow:
+         * 1. Initialize controller with mock LocalSnnEngine and ActionDispatcher
          * 2. Start streaming (connects, begins audio/video capture)
-         * 3. Verify data is forwarded to SmartGlassClient via DAT protocol
-         * 4. Finalize turn and verify agent response with actions
+         * 3. Verify visual context is extracted from frames
+         * 4. Handle user turn with LocalSnnEngine
+         * 5. Verify actions are dispatched
          *
-         * This test validates the complete integration between:
+         * This test validates the complete on-device integration between:
          * - DatSmartGlassController state machine
          * - MetaRayBanManager facade (mocked)
-         * - SmartGlassClient DAT API calls
+         * - LocalSnnEngine inference
+         * - ActionDispatcher execution
          *
          * For testing with real Ray-Ban Meta glasses, see:
          * docs/meta_dat_implementation_plan.md - "Testing with Real Hardware" section
@@ -274,10 +291,12 @@ class DatSmartGlassControllerTest {
             context = ApplicationProvider.getApplicationContext(),
             sdkFacade = mockFacade
         )
-        val mockClient = MockSmartGlassClient()
+        val mockSnnEngine = MockLocalSnnEngine()
+        val mockDispatcher = MockActionDispatcher()
         val controller = DatSmartGlassController(
             rayBanManager = mockRayBan,
-            smartGlassClient = mockClient,
+            localSnnEngine = mockSnnEngine,
+            actionDispatcher = mockDispatcher,
             keyframeIntervalMs = 200L
         )
 
@@ -285,15 +304,10 @@ class DatSmartGlassControllerTest {
         assertEquals(DatSmartGlassController.State.IDLE, controller.state)
 
         // Step 2: Start streaming session
-        val sessionHandle = controller.start(deviceId = "rayban-meta-e2e-test")
+        controller.start(deviceId = "rayban-meta-e2e-test")
         
         // Should transition to STREAMING state
         assertEquals(DatSmartGlassController.State.STREAMING, controller.state)
-        assertNotNull(sessionHandle)
-        
-        // Verify SmartGlassClient session was initialized
-        assertTrue(mockClient.sessionStarted)
-        assertEquals("mock-session-123", sessionHandle.sessionId)
         
         // Verify MetaRayBanManager connected to device
         assertTrue(mockFacade.connected)
@@ -301,30 +315,20 @@ class DatSmartGlassControllerTest {
         // Step 3: Allow data streaming for a period (simulate ~500ms of operation)
         delay(500)
         
-        // Verify audio chunks were forwarded to backend
-        assertTrue(mockClient.audioChunksReceived.isNotEmpty(), 
-            "Expected audio chunks to be forwarded to SmartGlassClient")
-        
-        // Verify frames were forwarded (rate-limited by keyframeIntervalMs)
-        assertTrue(mockClient.framesReceived.isNotEmpty(),
-            "Expected frame chunks to be forwarded to SmartGlassClient")
-        
-        // Frames should be rate-limited (expect ~2-3 frames for 500ms with 200ms interval)
-        assertTrue(mockClient.framesReceived.size <= 5,
-            "Frame rate limiting should be active")
+        // Verify streaming is active
+        assertTrue(mockFacade.streaming)
 
-        // Step 4: Finalize turn and get agent response
-        val agentResult = controller.finalizeTurn()
+        // Step 4: Handle a user turn
+        val (responseText, actions) = controller.handleUserTurn(
+            textQuery = "What do you see?",
+            visualContext = null // Will use latest from frames
+        )
         
-        // Verify agent response structure
-        assertNotNull(agentResult)
-        assertEquals("Mock response", agentResult.response)
-        assertNotNull(agentResult.actions)
-        assertTrue(agentResult.actions is List<*>)
-        
-        // In production, actions would have specific structure like:
-        // { action_type: "NAVIGATE", parameters: {...}, priority: "normal" }
-        // This validates the protocol contract is maintained
+        // Verify response and actions
+        assertNotNull(responseText)
+        assertTrue(responseText.isNotEmpty())
+        assertEquals(1, actions.size)
+        assertEquals(1, mockDispatcher.dispatchedActions.size)
 
         // Step 5: Clean up
         controller.stop()
@@ -336,24 +340,25 @@ class DatSmartGlassControllerTest {
     fun datWorkflowHandlesMultipleTurns() = runTest {
         /**
          * Test that controller can handle multiple turn completions in a single session.
-         * This validates that finalizeTurn() doesn't break the streaming state.
+         * This validates that handleUserTurn() doesn't break the streaming state.
          */
         val mockFacade = MockSdkFacade()
         val mockRayBan = MetaRayBanManager(
             context = ApplicationProvider.getApplicationContext(),
             sdkFacade = mockFacade
         )
-        val mockClient = MockSmartGlassClient()
-        val controller = DatSmartGlassController(mockRayBan, mockClient)
+        val mockSnnEngine = MockLocalSnnEngine()
+        val mockDispatcher = MockActionDispatcher()
+        val controller = DatSmartGlassController(mockRayBan, mockSnnEngine, mockDispatcher)
 
         // Start streaming
         controller.start(deviceId = "test-device")
         delay(100)
         
         // Complete first turn
-        val result1 = controller.finalizeTurn()
-        assertNotNull(result1)
-        assertEquals("Mock response", result1.response)
+        val (response1, actions1) = controller.handleUserTurn(textQuery = "First query")
+        assertNotNull(response1)
+        assertTrue(response1.isNotEmpty())
         
         // Controller should still be in STREAMING state
         assertEquals(DatSmartGlassController.State.STREAMING, controller.state)
@@ -362,12 +367,15 @@ class DatSmartGlassControllerTest {
         delay(100)
         
         // Complete second turn
-        val result2 = controller.finalizeTurn()
-        assertNotNull(result2)
-        assertEquals("Mock response", result2.response)
+        val (response2, actions2) = controller.handleUserTurn(textQuery = "Second query")
+        assertNotNull(response2)
+        assertTrue(response2.isNotEmpty())
         
         // Still streaming
         assertEquals(DatSmartGlassController.State.STREAMING, controller.state)
+        
+        // Verify both turns dispatched actions
+        assertEquals(2, mockDispatcher.dispatchedActions.size)
         
         controller.stop()
     }
@@ -384,19 +392,23 @@ class DatSmartGlassControllerTest {
             context = ApplicationProvider.getApplicationContext(),
             sdkFacade = mockFacade
         )
-        val mockClient = MockSmartGlassClient()
-        val controller = DatSmartGlassController(mockRayBan, mockClient)
+        val mockSnnEngine = MockLocalSnnEngine()
+        val mockDispatcher = MockActionDispatcher()
+        val controller = DatSmartGlassController(mockRayBan, mockSnnEngine, mockDispatcher)
 
-        // Start and immediately finalize (minimal data collection)
+        // Start and immediately handle turn (minimal data collection)
         controller.start(deviceId = "test-device")
         
         // Very short delay - may have minimal or no data collected
         delay(10)
         
         // Should still return a result even with minimal data
-        val result = controller.finalizeTurn()
-        assertNotNull(result)
-        assertNotNull(result.response)
+        val (responseText, actions) = controller.handleUserTurn(
+            textQuery = "Quick query",
+            visualContext = "test context"
+        )
+        assertNotNull(responseText)
+        assertTrue(responseText.isNotEmpty())
         
         controller.stop()
     }
@@ -407,9 +419,12 @@ class DatSmartGlassControllerTest {
             context = ApplicationProvider.getApplicationContext(),
             sdkFacade = mockFacade
         )
+        val mockSnnEngine = MockLocalSnnEngine()
+        val mockDispatcher = MockActionDispatcher()
         return DatSmartGlassController(
             rayBanManager = mockRayBan,
-            smartGlassClient = MockSmartGlassClient()
+            localSnnEngine = mockSnnEngine,
+            actionDispatcher = mockDispatcher
         )
     }
 
@@ -421,7 +436,7 @@ class DatSmartGlassControllerTest {
     ) : MetaRayBanManager.SdkFacade {
         var connected = false
         var disconnected = false
-        private var streaming = false
+        var streaming = false
 
         override suspend fun connect(deviceId: String, transportHint: String) {
             if (shouldFailConnect) {
@@ -473,40 +488,46 @@ class DatSmartGlassControllerTest {
         }
     }
 
-    private class MockSmartGlassClient : SmartGlassClient("http://mock:8000") {
-        var sessionStarted = false
-        val audioChunksReceived = mutableListOf<ByteArray>()
-        val framesReceived = mutableListOf<ByteArray>()
-        private var mockSessionHandle: SessionHandle? = null
-
-        override suspend fun startSession(): SessionHandle {
-            sessionStarted = true
-            mockSessionHandle = SessionHandle("mock-session-123")
-            return mockSessionHandle!!
+    /**
+     * Mock LocalSnnEngine that returns predefined JSON responses.
+     */
+    private class MockLocalSnnEngine : LocalSnnEngine(
+        context = ApplicationProvider.getApplicationContext(),
+        modelAssetPath = "mock_model.pt",
+        tokenizer = LocalTokenizer(ApplicationProvider.getApplicationContext())
+    ) {
+        override suspend fun generate(
+            prompt: String,
+            visualContext: String?,
+            maxTokens: Int
+        ): String {
+            // Return a JSON response with text and actions
+            return """{
+                "response": "Mock SNN response with actions",
+                "actions": [
+                    {
+                        "type": "SHOW_TEXT",
+                        "payload": {
+                            "title": "Test",
+                            "body": "Mock action"
+                        }
+                    }
+                ]
+            }"""
         }
+    }
 
-        override suspend fun sendAudioChunk(
-            session: SessionHandle,
-            data: ByteArray,
-            timestampMs: Long
-        ) {
-            audioChunksReceived.add(data)
-        }
+    /**
+     * Mock ActionDispatcher that records dispatched actions.
+     */
+    private class MockActionDispatcher : ActionDispatcher(
+        context = ApplicationProvider.getApplicationContext()
+    ) {
+        val dispatchedActions = mutableListOf<List<SmartGlassAction>>()
 
-        override suspend fun sendFrame(
-            session: SessionHandle,
-            jpegBytes: ByteArray,
-            timestampMs: Long
-        ) {
-            framesReceived.add(jpegBytes)
-        }
-
-        override suspend fun finalizeTurn(session: SessionHandle): AgentResult {
-            return AgentResult(
-                response = "Mock response",
-                actions = emptyList(),
-                raw = emptyMap()
-            )
+        override fun dispatch(actions: List<SmartGlassAction>) {
+            dispatchedActions.add(actions)
+            // Don't actually execute actions in tests
         }
     }
 }

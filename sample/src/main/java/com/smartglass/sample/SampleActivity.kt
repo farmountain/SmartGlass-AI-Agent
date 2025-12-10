@@ -10,11 +10,14 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.smartglass.actions.ActionDispatcher
 import com.smartglass.sdk.ActionExecutor
 import com.smartglass.sdk.DatSmartGlassController
 import com.smartglass.sdk.PrivacyPreferences
 import com.smartglass.sdk.SmartGlassClient
 import com.smartglass.sdk.rayban.MetaRayBanManager
+import com.smartglass.runtime.llm.LocalSnnEngine
+import com.smartglass.runtime.llm.LocalTokenizer
 import java.io.File
 import java.io.FileOutputStream
 import kotlinx.coroutines.CoroutineStart
@@ -36,8 +39,12 @@ class SampleActivity : AppCompatActivity() {
     private var audioStreamJob: Job? = null
     private var lastSessionId: String? = null
     
-    // End-to-end controller for streaming glasses data to backend
+    // End-to-end controller for streaming glasses data to local processing
     private var datController: DatSmartGlassController? = null
+    
+    companion object {
+        private const val SNN_MODEL_ASSET_PATH = "snn_student_ts.pt"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -82,7 +89,7 @@ class SampleActivity : AppCompatActivity() {
         }
         
         findViewById<Button>(R.id.finalizeControllerButton)?.setOnClickListener {
-            finalizeControllerTurn()
+            handleUserTurnController()
         }
     }
 
@@ -241,10 +248,10 @@ class SampleActivity : AppCompatActivity() {
     // ========================================================================
     
     /**
-     * Start end-to-end streaming using DatSmartGlassController.
+     * Start end-to-end streaming using DatSmartGlassController with on-device processing.
      * 
      * This method demonstrates the simplified API for connecting glasses
-     * and streaming audio/video to the backend in one call.
+     * and processing audio/video locally using LocalSnnEngine.
      */
     private fun startControllerStreaming() {
         val deviceId = resolveDeviceId()
@@ -255,10 +262,16 @@ class SampleActivity : AppCompatActivity() {
             try {
                 // Create controller if not already created
                 if (datController == null) {
+                    // Initialize LocalSnnEngine and ActionDispatcher for on-device processing
+                    val tokenizer = LocalTokenizer(applicationContext, SNN_MODEL_ASSET_PATH)
+                    val snnEngine = LocalSnnEngine(applicationContext, SNN_MODEL_ASSET_PATH, tokenizer)
+                    val actionDispatcher = ActionDispatcher(applicationContext)
+                    
                     datController = DatSmartGlassController(
                         rayBanManager = rayBanManager,
-                        smartGlassClient = client,
-                        keyframeIntervalMs = 500L // Send keyframes every 500ms
+                        localSnnEngine = snnEngine,
+                        actionDispatcher = actionDispatcher,
+                        keyframeIntervalMs = 500L // Process keyframes every 500ms
                     )
                 }
                 
@@ -270,10 +283,10 @@ class SampleActivity : AppCompatActivity() {
                         Log.d("SampleActivity", "Controller state: $state")
                         when (state) {
                             DatSmartGlassController.State.STREAMING -> {
-                                setStatus("🎥 Streaming audio and video to backend...")
+                                setStatus("🎥 Streaming and processing locally...")
                             }
                             DatSmartGlassController.State.CONNECTING -> {
-                                setStatus("🔌 Connecting to glasses and backend...")
+                                setStatus("🔌 Connecting to glasses...")
                             }
                             DatSmartGlassController.State.ERROR -> {
                                 setStatus("❌ Controller error - please stop and restart")
@@ -288,13 +301,22 @@ class SampleActivity : AppCompatActivity() {
                     }
                 }
                 
+                // Observe agent responses
+                launch {
+                    datController?.agentResponse?.collect { response ->
+                        if (response.isNotEmpty()) {
+                            setStatus("Agent: $response")
+                        }
+                    }
+                }
+                
                 // Start streaming
-                val result = datController!!.start(
+                datController!!.start(
                     deviceId = deviceId,
                     transport = MetaRayBanManager.Transport.WIFI
                 )
                 
-                Log.d("SampleActivity", "Controller started: ${result.response}")
+                Log.d("SampleActivity", "Controller started successfully")
                 
             } catch (exc: Exception) {
                 Log.e("SampleActivity", "Failed to start controller", exc)
@@ -315,15 +337,15 @@ class SampleActivity : AppCompatActivity() {
     }
     
     /**
-     * Finalize the current turn and get agent response.
+     * Handle a user turn with text query and visual context.
      * 
-     * This sends all accumulated audio and video frames to the backend
-     * and receives the agent's response with recommended actions.
+     * This processes the query using on-device LocalSnnEngine and dispatches
+     * any resulting actions.
      */
-    private fun finalizeControllerTurn() {
+    private fun handleUserTurnController() {
         lifecycleScope.launch {
             try {
-                setStatus("Finalizing turn...")
+                setStatus("Processing query...")
                 
                 val controller = datController
                 if (controller == null || controller.state != DatSmartGlassController.State.STREAMING) {
@@ -331,27 +353,31 @@ class SampleActivity : AppCompatActivity() {
                     return@launch
                 }
                 
-                val result = controller.finalizeTurn()
+                // Get text query from input
+                val textQuery = promptInput.text.toString().takeIf { it.isNotBlank() }
+                    ?: "What do you see?"
                 
-                // Execute any recommended actions
-                actionExecutor.execute(result.actions, this@SampleActivity)
+                val (responseText, actions) = controller.handleUserTurn(
+                    textQuery = textQuery,
+                    visualContext = null // Will use latest visual context from frames
+                )
                 
                 // Display response
-                val actionsSummary = result.actions.takeIf { it.isNotEmpty() }
+                val actionsSummary = actions.takeIf { it.isNotEmpty() }
                     ?.joinToString(prefix = "\nActions:\n", separator = "\n") { action ->
-                        "• ${action.type}: ${action.payload}"
+                        "• $action"
                     } ?: ""
                 
                 val responseSummary = buildString {
-                    append("Agent Response: ${result.response}")
+                    append("Agent Response: $responseText")
                     if (actionsSummary.isNotBlank()) append(actionsSummary)
                 }
                 
                 setStatus(responseSummary)
                 
             } catch (exc: Exception) {
-                Log.e("SampleActivity", "Failed to finalize turn", exc)
-                setStatus("Finalize error: ${exc.message}")
+                Log.e("SampleActivity", "Failed to handle user turn", exc)
+                setStatus("Query error: ${exc.message}")
             }
         }
     }
