@@ -508,4 +508,335 @@ except ValueError as e:
 
 ---
 
+## Android SDK - Room Database
+
+The Android SDK includes Room database integration for persistent storage of conversation history and notes.
+
+### SmartGlassRepository
+
+Main repository class providing data access methods.
+
+**File**: `sdk-android/src/main/kotlin/com/smartglass/data/SmartGlassRepository.kt`
+
+#### Initialization
+
+```kotlin
+val repository = SmartGlassRepository(context)
+```
+
+#### Message Operations
+
+**Insert Message**
+```kotlin
+suspend fun insertMessage(message: MessageEntity)
+```
+
+Insert a new conversation message.
+
+**Example**:
+```kotlin
+viewModelScope.launch {
+    repository.insertMessage(
+        MessageEntity(
+            content = "Hello from the glasses",
+            isFromUser = true,
+            timestamp = System.currentTimeMillis()
+        )
+    )
+}
+```
+
+**Get All Messages**
+```kotlin
+val allMessages: Flow<List<MessageEntity>>
+```
+
+Observe all messages as a Flow (reactive updates).
+
+**Example**:
+```kotlin
+repository.allMessages
+    .collect { messages ->
+        // Update UI with messages
+        _messages.value = messages.map { it.toMessage() }
+    }
+```
+
+**Get Recent Messages**
+```kotlin
+suspend fun getRecentMessages(limit: Int): List<MessageEntity>
+```
+
+Retrieve the most recent N messages.
+
+**Example**:
+```kotlin
+val recent = repository.getRecentMessages(10)
+```
+
+**Delete All Messages**
+```kotlin
+suspend fun deleteAllMessages()
+```
+
+Clear entire conversation history.
+
+**Example**:
+```kotlin
+viewModelScope.launch {
+    repository.deleteAllMessages()
+}
+```
+
+#### Note Operations
+
+**Insert Note**
+```kotlin
+suspend fun insertNote(note: NoteEntity)
+```
+
+Save a note captured during conversation.
+
+**Example**:
+```kotlin
+viewModelScope.launch {
+    repository.insertNote(
+        NoteEntity(
+            content = "Remember to buy milk",
+            context = "Shopping reminder",
+            timestamp = System.currentTimeMillis()
+        )
+    )
+}
+```
+
+**Search Notes**
+```kotlin
+suspend fun searchNotes(query: String): List<NoteEntity>
+```
+
+Search notes by content (case-insensitive, partial match).
+
+**Example**:
+```kotlin
+val results = repository.searchNotes("milk")
+// Returns notes containing "milk"
+```
+
+**Get All Notes**
+```kotlin
+val allNotes: Flow<List<NoteEntity>>
+```
+
+Observe all notes as a Flow.
+
+**Example**:
+```kotlin
+repository.allNotes
+    .collect { notes ->
+        // Update UI with notes
+    }
+```
+
+**Delete Note**
+```kotlin
+suspend fun deleteNote(note: NoteEntity)
+```
+
+Delete a specific note.
+
+**Example**:
+```kotlin
+viewModelScope.launch {
+    repository.deleteNote(note)
+}
+```
+
+### Data Entities
+
+#### MessageEntity
+
+Represents a conversation message in the database.
+
+**File**: `sdk-android/src/main/kotlin/com/smartglass/data/MessageEntity.kt`
+
+```kotlin
+@Entity(tableName = "messages")
+data class MessageEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    
+    val content: String,          // Message text
+    val isFromUser: Boolean,      // true = user, false = AI
+    val timestamp: Long,          // Unix timestamp (ms)
+    val actions: String? = null   // JSON string of actions (optional)
+)
+```
+
+**Convert to UI Model**:
+```kotlin
+fun MessageEntity.toMessage(): Message {
+    return Message(
+        content = content,
+        isFromUser = isFromUser,
+        timestamp = timestamp,
+        actions = actions?.let { parseActionsJson(it) } ?: emptyList()
+    )
+}
+```
+
+#### NoteEntity
+
+Represents a user note in the database.
+
+**File**: `sdk-android/src/main/kotlin/com/smartglass/data/NoteEntity.kt`
+
+```kotlin
+@Entity(tableName = "notes")
+data class NoteEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    
+    val content: String,          // Note content
+    val context: String? = null,  // Optional context/category
+    val timestamp: Long           // Unix timestamp (ms)
+)
+```
+
+### Database Configuration
+
+**File**: `sdk-android/src/main/kotlin/com/smartglass/data/SmartGlassDatabase.kt`
+
+The database is configured with:
+- **Version**: 1
+- **Auto-migrations**: Enabled for future schema changes
+- **Export schema**: Enabled for version control
+
+```kotlin
+@Database(
+    entities = [MessageEntity::class, NoteEntity::class],
+    version = 1,
+    exportSchema = true
+)
+abstract class SmartGlassDatabase : RoomDatabase() {
+    abstract fun messageDao(): MessageDao
+    abstract fun noteDao(): NoteDao
+}
+```
+
+### DAO Interfaces
+
+#### MessageDao
+
+**File**: `sdk-android/src/main/kotlin/com/smartglass/data/MessageDao.kt`
+
+```kotlin
+@Dao
+interface MessageDao {
+    @Insert
+    suspend fun insert(message: MessageEntity)
+    
+    @Query("SELECT * FROM messages ORDER BY timestamp DESC")
+    fun getAllMessages(): Flow<List<MessageEntity>>
+    
+    @Query("SELECT * FROM messages ORDER BY timestamp DESC LIMIT :limit")
+    suspend fun getRecentMessages(limit: Int): List<MessageEntity>
+    
+    @Query("DELETE FROM messages")
+    suspend fun deleteAll()
+}
+```
+
+#### NoteDao
+
+**File**: `sdk-android/src/main/kotlin/com/smartglass/data/NoteDao.kt`
+
+```kotlin
+@Dao
+interface NoteDao {
+    @Insert
+    suspend fun insert(note: NoteEntity)
+    
+    @Query("SELECT * FROM notes ORDER BY timestamp DESC")
+    fun getAllNotes(): Flow<List<NoteEntity>>
+    
+    @Query("SELECT * FROM notes WHERE content LIKE '%' || :query || '%' ORDER BY timestamp DESC")
+    suspend fun searchNotes(query: String): List<NoteEntity>
+    
+    @Delete
+    suspend fun delete(note: NoteEntity)
+}
+```
+
+### Usage in ViewModel
+
+**Example: Complete ViewModel Integration**
+
+```kotlin
+class SmartGlassViewModel(application: Application) : AndroidViewModel(application) {
+    private val repository = SmartGlassRepository(application)
+    
+    // Observe messages
+    val messages: StateFlow<List<Message>> = repository.allMessages
+        .map { entities -> entities.map { it.toMessage() } }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+    
+    // Send message and persist
+    fun sendMessage(text: String) {
+        viewModelScope.launch {
+            // Save user message
+            val userMessage = MessageEntity(
+                content = text,
+                isFromUser = true,
+                timestamp = System.currentTimeMillis()
+            )
+            repository.insertMessage(userMessage)
+            
+            // Get AI response
+            val response = getAIResponse(text)
+            
+            // Save AI message
+            val aiMessage = MessageEntity(
+                content = response,
+                isFromUser = false,
+                timestamp = System.currentTimeMillis()
+            )
+            repository.insertMessage(aiMessage)
+        }
+    }
+    
+    // Search notes with Flow
+    fun searchNotes(query: String): Flow<List<NoteEntity>> = flow {
+        emit(repository.searchNotes(query))
+    }
+}
+```
+
+### Testing
+
+**Unit Test Example**:
+
+```kotlin
+@Test
+fun testMessageInsertion() = runTest {
+    val message = MessageEntity(
+        content = "Test message",
+        isFromUser = true,
+        timestamp = System.currentTimeMillis()
+    )
+    
+    repository.insertMessage(message)
+    
+    val messages = repository.getRecentMessages(1)
+    assertEquals(1, messages.size)
+    assertEquals("Test message", messages[0].content)
+}
+```
+
+---
+
 For more examples, see the `examples/` directory and the Colab notebooks.
