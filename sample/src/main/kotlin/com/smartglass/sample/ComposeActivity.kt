@@ -10,7 +10,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.smartglass.sample.ui.BackendConfigDialog
 import com.smartglass.sample.ui.ConversationScreen
 import com.smartglass.sample.ui.theme.SmartGlassTheme
 
@@ -26,12 +30,18 @@ import com.smartglass.sample.ui.theme.SmartGlassTheme
  */
 class ComposeActivity : ComponentActivity() {
     private val viewModel: SmartGlassViewModel by viewModels()
+    private lateinit var config: Config
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Initialize config
+        config = Config(this)
 
         setContent {
             SmartGlassTheme {
+                var showBackendDialog by remember { mutableStateOf(false) }
+                
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -47,8 +57,22 @@ class ComposeActivity : ComponentActivity() {
                         onSendMessage = { text -> viewModel.sendMessage(text) },
                         onConnect = { viewModel.connect() },
                         onDisconnect = { viewModel.disconnect() },
-                        onOpenPrivacySettings = { openPrivacySettings() }
+                        onOpenPrivacySettings = { openPrivacySettings() },
+                        onOpenBackendSettings = { showBackendDialog = true }
                     )
+                    
+                    // Backend configuration dialog
+                    if (showBackendDialog) {
+                        BackendConfigDialog(
+                            currentUrl = config.backendUrl,
+                            config = config,
+                            onSave = { newUrl ->
+                                config.backendUrl = newUrl
+                                viewModel.updateBackendUrl(newUrl)
+                            },
+                            onDismiss = { showBackendDialog = false }
+                        )
+                    }
                 }
             }
         }

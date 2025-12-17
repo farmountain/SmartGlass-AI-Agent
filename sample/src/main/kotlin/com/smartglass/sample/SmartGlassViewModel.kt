@@ -60,6 +60,9 @@ class SmartGlassViewModel(application: Application) : AndroidViewModel(applicati
     private var actionDispatcher: ActionDispatcher? = null
     private var textToSpeech: TextToSpeech? = null
 
+    // Configuration
+    private val config = Config(context)
+    
     // State flows
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
     val messages: StateFlow<List<Message>> = _messages.asStateFlow()
@@ -364,6 +367,25 @@ class SmartGlassViewModel(application: Application) : AndroidViewModel(applicati
                 )
             )
         }
+    }
+    
+    /**
+     * Update the backend server URL.
+     * 
+     * This will be used for future API calls. Existing connections are not affected.
+     * Disconnect and reconnect to use the new URL.
+     * 
+     * @param newUrl New backend URL (e.g., "http://192.168.1.100:5000")
+     */
+    fun updateBackendUrl(newUrl: String) {
+        config.backendUrl = newUrl
+        Log.d(TAG, "Backend URL updated to: $newUrl")
+        
+        // Add system message to inform user
+        addMessage(Message(
+            content = "Backend URL updated to: $newUrl\nDisconnect and reconnect to use the new backend.",
+            isFromUser = false
+        ))
     }
 
     /**

@@ -40,7 +40,20 @@ Includes an **18-week learning program** with step-by-step **Google Colab worksh
 
 SmartGlass-AI-Agent now includes comprehensive documentation for integrating with the **Meta Wearables Device Access Toolkit (DAT)**, enabling AI-powered experiences on Ray-Ban Meta and Ray-Ban Display glasses.
 
-### 📚 New Integration Guides
+### 📚 Integration & Testing Guides
+
+- **[Hardware Testing Guide](docs/HARDWARE_TESTING_GUIDE.md)** - ⭐ **NEW** Complete hardware testing manual
+  - Meta Ray-Ban + OPPO Reno 12 setup guide
+  - 8-part comprehensive testing workflow
+  - 4 end-to-end test scenarios
+  - Performance benchmarks & troubleshooting
+  - Deployment checklist
+
+- **[Performance Optimization Guide](docs/PERFORMANCE_OPTIMIZATION.md)** - ⭐ **NEW** Optimization strategies
+  - Current vs target benchmarks
+  - Frame compression & SNN quantization
+  - Profiling tools setup & load testing
+  - Battery optimization techniques
 
 - **[Meta DAT Integration Guide](docs/meta_dat_integration.md)** - Complete setup and integration guide
   - Platform setup (Android & iOS)
@@ -54,18 +67,19 @@ SmartGlass-AI-Agent now includes comprehensive documentation for integrating wit
   - End-to-end implementation examples
   - Mock Device testing without hardware
 
-- **[Implementation Plan](docs/meta_dat_implementation_plan.md)** - Detailed technical roadmap
-  - 4-6 week implementation phases
-  - Architecture decisions
-  - Testing strategy
-  - Success criteria
+- **[Implementation Progress](docs/IMPLEMENTATION_PROGRESS.md)** - ⭐ **NEW** Current project status
+  - Week 1-6: Complete (PR #278-#287)
+  - Week 7-8: In progress (75% overall)
+  - Testing scenarios & known issues
+  - Technical roadmap
 
 ### 🎯 Quick Navigation
 
 **Getting Started**:
 1. Read the [Hello SmartGlass Quickstart](docs/hello_smartglass_quickstart.md) for a hands-on introduction
 2. Review the [Meta DAT Integration Guide](docs/meta_dat_integration.md) for comprehensive documentation
-3. Check the [Implementation Plan](docs/meta_dat_implementation_plan.md) for project planning
+3. Follow the [Hardware Testing Guide](docs/HARDWARE_TESTING_GUIDE.md) for Meta Ray-Ban + OPPO Reno 12 setup
+4. Check the [Implementation Progress](docs/IMPLEMENTATION_PROGRESS.md) for current project status (75% complete)
 
 **Key Features**:
 - ✅ Camera frame streaming from Ray-Ban Meta glasses
