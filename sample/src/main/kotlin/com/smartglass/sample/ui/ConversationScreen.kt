@@ -21,8 +21,11 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -30,8 +33,10 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
@@ -68,6 +73,7 @@ import java.util.Locale
  * @param onConnect Callback to connect to glasses
  * @param onDisconnect Callback to disconnect from glasses
  * @param onOpenPrivacySettings Callback to open privacy settings
+ * @param onOpenBackendSettings Callback to open backend URL settings
  * @param modifier Modifier for styling
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -80,10 +86,12 @@ fun ConversationScreen(
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onOpenPrivacySettings: () -> Unit,
+    onOpenBackendSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+    var showSettingsMenu by remember { mutableStateOf(false) }
 
     // Auto-scroll to bottom when new messages arrive
     LaunchedEffect(messages.size) {
@@ -98,8 +106,8 @@ fun ConversationScreen(
                 TopAppBar(
                     title = { Text("SmartGlass AI") },
                     actions = {
-                        IconButton(onClick = onOpenPrivacySettings) {
-                            Icon(Icons.Default.Menu, contentDescription = "Privacy Settings")
+                        IconButton(onClick = { showSettingsMenu = !showSettingsMenu }) {
+                            Icon(Icons.Default.Settings, contentDescription = "Settings")
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -108,6 +116,21 @@ fun ConversationScreen(
                         actionIconContentColor = Color.White
                     )
                 )
+                
+                // Settings dropdown menu
+                if (showSettingsMenu) {
+                    SettingsMenuDialog(
+                        onDismiss = { showSettingsMenu = false },
+                        onPrivacySettings = {
+                            showSettingsMenu = false
+                            onOpenPrivacySettings()
+                        },
+                        onBackendSettings = {
+                            showSettingsMenu = false
+                            onOpenBackendSettings()
+                        }
+                    )
+                }
                 ConnectionStatusView(
                     state = connectionState,
                     deviceId = if (connectionState != ConnectionState.DISCONNECTED) "MOCK-001" else null,
@@ -308,4 +331,138 @@ private fun ActionChipView(action: SmartGlassAction) {
 private fun formatTime(timestamp: Long): String {
     val formatter = SimpleDateFormat("HH:mm", Locale.getDefault())
     return formatter.format(Date(timestamp))
+}
+
+/**
+ * Settings menu dialog with options for Privacy and Backend configuration.
+ */
+@Composable
+private fun SettingsMenuDialog(
+    onDismiss: () -> Unit,
+    onPrivacySettings: () -> Unit,
+    onBackendSettings: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Settings") },
+        text = {
+            Column {
+                Button(
+                    onClick = onPrivacySettings,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Privacy Settings")
+                }
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = onBackendSettings,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Backend Configuration")
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
+}
+
+/**
+ * Backend URL configuration dialog.
+ * 
+ * Allows users to configure the backend server URL at runtime.
+ * 
+ * @param currentUrl Current backend URL
+ * @param onSave Callback when user saves a new URL
+ * @param onDismiss Callback when dialog is dismissed
+ */
+@Composable
+fun BackendConfigDialog(
+    currentUrl: String,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var urlInput by remember { mutableStateOf(currentUrl) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Backend Configuration") },
+        text = {
+            Column {
+                Text(
+                    text = "Enter the backend server URL:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                
+                OutlinedTextField(
+                    value = urlInput,
+                    onValueChange = { 
+                        urlInput = it
+                        errorMessage = null
+                    },
+                    label = { Text("Backend URL") },
+                    placeholder = { Text("http://192.168.1.100:5000") },
+                    singleLine = true,
+                    isError = errorMessage != null,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                if (errorMessage != null) {
+                    Text(
+                        text = errorMessage!!,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+                
+                Spacer(Modifier.height(8.dp))
+                
+                Text(
+                    text = "Examples:\n" +
+                           "• Local: http://localhost:5000\n" +
+                           "• Network: http://192.168.1.100:5000\n" +
+                           "• Production: https://api.smartglass.ai",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val trimmed = urlInput.trim()
+                    
+                    // Validate URL format
+                    when {
+                        trimmed.isEmpty() -> {
+                            errorMessage = "URL cannot be empty"
+                        }
+                        !trimmed.startsWith("http://") && !trimmed.startsWith("https://") -> {
+                            errorMessage = "URL must start with http:// or https://"
+                        }
+                        trimmed.endsWith("/") -> {
+                            errorMessage = "URL should not end with /"
+                        }
+                        else -> {
+                            onSave(trimmed)
+                            onDismiss()
+                        }
+                    }
+                }
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
