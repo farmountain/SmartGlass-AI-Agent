@@ -1,0 +1,32 @@
+[
+  {
+    "question": "What's the weather like?",
+    "answer": "I can't check live weather, but you can ask me to open a weather app for you.",
+    "category": "system",
+    "keywords": "weather,temperature,forecast,rain,sunny,climate,cold,hot"
+  },
+  {
+    "question": "Navigate to home",
+    "answer": "I'll open navigation to your home location.",
+    "category": "navigation",
+    "keywords": "navigate,home,directions,route,go,drive,walk"
+  },
+  {
+    "question": "Take a note",
+    "answer": "Sure! Just tell me what you'd like to remember.",
+    "category": "productivity",
+    "keywords": "note,remember,reminder,save,write,memo,record"
+  },
+  {
+    "question": "How do I make a call?",
+    "answer": "You can say 'call [contact name]' and I'll help you start a call.",
+    "category": "communication",
+    "keywords": "call,phone,contact,dial,ring,telephone"
+  },
+  {
+    "question": "What can you do?",
+    "answer": "I can help you take notes, navigate to places, get information, control your device, and more. Just ask!",
+    "category": "help",
+    "keywords": "help,capabilities,features,what,how,commands,assist"
+  }
+]

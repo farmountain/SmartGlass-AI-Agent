@@ -1,6 +1,8 @@
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
+    kotlin("kapt")
+    kotlin("plugin.serialization") version "1.9.22"
 }
 
 import java.util.Locale
@@ -56,6 +58,15 @@ dependencies {
     implementation("com.squareup.moshi:moshi-adapters:1.15.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     
+    // Room Database
+    val roomVersion = "2.6.1"
+    implementation("androidx.room:room-runtime:$roomVersion")
+    implementation("androidx.room:room-ktx:$roomVersion")
+    kapt("androidx.room:room-compiler:$roomVersion")
+    
+    // Kotlinx Serialization
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
+    
     // Meta Wearables Device Access Toolkit (DAT) SDK
     // Dependencies are optional at compile-time to support builds without GitHub credentials
     compileOnly("com.meta.wearable:mwdat-core:0.2.1")
@@ -82,4 +93,5 @@ dependencies {
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     testImplementation("org.robolectric:robolectric:4.12.2")
     testImplementation("androidx.test:core:1.5.0")
+    testImplementation("androidx.room:room-testing:2.6.1")
 }

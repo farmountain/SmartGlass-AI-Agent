@@ -8,6 +8,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartglass.actions.ActionDispatcher
 import com.smartglass.actions.SmartGlassAction
+import com.smartglass.data.SmartGlassRepository
+import com.smartglass.data.MessageEntity
+import com.smartglass.data.NoteEntity
 import com.smartglass.runtime.llm.LocalSnnEngine
 import com.smartglass.runtime.llm.LocalTokenizer
 import com.smartglass.sample.ui.ConnectionState
@@ -18,6 +21,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -49,6 +54,7 @@ class SmartGlassViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     // Dependencies
+    private val repository = SmartGlassRepository(context)
     private val rayBanManager = MetaRayBanManager(context)
     private var localSnnEngine: LocalSnnEngine? = null
     private var actionDispatcher: ActionDispatcher? = null
@@ -71,6 +77,8 @@ class SmartGlassViewModel(application: Application) : AndroidViewModel(applicati
 
     init {
         initializeDependencies()
+        loadPersistedMessages()
+        seedKnowledgeBase()
     }
 
     private fun initializeDependencies() {
@@ -80,12 +88,12 @@ class SmartGlassViewModel(application: Application) : AndroidViewModel(applicati
                 textToSpeech?.language = Locale.getDefault()
                 Log.d(TAG, "TextToSpeech initialized successfully")
                 
-                // Now that TTS is ready, initialize ActionDispatcher
-                actionDispatcher = ActionDispatcher(context, textToSpeech)
+                // Now that TTS is ready, initialize ActionDispatcher with repository
+                actionDispatcher = ActionDispatcher(context, textToSpeech, repository)
             } else {
                 Log.w(TAG, "TextToSpeech initialization failed")
-                // Initialize dispatcher without TTS
-                actionDispatcher = ActionDispatcher(context, null)
+                // Initialize dispatcher without TTS but with repository
+                actionDispatcher = ActionDispatcher(context, null, repository)
             }
         }
 
@@ -98,6 +106,31 @@ class SmartGlassViewModel(application: Application) : AndroidViewModel(applicati
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to initialize LocalSnnEngine", e)
             }
+        }
+    }
+    
+    /**
+     * Load persisted messages from database on startup.
+     */
+    private fun loadPersistedMessages() {
+        viewModelScope.launch {
+            repository.allMessages
+                .map { entities -> entities.map { it.toMessage() } }
+                .collect { persistedMessages ->
+                    if (persistedMessages.isNotEmpty() && _messages.value.isEmpty()) {
+                        _messages.value = persistedMessages
+                        Log.d(TAG, "Loaded ${persistedMessages.size} persisted messages")
+                    }
+                }
+        }
+    }
+    
+    /**
+     * Seed knowledge base on first launch.
+     */
+    private fun seedKnowledgeBase() {
+        viewModelScope.launch {
+            repository.seedKnowledgeBase(context)
         }
     }
 
@@ -244,7 +277,9 @@ class SmartGlassViewModel(application: Application) : AndroidViewModel(applicati
                 try {
                     val engine = localSnnEngine
                     if (engine != null) {
-                        val response = engine.generate(text, "")
+                        // Augment prompt with knowledge base
+                        val augmentedPrompt = augmentPromptWithKnowledge(text)
+                        val response = engine.generate(augmentedPrompt, "")
                         val actions = extractActions(response)
 
                         addMessage(
@@ -283,6 +318,32 @@ class SmartGlassViewModel(application: Application) : AndroidViewModel(applicati
             )
         }
     }
+    
+    /**
+     * Search notes by query string.
+     */
+    fun searchNotes(query: String): Flow<List<NoteEntity>> = kotlinx.coroutines.flow.flow {
+        emit(repository.searchNotes(query))
+    }
+    
+    /**
+     * Augment user prompt with relevant knowledge from local database.
+     */
+    private suspend fun augmentPromptWithKnowledge(query: String): String {
+        val relevantKnowledge = repository.queryKnowledge(query)
+        
+        return if (relevantKnowledge.isNotEmpty()) {
+            val context = relevantKnowledge.joinToString("\n") { 
+                "Q: ${it.question}\nA: ${it.answer}"
+            }
+            // Record access for the first result
+            relevantKnowledge.firstOrNull()?.let { repository.recordKnowledgeAccess(it.id) }
+            
+            "Context:\n$context\n\nUser query: $query"
+        } else {
+            query
+        }
+    }
 
     /**
      * Disconnect from smart glasses.
@@ -306,10 +367,15 @@ class SmartGlassViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     /**
-     * Add a message to the conversation.
+     * Add a message to the conversation and persist it.
      */
     private fun addMessage(message: Message) {
         _messages.value = _messages.value + message
+        
+        // Persist to database
+        viewModelScope.launch {
+            repository.saveMessage(message)
+        }
     }
 
     /**
@@ -353,4 +419,18 @@ class SmartGlassViewModel(application: Application) : AndroidViewModel(applicati
         disconnect()
         textToSpeech?.shutdown()
     }
+}
+
+/**
+ * Extension function to convert MessageEntity to Message.
+ */
+private fun MessageEntity.toMessage(): Message {
+    return Message(
+        id = this.id,
+        content = this.content,
+        timestamp = this.timestamp,
+        isFromUser = this.isFromUser,
+        visualContext = this.visualContext,
+        actions = emptyList() // Actions are not persisted in this version
+    )
 }
