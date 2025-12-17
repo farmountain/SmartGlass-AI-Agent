@@ -8,19 +8,27 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.SmartGlassSample">
+        <!-- ComposeActivity with modern Jetpack Compose UI (new default) -->
         <activity
-            android:name="com.smartglass.sample.SampleActivity"
-            android:exported="true">
+            android:name="com.smartglass.sample.ComposeActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SmartGlassSample">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        
+        <!-- SampleActivity with XML-based UI (kept for backward compatibility) -->
+        <activity
+            android:name="com.smartglass.sample.SampleActivity"
+            android:exported="false" />
+        
         <activity
             android:name="com.smartglass.sample.PrivacySettingsActivity"
             android:label="@string/privacy_settings"
-            android:parentActivityName="com.smartglass.sample.SampleActivity" />
+            android:parentActivityName="com.smartglass.sample.ComposeActivity" />
     </application>
 
 </manifest>
