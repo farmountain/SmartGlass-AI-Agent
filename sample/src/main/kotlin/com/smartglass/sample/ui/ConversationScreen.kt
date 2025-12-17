@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
@@ -133,7 +134,7 @@ fun ConversationScreen(
                     imageVector = if (connectionState == ConnectionState.DISCONNECTED || connectionState == ConnectionState.ERROR) {
                         Icons.Default.Send
                     } else {
-                        Icons.Default.Menu
+                        Icons.Default.Close
                     },
                     contentDescription = if (connectionState == ConnectionState.DISCONNECTED || connectionState == ConnectionState.ERROR) {
                         "Connect"

@@ -39,6 +39,13 @@ class SmartGlassViewModel(application: Application) : AndroidViewModel(applicati
         private const val FRAME_PROCESSING_INTERVAL = 5 // Process every 5th frame (~5fps at 30fps stream)
         private const val METRICS_UPDATE_INTERVAL = 30 // Update metrics every 30 frames
         private const val RECENT_MESSAGE_TIMEOUT_MS = 5000L // 5 seconds
+        private const val MOCK_DEVICE_ID = "MOCK-001" // Mock device for testing without real hardware
+        
+        /**
+         * Regex pattern for extracting JSON action arrays from AI responses.
+         * Matches: ```json [...] ``` or ``` [...] ```
+         */
+        private val JSON_ACTION_PATTERN = """```(?:json)?\s*(\[.*?\])\s*```""".toRegex(RegexOption.DOT_MATCHES_ALL)
     }
 
     // Dependencies
@@ -103,7 +110,7 @@ class SmartGlassViewModel(application: Application) : AndroidViewModel(applicati
                 _connectionState.value = ConnectionState.CONNECTING
 
                 // Use mock device for testing (no real hardware required)
-                rayBanManager.connect("MOCK-001", MetaRayBanManager.Transport.WIFI)
+                rayBanManager.connect(MOCK_DEVICE_ID, MetaRayBanManager.Transport.WIFI)
 
                 _connectionState.value = ConnectionState.CONNECTED
 
@@ -179,7 +186,7 @@ class SmartGlassViewModel(application: Application) : AndroidViewModel(applicati
     private suspend fun processFrame(videoFrame: MetaRayBanManager.VideoFrame) {
         try {
             // Generate visual context (simplified - real implementation would use CLIP or similar)
-            val visualContext = "Frame ${videoFrame.width}x${videoFrame.height}"
+            val visualContext = generateVisualContext(videoFrame)
 
             // Only generate response if user asked a question recently
             val recentUserMessage = _messages.value.lastOrNull { it.isFromUser }
@@ -306,6 +313,18 @@ class SmartGlassViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     /**
+     * Generate visual context from video frame.
+     * 
+     * This is a simplified placeholder. A real implementation would use:
+     * - CLIP or similar vision-language model for semantic understanding
+     * - Object detection for identifying items in the scene
+     * - OCR for reading text in the frame
+     */
+    private fun generateVisualContext(videoFrame: MetaRayBanManager.VideoFrame): String {
+        return "Frame ${videoFrame.width}x${videoFrame.height}"
+    }
+
+    /**
      * Extract SmartGlassAction instances from AI response.
      *
      * Looks for JSON blocks in the format:
@@ -315,8 +334,7 @@ class SmartGlassViewModel(application: Application) : AndroidViewModel(applicati
      */
     private fun extractActions(response: String): List<SmartGlassAction> {
         // Look for JSON blocks in response
-        val jsonPattern = """```(?:json)?\s*(\[.*?\])\s*```""".toRegex(RegexOption.DOT_MATCHES_ALL)
-        val match = jsonPattern.find(response)
+        val match = JSON_ACTION_PATTERN.find(response)
 
         return if (match != null) {
             try {
