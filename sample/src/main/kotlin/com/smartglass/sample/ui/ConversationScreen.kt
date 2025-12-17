@@ -374,14 +374,17 @@ private fun SettingsMenuDialog(
  * Backend URL configuration dialog.
  * 
  * Allows users to configure the backend server URL at runtime.
+ * Uses Config.validateBackendUrl for consistent validation.
  * 
  * @param currentUrl Current backend URL
+ * @param config Config instance for validation
  * @param onSave Callback when user saves a new URL
  * @param onDismiss Callback when dialog is dismissed
  */
 @Composable
 fun BackendConfigDialog(
     currentUrl: String,
+    config: com.smartglass.sample.Config,
     onSave: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -436,23 +439,14 @@ fun BackendConfigDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val trimmed = urlInput.trim()
+                    // Use Config validation method for consistency
+                    val (isValid, error) = config.validateBackendUrl(urlInput)
                     
-                    // Validate URL format
-                    when {
-                        trimmed.isEmpty() -> {
-                            errorMessage = "URL cannot be empty"
-                        }
-                        !trimmed.startsWith("http://") && !trimmed.startsWith("https://") -> {
-                            errorMessage = "URL must start with http:// or https://"
-                        }
-                        trimmed.endsWith("/") -> {
-                            errorMessage = "URL should not end with /"
-                        }
-                        else -> {
-                            onSave(trimmed)
-                            onDismiss()
-                        }
+                    if (isValid) {
+                        onSave(urlInput.trim())
+                        onDismiss()
+                    } else {
+                        errorMessage = error
                     }
                 }
             ) {

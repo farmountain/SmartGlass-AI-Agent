@@ -51,25 +51,37 @@ class Config(context: Context) {
     /**
      * Validate backend URL format.
      * 
+     * Uses Android's URLUtil for comprehensive validation, with additional
+     * checks for trailing slashes which cause API routing issues.
+     * 
      * @param url URL to validate
-     * @return true if valid, false otherwise
+     * @return Pair of (isValid, errorMessage). errorMessage is null if valid.
      */
-    fun isValidBackendUrl(url: String): Boolean {
+    fun validateBackendUrl(url: String): Pair<Boolean, String?> {
         val trimmed = url.trim()
+        
+        // Must not be empty
+        if (trimmed.isEmpty()) {
+            return Pair(false, "URL cannot be empty")
+        }
         
         // Must start with http:// or https://
         if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
-            return false
+            return Pair(false, "URL must start with http:// or https://")
         }
         
-        // Must not end with trailing slash
+        // Must not end with trailing slash (causes routing issues)
         if (trimmed.endsWith("/")) {
-            return false
+            return Pair(false, "URL should not end with /")
         }
         
-        // Basic format check (host:port or just host)
-        val urlPattern = Regex("^https?://[a-zA-Z0-9.-]+(:[0-9]+)?$")
-        return urlPattern.matches(trimmed)
+        // Use Android URLUtil for comprehensive validation
+        try {
+            android.webkit.URLUtil.isValidUrl(trimmed)
+            return Pair(true, null)
+        } catch (e: Exception) {
+            return Pair(false, "Invalid URL format")
+        }
     }
     
     /**

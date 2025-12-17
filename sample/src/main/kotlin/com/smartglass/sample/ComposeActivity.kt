@@ -65,6 +65,7 @@ class ComposeActivity : ComponentActivity() {
                     if (showBackendDialog) {
                         BackendConfigDialog(
                             currentUrl = config.backendUrl,
+                            config = config,
                             onSave = { newUrl ->
                                 config.backendUrl = newUrl
                                 viewModel.updateBackendUrl(newUrl)
