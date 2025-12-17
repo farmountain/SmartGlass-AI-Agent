@@ -213,3 +213,7 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 docs/cost_model.xlsx
+
+# Kotlin compiler output
+META-INF/
+*.class
