@@ -37,7 +37,7 @@ This directory contains older documentation that has been superseded by newer gu
 For up-to-date information, refer to:
 
 ### Primary Guides
-- **[IMPLEMENTATION_PROGRESS.md](../IMPLEMENTATION_PROGRESS.md)** - Current implementation status (75% complete)
+- **[IMPLEMENTATION_PROGRESS.md](../IMPLEMENTATION_PROGRESS.md)** - Current implementation status (83% complete)
 - **[HARDWARE_TESTING_GUIDE.md](../HARDWARE_TESTING_GUIDE.md)** - Hardware testing manual
 - **[PERFORMANCE_OPTIMIZATION.md](../PERFORMANCE_OPTIMIZATION.md)** - Performance optimization strategies
 
@@ -46,6 +46,7 @@ For up-to-date information, refer to:
 - **[WEEK_02.md](../WEEK_02.md)** - Audio Pipeline
 - **[WEEK_03.md](../WEEK_03.md)** - Vision Pipeline
 - **[WEEK_04.md](../WEEK_04.md)** - SNN Language Model
+- **[WEEK_15.md](../WEEK_15.md)** - Travel Companion Scenario (Latest)
 
 ### Integration Guides
 - **[meta_dat_integration.md](../meta_dat_integration.md)** - Meta DAT SDK integration

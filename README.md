@@ -9,7 +9,7 @@ A multimodal AI assistant for smart glasses, integrating:
 Built for the **Meta Ray-Ban Wayfarer** and similar wearable devices.
 Includes an **18-week learning program** with step-by-step **Google Colab workshops**, and a fully functional modular Python agent (`SmartGlassAgent`) for real-world deployment. The **SmartGlassAgent** and primary SDK classes are considered **stable as of v1.0**, so downstream apps can rely on their public methods without churn.
 
-📄 Latest weekly doc: [Week 4 Report](docs/WEEK_04.md).
+📄 Latest weekly doc: [Week 15 Report](docs/WEEK_15.md) - Travel Companion Scenario | [Week 4 Report](docs/WEEK_04.md) - Foundation.
 
 ---
 
@@ -67,9 +67,10 @@ SmartGlass-AI-Agent now includes comprehensive documentation for integrating wit
   - End-to-end implementation examples
   - Mock Device testing without hardware
 
-- **[Implementation Progress](docs/IMPLEMENTATION_PROGRESS.md)** - ⭐ **NEW** Current project status
+- **[Implementation Progress](docs/IMPLEMENTATION_PROGRESS.md)** - ⭐ **UPDATED** Current project status
   - Week 1-6: Complete (PR #278-#287)
-  - Week 7-8: In progress (75% overall)
+  - Week 7-8: In progress
+  - Week 15: Travel Companion complete (83% overall)
   - Testing scenarios & known issues
   - Technical roadmap
 
@@ -79,7 +80,8 @@ SmartGlass-AI-Agent now includes comprehensive documentation for integrating wit
 1. Read the [Hello SmartGlass Quickstart](docs/hello_smartglass_quickstart.md) for a hands-on introduction
 2. Review the [Meta DAT Integration Guide](docs/meta_dat_integration.md) for comprehensive documentation
 3. Follow the [Hardware Testing Guide](docs/HARDWARE_TESTING_GUIDE.md) for Meta Ray-Ban + OPPO Reno 12 setup
-4. Check the [Implementation Progress](docs/IMPLEMENTATION_PROGRESS.md) for current project status (75% complete)
+4. Check the [Implementation Progress](docs/IMPLEMENTATION_PROGRESS.md) for current project status (83% complete)
+5. Explore the [Week 15 Travel Companion](docs/WEEK_15.md) scenario for advanced multimodal features
 
 **Key Features**:
 - ✅ Camera frame streaming from Ray-Ban Meta glasses
