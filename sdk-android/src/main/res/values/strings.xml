@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SmartGlass AI Companion</string>
+    <string name="connecting">Connecting to glasses...</string>
+    <string name="connected">Connected successfully</string>
+    <string name="disconnected">Disconnected</string>
+    <string name="error">Error occurred</string>
+    <string name="permission_required">Permission required for glasses connection</string>
+    <string name="meta_ai_response">Meta AI Response:</string>
+    <string name="hardware_test">Hardware Test</string>
+    <string name="voice_query">Voice Query</string>
+    <string name="visual_scene">Visual Scene Analysis</string>
+    <string name="connect_glasses">Connect Glasses</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="test_query">Test Query</string>
+    <string name="meta_ai_test">Meta AI Test</string>
+</resources>
