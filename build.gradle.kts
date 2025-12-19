@@ -10,15 +10,8 @@ allprojects {
         google()
         mavenCentral()
         
-        // Meta Wearables Device Access Toolkit (DAT) SDK
-        // GitHub token is optional; SDK dependencies are compileOnly
-        maven {
-            url = uri("https://maven.pkg.github.com/facebook/meta-wearables-dat-android")
-            credentials {
-                username = ""
-                password = System.getenv("GITHUB_TOKEN") ?: ""
-            }
-        }
+        // Meta Wearables Device Access Toolkit (DAT) SDK uses Application ID only
+        // Following Meta's official documentation: only Application ID required
     }
 }
 

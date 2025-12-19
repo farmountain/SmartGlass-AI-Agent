@@ -1,8 +1,59 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="rayskillkit.core">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <application>
+    <!-- Runtime permissions required by Meta DAT SDK and OPPO Reno 12 Pro -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    
+    <!-- OPPO ColorOS specific permissions -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <application
+        android:allowBackup="true"
+        android:label="@string/app_name"
+        android:theme="@style/AppTheme"
+        android:hardwareAccelerated="true"
+        android:largeHeap="true"
+        android:networkSecurityConfig="@xml/network_security_config">
+        
+        <!-- Main Companion App Activity -->
+        <activity
+            android:name="rayskillkit.core.companion.SmartGlassCompanionActivity"
+            android:exported="true"
+            android:screenOrientation="portrait">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        
+        <!-- Hardware Test Activity -->
+        <activity
+            android:name="com.smartglass.examples.MetaRayBanHardwareTest"
+            android:exported="false"
+            android:label="Hardware Test" />
+        
+        <!-- Meta Wearables Device Access Toolkit Configuration -->
+        <!-- Production Application ID from Meta Developer Portal -->
+        <meta-data
+            android:name="com.meta.wearable.mwdat.APPLICATION_ID"
+            android:value="1152466697047705" />
+            
+        <!-- Optional: Disable analytics if desired -->
+        <meta-data
+            android:name="com.meta.wearable.mwdat.ANALYTICS_OPT_OUT"
+            android:value="false" />
+        
         <activity
             android:name="rayskillkit.ui.ShareInActivity"
             android:exported="true"
@@ -15,6 +66,14 @@
 
                 <data android:mimeType="text/plain" />
                 <data android:mimeType="image/*" />
+            </intent-filter>
+            
+            <!-- Meta AI app callback scheme for DAT integration -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="smartglassaiagent" />
             </intent-filter>
         </activity>
     </application>
