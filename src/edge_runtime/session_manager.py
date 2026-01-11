@@ -166,6 +166,21 @@ class SessionManager:
             "query_count": len(state.query_history),
         }
 
+    def list_sessions(self) -> List[Dict[str, Any]]:
+        """Return a list of all active sessions with their summaries."""
+
+        with self._lock:
+            sessions = []
+            for session_id in self._sessions.keys():
+                state = self._sessions[session_id]
+                sessions.append({
+                    "session_id": session_id,
+                    "transcript_count": len(state.transcripts),
+                    "has_frame": state.last_frame is not None,
+                    "query_count": len(state.query_history),
+                })
+            return sessions
+
     @staticmethod
     def _calculate_audio_duration(
         audio_array: np.ndarray, sample_rate: Optional[int]
