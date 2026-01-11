@@ -156,15 +156,19 @@ class SessionManager:
                 state.transcripts.append(result["query"])
         return result
 
-    def get_summary(self, session_id: str) -> Dict[str, Any]:
-        """Return lightweight session diagnostics."""
-
-        state = self._get_state(session_id)
+    def _get_session_summary_data(self, state: SessionState) -> Dict[str, Any]:
+        """Extract summary data from a session state."""
         return {
             "transcript_count": len(state.transcripts),
             "has_frame": state.last_frame is not None,
             "query_count": len(state.query_history),
         }
+
+    def get_summary(self, session_id: str) -> Dict[str, Any]:
+        """Return lightweight session diagnostics."""
+
+        state = self._get_state(session_id)
+        return self._get_session_summary_data(state)
 
     def list_sessions(self) -> List[Dict[str, Any]]:
         """Return a list of all active sessions with their summaries."""
@@ -173,12 +177,9 @@ class SessionManager:
             sessions = []
             for session_id in self._sessions.keys():
                 state = self._sessions[session_id]
-                sessions.append({
-                    "session_id": session_id,
-                    "transcript_count": len(state.transcripts),
-                    "has_frame": state.last_frame is not None,
-                    "query_count": len(state.query_history),
-                })
+                summary = self._get_session_summary_data(state)
+                summary["session_id"] = session_id
+                sessions.append(summary)
             return sessions
 
     @staticmethod
