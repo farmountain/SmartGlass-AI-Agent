@@ -249,6 +249,25 @@ def _decode_image_bytes(image_bytes: bytes) -> Image.Image:
     return Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
 
+@app.get("/sessions")
+def list_sessions() -> Dict[str, Any]:
+    """List all active SmartGlassAgent sessions.
+    
+    Returns a list of active sessions with their metadata including:
+    - session_id: Unique identifier for the session
+    - transcript_count: Number of transcripts stored in the session
+    - has_frame: Whether the session has a stored video frame
+    - query_count: Number of queries processed by the session
+    """
+    
+    logger.info("Listing all active sessions")
+    sessions = session_manager.list_sessions()
+    return {
+        "sessions": sessions,
+        "count": len(sessions)
+    }
+
+
 @app.post("/sessions", response_model=CreateSessionResponse)
 def create_session(request: Request) -> Dict[str, str]:
     """Instantiate a new :class:`SmartGlassAgent` session.

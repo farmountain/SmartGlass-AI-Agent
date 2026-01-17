@@ -194,6 +194,68 @@ def test_edge_runtime_server_lifecycle(edge_app):
     assert delete_response.json()["status"] == "deleted"
 
 
+def test_list_sessions_endpoint(edge_app):
+    client = TestClient(edge_app)
+    
+    # Initially, no sessions should exist
+    list_response = client.get("/sessions")
+    assert list_response.status_code == 200
+    assert list_response.json()["count"] == 0
+    assert list_response.json()["sessions"] == []
+    
+    # Create first session
+    session1_id = client.post("/sessions").json()["session_id"]
+    
+    # List should show one session
+    list_response = client.get("/sessions")
+    assert list_response.status_code == 200
+    assert list_response.json()["count"] == 1
+    sessions = list_response.json()["sessions"]
+    assert len(sessions) == 1
+    assert sessions[0]["session_id"] == session1_id
+    assert sessions[0]["transcript_count"] == 0
+    assert sessions[0]["has_frame"] is False
+    assert sessions[0]["query_count"] == 0
+    
+    # Create second session with some activity
+    session2_id = client.post("/sessions").json()["session_id"]
+    audio_payload = {"audio_base64": _encode_silent_wav(), "language": "en"}
+    client.post(f"/sessions/{session2_id}/audio", json=audio_payload)
+    frame_payload = {"image_base64": _encode_test_image()}
+    client.post(f"/sessions/{session2_id}/frame", json=frame_payload)
+    client.post(f"/sessions/{session2_id}/query", json={"text_query": "test"})
+    
+    # List should show two sessions with different states
+    list_response = client.get("/sessions")
+    assert list_response.status_code == 200
+    assert list_response.json()["count"] == 2
+    sessions = list_response.json()["sessions"]
+    assert len(sessions) == 2
+    
+    # Find session2 in the list and verify its state
+    session2_data = next(s for s in sessions if s["session_id"] == session2_id)
+    assert session2_data["transcript_count"] > 0
+    assert session2_data["has_frame"] is True
+    assert session2_data["query_count"] > 0
+    
+    # Delete first session
+    client.delete(f"/sessions/{session1_id}")
+    
+    # List should show only one session now
+    list_response = client.get("/sessions")
+    assert list_response.status_code == 200
+    assert list_response.json()["count"] == 1
+    assert list_response.json()["sessions"][0]["session_id"] == session2_id
+    
+    # Delete second session
+    client.delete(f"/sessions/{session2_id}")
+    
+    # List should be empty again
+    list_response = client.get("/sessions")
+    assert list_response.status_code == 200
+    assert list_response.json()["count"] == 0
+
+
 def test_metrics_endpoint_reports_activity(edge_app):
     client = TestClient(edge_app)
 

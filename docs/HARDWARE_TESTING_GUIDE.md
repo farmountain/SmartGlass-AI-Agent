@@ -748,6 +748,10 @@ adb shell ls /data/data/com.smartglass.sample/files/
 - **Description**: Health check
 - **Response**: `{"status": "healthy"}`
 
+**GET /sessions**
+- **Description**: List all active sessions
+- **Response**: `{"sessions": [{"session_id": "<uuid>", "transcript_count": 0, "has_frame": false, "query_count": 0}], "count": 1}`
+
 **POST /sessions**
 - **Description**: Create new session
 - **Headers**:
