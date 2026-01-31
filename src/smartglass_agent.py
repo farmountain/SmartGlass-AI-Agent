@@ -20,6 +20,7 @@ from drivers.providers import BaseProvider, get_provider
 from .clip_vision import CLIPVisionProcessor
 from .gpt2_generator import GPT2Backend
 from .llm_backend_base import BaseLLMBackend
+from .safety import SafetyGuard, ContentModerator
 from .utils.skill_registry import index_skill_capabilities, load_skill_registry, validate_skill_id
 from .whisper_processor import WhisperAudioProcessor
 from .utils.metrics import record_latency
@@ -114,6 +115,10 @@ class SmartGlassAgent:
             enable_face_detection=True,
             enable_plate_detection=True,
         )
+        
+        # Safety guardrails (CRITICAL: Week 3-4 of 30-day plan)
+        self.safety_guard = SafetyGuard()
+        logger.info("SafetyGuard initialized for content moderation")
 
         # Conversation history
         self.conversation_history: List[str] = []
@@ -456,6 +461,42 @@ class SmartGlassAgent:
         # Generate response
         response = self.generate_response(query, visual_context)
         actions, linked_skills = self._parse_actions(response, skill_signals)
+        
+        # SAFETY GUARDRAIL: Check response and actions for harmful content
+        # This is CRITICAL for compliance (GDPR, AI Act) and user safety
+        moderation_context = {
+            "query": query,
+            "visual_context": visual_context,
+            "confidence": metadata.get("confidence", 1.0),  # TODO: Extract from LLM backend
+        }
+        
+        moderation_result = self.safety_guard.check_response(
+            response_text=response,
+            actions=actions,
+            context=moderation_context
+        )
+        
+        if not moderation_result.is_safe:
+            # UNSAFE: Replace response with safe fallback
+            logger.warning(
+                f"Response blocked by SafetyGuard: {moderation_result.reason}",
+                extra={
+                    "severity": moderation_result.severity.value,
+                    "categories": [c.value for c in moderation_result.categories],
+                    "original_response": response[:100],  # Log truncated original
+                }
+            )
+            response = moderation_result.suggested_fallback or "I'm not able to help with that request."
+            actions = []  # Block all actions if response is unsafe
+            metadata["safety_blocked"] = True
+            metadata["safety_reason"] = moderation_result.reason
+        else:
+            # SAFE: Filter individual actions if needed (belt-and-suspenders)
+            safe_actions = self.safety_guard.filter_actions(actions)
+            if len(safe_actions) < len(actions):
+                logger.warning(f"Filtered {len(actions) - len(safe_actions)} unsafe actions")
+                actions = safe_actions
+            metadata["safety_blocked"] = False
 
         raw_payload: Dict[str, Any] = {
             "query": query,
