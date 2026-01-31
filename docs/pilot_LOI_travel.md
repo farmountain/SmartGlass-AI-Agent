@@ -42,3 +42,59 @@
 ## Acceptance & Signatures
 - **Travel Partner Authorized Signatory:** ____________________________    **Date:** ______________
 - **SmartGlass AI Authorized Signatory:** ____________________________    **Date:** ______________
+
+---
+
+# Pilot Outreach Materials (Travel Vertical)
+
+## 2-Minute Demo Script
+
+**Goal**: Show 3 tasks completed faster than baseline: rebooking, gate change, baggage lookup.
+
+1. **Intro (10s)**
+	- "This is SmartGlass AI for airport agents. It listens, sees, and helps in real time."
+
+2. **Scenario 1: Rebooking (35s)**
+	- Agent: "Rebook passenger to earliest flight to SFO."
+	- System: Shows top 3 options, reads summary, suggests best choice.
+	- Outcome: "Rebooking confirmed in 20 seconds."
+
+3. **Scenario 2: Gate Change (35s)**
+	- Agent: "Gate change for AA245."
+	- System: Confirms gate update, auto-pushes notification.
+	- Outcome: "Gate change announced without switching screens."
+
+4. **Scenario 3: Baggage Status (30s)**
+	- Agent: "Baggage status for PNR 8X7K2."
+	- System: Displays last scan location, ETA, next step recommendation.
+
+5. **Close (10s)**
+	- "We reduce agent task time by 30–50% with hands-free assistance."
+
+## 10-Slide Sales Deck Outline
+
+1. **Title**: SmartGlass AI for Travel Operations
+2. **Problem**: High cognitive load, slow task switching, delays
+3. **Solution**: Hands-free multimodal AI on smart glasses
+4. **How It Works**: Glasses → Mobile → Edge AI → Actions
+5. **Use Cases**: Rebooking, gate changes, baggage, disruption playbooks
+6. **Results**: Target 30–50% task time reduction, p95 latency <1.5s
+7. **Safety & Privacy**: Opt-in data, no raw storage by default
+8. **Pilot Plan**: 4-week pilot, 10–50 agents, clear KPIs
+9. **Pricing**: $50K–$100K pilot, $500–$1,000 per device/year
+10. **Next Steps**: LOI + hardware trial schedule
+
+## Pilot Pricing Sheet (Draft)
+
+**Pilot Package (4–6 weeks)**
+- **$50K** for 10–25 devices
+- **$100K** for 26–50 devices
+- Includes onboarding, analytics dashboard, weekly support
+
+**Annual Deployment (Post-Pilot)**
+- **$500–$1,000 per device/year** (volume-based)
+- Optional integrations: $25K–$100K depending on system complexity
+
+**Notes**
+- Hardware cost not included (can be procured by partner or bundled).
+- SLA and uptime guarantees available at enterprise tier.
