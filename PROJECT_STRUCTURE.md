@@ -14,6 +14,9 @@ SmartGlass-AI-Agent/
 │   ├── agent/                   # Policies, fusion, and action formatting
 │   ├── edge_runtime/            # Edge runtime toggles and privacy protections
 │   └── skills/                  # Action execution shims and RaySkillKit bindings
+│   ├── world_model.py            # World state representation (planned/partial)
+│   ├── context_store.py          # Memory store interface (planned/partial)
+│   └── planner.py                # Task planning interface (planned/partial)
 │
 ├── drivers/                      # Device drivers and provider abstractions
 │   ├── providers/               # Provider resolver (mock, meta, vuzix, xreal, visionos, openxr)
