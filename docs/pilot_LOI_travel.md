@@ -98,3 +98,57 @@
 **Notes**
 - Hardware cost not included (can be procured by partner or bundled).
 - SLA and uptime guarantees available at enterprise tier.
+
+---
+
+# Target Pilot Customers (Initial List)
+
+> This is a working list to prioritize outreach. Update with real contacts and qualification notes.
+
+## Travel / Aviation (10 Targets)
+
+1. Delta Air Lines — Operations Innovation / Airport Ops
+2. United Airlines — Customer Experience / Airport Operations
+3. American Airlines — Operations Innovation
+4. Southwest Airlines — Ground Operations
+5. JetBlue — Customer Experience / Operations
+6. Alaska Airlines — Ops Innovation
+7. Heathrow Airport (LHR) — Digital Transformation / Passenger Ops
+8. Dallas Fort Worth Airport (DFW) — Innovation / Airport Ops
+9. Changi Airport (SIN) — Digital Transformation
+10. Schiphol Airport (AMS) — Innovation / Airport Operations
+
+**Primary Roles to Contact**
+- VP/Director of Airport Operations
+- Head of Digital Transformation / Innovation Lab
+- Customer Experience Lead
+- IT/OT Program Manager
+
+## Healthcare (10 Targets)
+
+1. Mayo Clinic — Clinical Innovation
+2. Cleveland Clinic — Digital Health
+3. Kaiser Permanente — Care Innovation
+4. Johns Hopkins Medicine — Health IT
+5. Mass General Brigham — Clinical Operations
+6. Stanford Health Care — Innovation / AI
+7. Mount Sinai Health System — Digital Transformation
+8. University of Michigan Health — Clinical Ops
+9. HCA Healthcare — Enterprise Innovation
+10. NHS Trust (UK) — Digital / Clinical Ops
+
+**Primary Roles to Contact**
+- Director of Clinical Operations
+- Chief Digital Officer / Chief Innovation Officer
+- Head of Clinical Informatics
+- Nursing Operations Lead
+
+## Qualification Criteria
+
+Score each prospect (1–5) on:
+- **Need** (pain in workflow/throughput)
+- **Budget** (ability to fund pilot)
+- **Authority** (decision maker access)
+- **Timeline** (can start within 60 days)
+
+**Priority Rule**: Pursue prospects with total score ≥ 14.
