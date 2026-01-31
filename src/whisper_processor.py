@@ -3,11 +3,18 @@ SmartGlass AI Agent - Audio Processing Module
 Uses OpenAI Whisper for speech-to-text transcription
 """
 
-import whisper
-import torch
-import numpy as np
+import os
 from typing import Optional, Union
+
+import numpy as np
 import soundfile as sf
+import torch
+import whisper
+
+try:
+    from faster_whisper import WhisperModel
+except ImportError:  # Optional dependency
+    WhisperModel = None
 
 
 class WhisperAudioProcessor:
@@ -26,10 +33,21 @@ class WhisperAudioProcessor:
             device: Device to run the model on ('cuda', 'cpu', or None for auto-detect)
         """
         self.device = device if device else ("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"Loading Whisper model '{model_size}' on device '{self.device}'...")
-        self.model = whisper.load_model(model_size, device=self.device)
         self.model_size = model_size
-        print(f"Whisper model loaded successfully.")
+
+        # Prefer faster-whisper if available and enabled
+        use_faster_env = os.getenv("USE_FASTER_WHISPER", "true").lower() in {"1", "true", "yes"}
+        self.use_faster_whisper = bool(WhisperModel) and use_faster_env
+
+        if self.use_faster_whisper:
+            print(f"Loading faster-whisper model '{model_size}' on device '{self.device}'...")
+            compute_type = "float16" if self.device == "cuda" else "int8"
+            self.model = WhisperModel(model_size, device=self.device, compute_type=compute_type)
+            print("Faster-whisper model loaded successfully.")
+        else:
+            print(f"Loading Whisper model '{model_size}' on device '{self.device}'...")
+            self.model = whisper.load_model(model_size, device=self.device)
+            print("Whisper model loaded successfully.")
     
     def transcribe_audio(
         self, 
@@ -66,13 +84,28 @@ class WhisperAudioProcessor:
         audio = audio.astype(np.float32)
         
         # Transcribe
+        if self.use_faster_whisper:
+            segments, info = self.model.transcribe(
+                audio,
+                language=language,
+                task=task,
+                beam_size=1,
+                vad_filter=True,
+            )
+            text = " ".join(segment.text.strip() for segment in segments).strip()
+            return {
+                "text": text,
+                "language": getattr(info, "language", language),
+                "segments": [segment._asdict() for segment in segments],
+            }
+
         result = self.model.transcribe(
             audio,
             language=language,
             task=task,
             fp16=(self.device == "cuda")
         )
-        
+
         return result
     
     def transcribe_realtime(self, audio_chunk: np.ndarray) -> str:
@@ -93,7 +126,8 @@ class WhisperAudioProcessor:
         return {
             "model_size": self.model_size,
             "device": self.device,
-            "language_support": "multilingual" if self.model_size != "tiny.en" else "English only"
+            "language_support": "multilingual" if self.model_size != "tiny.en" else "English only",
+            "backend": "faster-whisper" if self.use_faster_whisper else "openai-whisper",
         }
 
 
