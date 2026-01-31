@@ -668,6 +668,27 @@ adb shell ls /data/data/com.smartglass.sample/files/
 
 ## Part 7: Deployment Checklist
 
+### Hardware Validation Setup (Week 1-2)
+
+- [ ] **Procurement**
+  - [ ] Meta Ray-Ban smart glasses (1 unit)
+  - [ ] OPPO Reno 12 smartphone (1 unit)
+  - [ ] USB-C cable + power bank
+  - [ ] Backup test device (optional)
+
+- [ ] **Test Environment**
+  - [ ] Install ADB tools on development machine
+  - [ ] Prepare a dedicated test space (quiet, stable lighting)
+  - [ ] Configure low-latency Wi-Fi network
+  - [ ] Set up device logging: `adb logcat` and server logs
+
+- [ ] **Baseline Measurements**
+  - [ ] Bluetooth pairing stability (1-hour continuous)
+  - [ ] Camera capture quality (sample frames)
+  - [ ] Microphone quality (sample audio)
+  - [ ] End-to-end latency baseline (5 test runs)
+  - [ ] Battery drain baseline (30-minute session)
+
 ### Pre-Deployment Validation
 
 - [ ] **Backend Server**
