@@ -8,6 +8,8 @@ import json
 import logging
 import os
 import re
+import time
+from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
@@ -21,6 +23,10 @@ from .clip_vision import CLIPVisionProcessor
 from .gpt2_generator import GPT2Backend
 from .llm_backend_base import BaseLLMBackend
 from .safety import SafetyGuard, ContentModerator
+from .telemetry import TelemetryCollector, LoggingCollector, LatencyTracker
+from .world_model import WorldModel, WorldState, SceneObject, UserIntent
+from .context_store import ContextStore, ExperienceFrame
+from .planner import Planner, Plan
 from .utils.skill_registry import index_skill_capabilities, load_skill_registry, validate_skill_id
 from .whisper_processor import WhisperAudioProcessor
 from .utils.metrics import record_latency
@@ -55,6 +61,10 @@ class SmartGlassAgent:
         ] = None,
         llm_backend: Optional[BaseLLMBackend] = None,
         provider: Optional[Union[str, BaseProvider]] = None,
+        telemetry_collector: Optional[TelemetryCollector] = None,
+        world_model: Optional[WorldModel] = None,
+        context_store: Optional[ContextStore] = None,
+        planner: Optional[Planner] = None,
     ):
         """
         Initialize SmartGlass AI Agent.
@@ -74,6 +84,14 @@ class SmartGlassAgent:
                 ``PROVIDER`` environment variable (default: ``"mock"``) is read and
                 :func:`drivers.providers.get_provider` is used to construct an
                 instance.
+            telemetry_collector: Optional telemetry collector for structured event
+                logging (latency, errors, safety events). Defaults to LoggingCollector.
+            world_model: Optional world model for state representation. When omitted,
+                world model features are disabled.
+            context_store: Optional context store for memory persistence. When omitted,
+                memory features are disabled.
+            planner: Optional planner for task decomposition. When omitted, planning
+                features are disabled.
         """
         print("Initializing SmartGlass AI Agent...")
         print("=" * 60)
@@ -119,6 +137,25 @@ class SmartGlassAgent:
         # Safety guardrails (CRITICAL: Week 3-4 of 30-day plan)
         self.safety_guard = SafetyGuard()
         logger.info("SafetyGuard initialized for content moderation")
+        
+        # Telemetry collector for structured event logging
+        self.telemetry = telemetry_collector or LoggingCollector()
+        logger.info("Telemetry collector initialized")
+        
+        # World model for state representation (optional)
+        self.world_model = world_model
+        if self.world_model:
+            logger.info("WorldModel initialized for state tracking")
+        
+        # Context store for memory persistence (optional)
+        self.context_store = context_store
+        if self.context_store:
+            logger.info("ContextStore initialized for memory persistence")
+        
+        # Planner for task decomposition (optional)
+        self.planner = planner
+        if self.planner:
+            logger.info("Planner initialized for task decomposition")
 
         # Conversation history
         self.conversation_history: List[str] = []
@@ -431,100 +468,185 @@ class SmartGlassAgent:
         with any available visual context so downstream implementations can
         reason over both modalities consistently.
         """
-        # Process audio if provided
-        if audio_input is not None:
-            query = self.process_audio_command(audio_input, language)
-        elif text_query is not None:
-            query = text_query
-        else:
-            raise ValueError("Either audio_input or text_query must be provided")
+        session_id = f"session_{int(time.time() * 1000)}"
         
-        # Process image if provided
-        visual_context = None
-        redaction_summary: Optional[RedactionSummary] = None
-        metadata: Dict[str, Any] = {"cloud_offload": cloud_offload}
-        if image_input is not None:
-            if cloud_offload:
-                redacted_image, redaction_summary = self.redactor(image_input)
-                logger.info(
-                    "Redaction applied before cloud processing.",
-                    extra={"faces_masked": redaction_summary.faces_masked, "plates_masked": redaction_summary.plates_masked},
-                )
-                image_for_analysis = redacted_image
-            else:
-                logger.info("Processing image locally without redaction.")
-                image_for_analysis = image_input
+        # Track end-to-end latency
+        with LatencyTracker(self.telemetry, "E2E", session_id):
+            try:
+                # Process audio if provided
+                if audio_input is not None:
+                    with LatencyTracker(self.telemetry, "ASR", session_id):
+                        query = self.process_audio_command(audio_input, language)
+                elif text_query is not None:
+                    query = text_query
+                else:
+                    raise ValueError("Either audio_input or text_query must be provided")
+        
+                # Process image if provided
+                visual_context = None
+                redaction_summary: Optional[RedactionSummary] = None
+                metadata: Dict[str, Any] = {"cloud_offload": cloud_offload, "session_id": session_id}
+                if image_input is not None:
+                    with LatencyTracker(self.telemetry, "Vision", session_id):
+                        if cloud_offload:
+                            redacted_image, redaction_summary = self.redactor(image_input)
+                            logger.info(
+                                "Redaction applied before cloud processing.",
+                                extra={"faces_masked": redaction_summary.faces_masked, "plates_masked": redaction_summary.plates_masked},
+                            )
+                            image_for_analysis = redacted_image
+                        else:
+                            logger.info("Processing image locally without redaction.")
+                            image_for_analysis = image_input
 
-            scene_analysis = self.analyze_scene(image_for_analysis)
-            visual_context = scene_analysis.get("description", "")
+                        scene_analysis = self.analyze_scene(image_for_analysis)
+                        visual_context = scene_analysis.get("description", "")
+                        
+                        # Update world model with scene understanding (if enabled)
+                        if self.world_model:
+                            # TODO: Extract scene objects from CLIP analysis
+                            scene_objects = []  # Placeholder - extract from scene_analysis
+                            user_intent = UserIntent(raw_query=query, intent_type="unknown", confidence=0.0)
+                            self.world_model.update(scene_objects, user_intent)
         
-        # Generate response
-        response = self.generate_response(query, visual_context)
-        actions, linked_skills = self._parse_actions(response, skill_signals)
+                # Generate response with LLM
+                with LatencyTracker(self.telemetry, "LLM", session_id):
+                    response = self.generate_response(query, visual_context)
+                    actions, linked_skills = self._parse_actions(response, skill_signals)
+                    
+                    # Use planner to decompose intent into actionable steps (if enabled)
+                    if self.planner and self.world_model:
+                        with LatencyTracker(self.telemetry, "Planning", session_id):
+                            world_state = self.world_model.current_state()
+                            plan = self.planner.plan(
+                                query,
+                                world_state,
+                                constraints={"max_steps": 5, "safety_mode": True}
+                            )
+                            # Merge plan steps with parsed actions
+                            if plan and plan.steps:
+                                logger.info(f"Planner generated {len(plan.steps)} steps for intent: {query}")
+                                for step in plan.steps:
+                                    actions.append({
+                                        "type": step.action_type,
+                                        "skill_id": step.skill_id,
+                                        "payload": step.parameters,
+                                        "source": "planner",
+                                    })
         
-        # SAFETY GUARDRAIL: Check response and actions for harmful content
-        # This is CRITICAL for compliance (GDPR, AI Act) and user safety
-        moderation_context = {
-            "query": query,
-            "visual_context": visual_context,
-            "confidence": metadata.get("confidence", 1.0),  # TODO: Extract from LLM backend
-        }
+                # SAFETY GUARDRAIL: Check response and actions for harmful content
+                # This is CRITICAL for compliance (GDPR, AI Act) and user safety
+                with LatencyTracker(self.telemetry, "Safety", session_id):
+                    moderation_context = {
+                        "query": query,
+                        "visual_context": visual_context,
+                        "confidence": metadata.get("confidence", 1.0),  # TODO: Extract from LLM backend
+                    }
+                    
+                    moderation_result = self.safety_guard.check_response(
+                        response_text=response,
+                        actions=actions,
+                        context=moderation_context
+                    )
         
-        moderation_result = self.safety_guard.check_response(
-            response_text=response,
-            actions=actions,
-            context=moderation_context
-        )
-        
-        if not moderation_result.is_safe:
-            # UNSAFE: Replace response with safe fallback
-            logger.warning(
-                f"Response blocked by SafetyGuard: {moderation_result.reason}",
-                extra={
-                    "severity": moderation_result.severity.value,
-                    "categories": [c.value for c in moderation_result.categories],
-                    "original_response": response[:100],  # Log truncated original
+                    if not moderation_result.is_safe:
+                        # UNSAFE: Replace response with safe fallback
+                        logger.warning(
+                            f"Response blocked by SafetyGuard: {moderation_result.reason}",
+                            extra={
+                                "severity": moderation_result.severity.value,
+                                "categories": [c.value for c in moderation_result.categories],
+                                "original_response": response[:100],  # Log truncated original
+                            }
+                        )
+                        # Record safety event in telemetry
+                        self.telemetry.record_safety_event(
+                            "SafetyGuard",
+                            blocked=True,
+                            reason=moderation_result.reason,
+                            session_id=session_id,
+                            context={"categories": [c.value for c in moderation_result.categories]}
+                        )
+                        response = moderation_result.suggested_fallback or "I'm not able to help with that request."
+                        actions = []  # Block all actions if response is unsafe
+                        metadata["safety_blocked"] = True
+                        metadata["safety_reason"] = moderation_result.reason
+                    else:
+                        # SAFE: Filter individual actions if needed (belt-and-suspenders)
+                        safe_actions = self.safety_guard.filter_actions(actions)
+                        if len(safe_actions) < len(actions):
+                            logger.warning(f"Filtered {len(actions) - len(safe_actions)} unsafe actions")
+                            actions = safe_actions
+                        metadata["safety_blocked"] = False
+
+                raw_payload: Dict[str, Any] = {
+                    "query": query,
+                    "visual_context": visual_context or "No visual input",
+                    "metadata": metadata,
                 }
-            )
-            response = moderation_result.suggested_fallback or "I'm not able to help with that request."
-            actions = []  # Block all actions if response is unsafe
-            metadata["safety_blocked"] = True
-            metadata["safety_reason"] = moderation_result.reason
-        else:
-            # SAFE: Filter individual actions if needed (belt-and-suspenders)
-            safe_actions = self.safety_guard.filter_actions(actions)
-            if len(safe_actions) < len(actions):
-                logger.warning(f"Filtered {len(actions) - len(safe_actions)} unsafe actions")
-                actions = safe_actions
-            metadata["safety_blocked"] = False
 
-        raw_payload: Dict[str, Any] = {
-            "query": query,
-            "visual_context": visual_context or "No visual input",
-            "metadata": metadata,
-        }
+                if linked_skills:
+                    raw_payload["skills"] = linked_skills
 
-        if linked_skills:
-            raw_payload["skills"] = linked_skills
+                if redaction_summary is not None:
+                    redaction_details = redaction_summary.as_dict()
+                    raw_payload["redaction"] = redaction_details
+                    metadata["redaction_summary"] = redaction_details
 
-        if redaction_summary is not None:
-            redaction_details = redaction_summary.as_dict()
-            raw_payload["redaction"] = redaction_details
-            metadata["redaction_summary"] = redaction_details
+                result: Dict[str, Any] = {
+                    "query": raw_payload["query"],
+                    "visual_context": raw_payload["visual_context"],
+                    "response": response,
+                    "metadata": metadata,
+                    "actions": actions,
+                    "raw": raw_payload,
+                }
 
-        result: Dict[str, Any] = {
-            "query": raw_payload["query"],
-            "visual_context": raw_payload["visual_context"],
-            "response": response,
-            "metadata": metadata,
-            "actions": actions,
-            "raw": raw_payload,
-        }
+                if redaction_summary is not None:
+                    result["redaction"] = redaction_details
+                
+                # Write experience frame to context store (if enabled)
+                if self.context_store:
+                    try:
+                        experience = ExperienceFrame(
+                            timestamp=datetime.now().isoformat(),
+                            query=query,
+                            visual_context=visual_context or "",
+                            response=response,
+                            actions=actions,
+                            metadata=metadata,
+                        )
+                        self.context_store.write(experience)
+                    except Exception as e:
+                        logger.error(f"Failed to write to context store: {e}")
+                        self.telemetry.record_error(
+                            "ContextStore",
+                            str(e),
+                            session_id=session_id,
+                        )
+                
+                # Record usage metrics
+                self.telemetry.record_usage(
+                    "SmartGlassAgent",
+                    metrics={
+                        "actions_count": len(actions),
+                        "safety_blocked": 1.0 if metadata.get("safety_blocked") else 0.0,
+                    },
+                    session_id=session_id,
+                    context={"query_length": len(query)}
+                )
 
-        if redaction_summary is not None:
-            result["redaction"] = redaction_details
-
-        return result
+                return result
+            
+            except Exception as e:
+                # Record error telemetry
+                self.telemetry.record_error(
+                    "SmartGlassAgent",
+                    str(e),
+                    session_id=session_id,
+                    context={"query": query[:100]}
+                )
+                raise
     
     def help_identify(
         self,
