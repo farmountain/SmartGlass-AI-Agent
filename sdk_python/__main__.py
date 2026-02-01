@@ -1,13 +1,7 @@
-"""Entry point for ``python -m sdk_python`` when using the namespace package."""
-from __future__ import annotations
+"""Allows ``python -m sdk_python`` to invoke the CLI."""
 
-from importlib import import_module
-
-
-def main() -> int:
-    module = import_module("sdk_python.raycli")
-    return module.main()
+from .raycli import main
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

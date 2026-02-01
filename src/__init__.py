@@ -30,19 +30,8 @@ if _is_truthy(os.getenv("CI")):
 
 # Public re-exports so downstream code can rely on a stable import path for
 # core backends (e.g. ``from smartglass_agent import LLMBackend``).
-from .whisper_processor import WhisperAudioProcessor
-from .clip_vision import CLIPVisionProcessor
-from .gpt2_generator import GPT2TextGenerator
-from .llm_backend_base import BaseLLMBackend
-from .llm_backend import AnnLLMBackend, LLMBackend
-from .llm_snn_backend import SNNLLMBackend
-from .smartglass_agent import SmartGlassAgent
-from .audio import get_default_asr, get_default_vad
-from .fusion import ConfidenceFusion
-from .perception import get_default_keyframer, get_default_ocr, get_default_vq
-from .policy import get_default_policy
-
 __version__ = "0.1.0"
+
 __all__ = [
     "WhisperAudioProcessor",
     "CLIPVisionProcessor",
@@ -60,3 +49,34 @@ __all__ = [
     "get_default_vq",
     "get_default_policy",
 ]
+
+_LAZY_IMPORTS = {
+    "WhisperAudioProcessor": (".whisper_processor", "WhisperAudioProcessor"),
+    "CLIPVisionProcessor": (".clip_vision", "CLIPVisionProcessor"),
+    "GPT2TextGenerator": (".gpt2_generator", "GPT2TextGenerator"),
+    "BaseLLMBackend": (".llm_backend_base", "BaseLLMBackend"),
+    "LLMBackend": (".llm_backend", "LLMBackend"),
+    "AnnLLMBackend": (".llm_backend", "AnnLLMBackend"),
+    "SNNLLMBackend": (".llm_snn_backend", "SNNLLMBackend"),
+    "SmartGlassAgent": (".smartglass_agent", "SmartGlassAgent"),
+    "get_default_asr": (".audio", "get_default_asr"),
+    "get_default_vad": (".audio", "get_default_vad"),
+    "ConfidenceFusion": (".fusion", "ConfidenceFusion"),
+    "get_default_keyframer": (".perception", "get_default_keyframer"),
+    "get_default_ocr": (".perception", "get_default_ocr"),
+    "get_default_vq": (".perception", "get_default_vq"),
+    "get_default_policy": (".policy", "get_default_policy"),
+}
+
+
+def __getattr__(name: str):
+    """Lazily import public symbols to avoid heavy import side effects."""
+    if name not in _LAZY_IMPORTS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module_name, attr_name = _LAZY_IMPORTS[name]
+    from importlib import import_module
+
+    module = import_module(module_name, package=__name__)
+    value = getattr(module, attr_name)
+    globals()[name] = value
+    return value

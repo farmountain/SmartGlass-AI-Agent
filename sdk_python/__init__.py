@@ -1,12 +1,15 @@
-"""Namespace package that exposes the local SDK implementation."""
-from __future__ import annotations
+"""SmartGlass SDK for building Ray-based skills."""
 
-from pathlib import Path
-import pkgutil
+from importlib import import_module
+from types import ModuleType
+from typing import Any
 
-# Extend the package search path so modules defined in ``sdk-python/sdk_python``
-# are importable without installing the package.
-__path__ = pkgutil.extend_path(__path__, __name__)
-_pkg_dir = Path(__file__).resolve().parent.parent / "sdk-python" / "sdk_python"
-if _pkg_dir.is_dir():
-    __path__.append(str(_pkg_dir))
+__all__ = ["raycli", "distill"]
+
+
+def __getattr__(name: str) -> Any:  # pragma: no cover - trivial passthrough
+    if name in __all__:
+        module: ModuleType = import_module(f"{__name__}.{name}")
+        globals()[name] = module
+        return module
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
