@@ -14,9 +14,13 @@ SmartGlass-AI-Agent/
 │   ├── agent/                   # Policies, fusion, and action formatting
 │   ├── edge_runtime/            # Edge runtime toggles and privacy protections
 │   └── skills/                  # Action execution shims and RaySkillKit bindings
-│   ├── world_model.py            # World state representation (planned/partial)
-│   ├── context_store.py          # Memory store interface (planned/partial)
-│   └── planner.py                # Task planning interface (planned/partial)
+│   ├── world_model.py            # World state representation interface (Week 6)
+│   ├── context_store.py          # Memory store interface for experience frames (Week 6)
+│   ├── planner.py                # Task planning and decomposition interface (Week 6)
+│   ├── telemetry.py              # Structured event logging for latency, errors, safety (Week 6)
+│   └── safety/                  # Content moderation and guardrails
+│       ├── content_moderation.py  # RuleBasedModerator and SafetyGuard
+│       └── __init__.py
 │
 ├── drivers/                      # Device drivers and provider abstractions
 │   ├── providers/               # Provider resolver (mock, meta, vuzix, xreal, visionos, openxr)
@@ -87,6 +91,52 @@ SmartGlass-AI-Agent/
   - Adapters that bind RaySkillKit skills to provider capabilities
 - **Use Case**: Execute actions on-device or via paired mobile/edge runtimes
 
+### 7. world_model.py (Week 6 - Architecture Foundation)
+- **Purpose**: World state representation and scene understanding
+- **Interface**: WorldState, SceneObject, UserIntent dataclasses
+- **Features**:
+  - Update world state from vision processing
+  - Query current state for planning context
+- **Use Case**: Maintain persistent understanding of user environment across interactions
+
+### 8. context_store.py (Week 6 - Architecture Foundation)
+- **Purpose**: Memory persistence for experience frames
+- **Interface**: ExperienceFrame, ContextQuery, ContextStore
+- **Features**:
+  - Write interaction history (query, response, actions, metadata)
+  - Query past experiences for context retrieval
+  - Session state summarization
+- **Use Case**: Enable contextual awareness and conversation continuity
+
+### 9. planner.py (Week 6 - Architecture Foundation)
+- **Purpose**: Task decomposition and action planning
+- **Interface**: Plan, PlanStep, Planner
+- **Features**:
+  - Decompose user intents into actionable steps
+  - Generate execution plans with skill IDs and parameters
+  - Constraint-based planning (safety mode, max steps)
+- **Use Case**: Bridge high-level intents to executable actions with temporal ordering
+
+### 10. telemetry.py (Week 6 - Architecture Foundation)
+- **Purpose**: Structured event logging for observability
+- **Components**: TelemetryEvent, TelemetryCollector, LatencyTracker
+- **Event Types**: Latency, Error, Usage, Safety, Action
+- **Features**:
+  - Component-level latency tracking (ASR, Vision, LLM, E2E)
+  - Error logging with severity levels
+  - Safety moderation event tracking
+  - In-memory and logging collectors for dev/test
+- **Use Case**: Monitor performance, debug issues, track safety events in production
+
+### 11. safety/ (Week 3-4 - Safety Implementation)
+- **Purpose**: Content moderation and safety guardrails
+- **Components**: RuleBasedModerator, SafetyGuard, ModerationResult
+- **Features**:
+  - Rule-based content filtering (violence, medical, dangerous activity, privacy)
+  - Action filtering with severity-based blocking
+  - Suggested fallback responses for unsafe content
+- **Use Case**: GDPR/AI Act compliance, user safety, liability protection
+
 ## 📓 Notebooks
 
 ### SmartGlass_AI_Agent_Meta_RayBan.ipynb
@@ -151,6 +201,39 @@ SmartGlass-AI-Agent/
 - Scene understanding
 - Object classification
 - Real-world use cases
+
+## 🧪 Test Coverage
+
+### tests/test_safety_suite.py (Week 3-4)
+- **Purpose**: Validate safety guardrails and content moderation
+- **Coverage**: 32 test cases, 27 passing (84% pass rate)
+- **Test Classes**:
+  - TestContentModeration: Keyword-based filtering
+  - TestActionModeration: Action safety validation
+  - TestSafetyGuard: Integration with SmartGlassAgent
+  - TestAdversarialCases: Edge cases and adversarial inputs
+  - TestComplianceScenarios: GDPR/regulatory compliance
+- **Known Gaps**: PII detection, ML-based moderation (documented for Week 10+ enhancement)
+
+### tests/test_telemetry.py (Week 6)
+- **Purpose**: Validate telemetry event collection and tracking
+- **Coverage**: 18 test cases, 18 passing (100% pass rate)
+- **Test Classes**:
+  - TestTelemetryEvent: Event schema validation
+  - TestInMemoryCollector: In-memory event storage for testing
+  - TestLoggingCollector: Logging-based event collection
+  - TestTelemetryCollectorHelpers: Convenience methods (latency, error, usage, safety)
+  - TestLatencyTracker: Context manager for latency tracking
+  - TestEndToEndTelemetry: E2E integration patterns
+- **Features Tested**: Event serialization, filtering, error handling, multi-component latency
+
+### tests/test_architecture_integration.py (Week 6)
+- **Purpose**: Validate architecture component integration
+- **Test Classes**:
+  - TestArchitectureIntegration: Full stack integration with telemetry, world model, context store, planner
+  - TestMockImplementations: Mock WorldModel, ContextStore, Planner for testing
+- **Features Tested**: Telemetry collection during queries, world model updates, context store writes, planner integration, error handling
+- **Mock Components**: Provides test doubles for architecture interfaces
 
 ## 🔄 Data Flow
 
