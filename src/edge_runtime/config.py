@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 
-from privacy_flags import (
+from ..privacy_flags import (
     should_store_audio,
     should_store_frames,
     should_store_transcripts,
